@@ -1,3 +1,5 @@
+# version 2.1
+
 import tkinter as tk
 from tkinter import *
 from tkinter import filedialog
@@ -7,7 +9,7 @@ import shutil
 import xml.dom.minidom as md
 
 root = tk.Tk()
-root.geometry('290x410')
+root.geometry('290x440')
 root.title('Control4 Icon Swapper')
 root.resizable(False, False)
 
@@ -17,6 +19,7 @@ global icon_objects
 global current_icon
 global replacement_image
 global driver_name
+global modify_xml
 
 driver_selected = False
 replacement_selected = False
@@ -227,8 +230,14 @@ def replace_icon():
                 os.rename(comp_dir + icon, comp_dir + icon + '.orig')
                 shutil.copy(replacement_dir + icon, comp_dir)
                 os.remove(replacement_dir + icon)
+            else:
+                shutil.copy(replacement_dir + icon, comp_dir)
+                os.remove(replacement_dir + icon)
         elif not os.path.isfile(icon_dir + icon + '.orig'):
             os.rename(icon_dir + icon, icon_dir + icon + '.orig')
+            shutil.copy(replacement_dir + icon, icon_dir)
+            os.remove(replacement_dir + icon)
+        else:
             shutil.copy(replacement_dir + icon, icon_dir)
             os.remove(replacement_dir + icon)
 
@@ -317,6 +326,7 @@ def export_driver():
     global pop
     global temp_dir
     global driver_name
+    global modify_xml
 
     driver_name = driver_name_entry.get().replace(' ', '')
     temp = ''
@@ -328,26 +338,43 @@ def export_driver():
     driver_name_entry.delete(0, 'end')
     driver_name_entry.insert(0, driver_name)
 
-    # replace xml data
-    driver_xml = md.parse(temp_dir + '/driver/driver.xml')
-    driver_xml.getElementsByTagName('name')[0].childNodes[0].nodeValue = driver_name
-    for i in range(driver_xml.getElementsByTagName('Icon').length):
-        temp_str = driver_xml.getElementsByTagName('Icon')[i].childNodes[0].nodeValue
-        result = re.search('driver/(.*)/icons', temp_str)
-        result_str = result.group(1)
-        temp_str = temp_str.replace(result_str, driver_name)
-        driver_xml.getElementsByTagName('Icon')[i].childNodes[0].nodeValue = temp_str
+    if modify_xml.get() > 0:
+        if not os.path.isfile(temp_dir + '/driver/driver.xml.orig'):
+            shutil.copy(temp_dir + '/driver/driver.xml', temp_dir + '/driver/driver.xml.orig')
+        print('modified xml')
+        # replace xml data
+        # driver_tree = ET.parse(temp_dir + '/driver/driver.xml')
+        # driver_root = driver_tree.getroot()
+        # driver_root.find('name').text = driver_name
+        # driver_tree.write(temp_dir + '/driver/driver.xml')
 
-    for i in range(driver_xml.getElementsByTagName('translation_url').length):
-        temp_str = driver_xml.getElementsByTagName('translation_url')[i].childNodes[0].nodeValue
-        result = re.search('driver/(.*)/translations', temp_str)
-        result_str = result.group(1)
-        temp_str = temp_str.replace(result_str, driver_name)
-        driver_xml.getElementsByTagName('translation_url')[i].childNodes[0].nodeValue = temp_str
+        driver_xml = md.parse(temp_dir + '/driver/driver.xml')
+        driver_xml.getElementsByTagName('name')[0].childNodes[0].nodeValue = driver_name
+        for i in range(driver_xml.getElementsByTagName('Icon').length):
+            temp_str = driver_xml.getElementsByTagName('Icon')[i].childNodes[0].nodeValue
+            result = re.search('driver/(.*)/icons', temp_str)
+            result_str = result.group(1)
+            temp_str = temp_str.replace(result_str, driver_name)
+            driver_xml.getElementsByTagName('Icon')[i].childNodes[0].nodeValue = temp_str
 
-    with open(temp_dir + '/driver/driver.xml', "w") as fs:
-        fs.write(driver_xml.toxml())
-        fs.close()
+        for i in range(driver_xml.getElementsByTagName('translation_url').length):
+            temp_str = driver_xml.getElementsByTagName('translation_url')[i].childNodes[0].nodeValue
+            result = re.search('driver/(.*)/translations', temp_str)
+            result_str = result.group(1)
+            temp_str = temp_str.replace(result_str, driver_name)
+            driver_xml.getElementsByTagName('translation_url')[i].childNodes[0].nodeValue = temp_str
+
+        for i in range(driver_xml.getElementsByTagName('proxy').length):
+            temp_str = driver_xml.getElementsByTagName('proxy')[i]
+            temp_str.setAttribute('name', driver_name)
+
+        with open(temp_dir + '/driver/driver.xml', "w") as fs:
+            fs.write(driver_xml.toxml())
+            fs.close()
+    else:
+        if os.path.isfile(temp_dir + '/driver/driver.xml.orig'):
+            shutil.copy(temp_dir + '/driver/driver.xml.orig', temp_dir + '/driver/driver.xml')
+            os.remove(temp_dir + '/driver/driver.xml.orig')
 
     def confirm_write():
         if os.path.isfile(cur_dir + '/' + driver_name + '.c4z'):
@@ -452,6 +479,10 @@ restore_all_button['state'] = DISABLED
 
 divider_label2 = tk.Label(root, text='---------------------------------------------------------')
 divider_label2.grid(row=10, column=0, columnspan=3, sticky='E')
+
+modify_xml = IntVar(value=1)
+modify_xml_check = Checkbutton(root, text="modify xml", variable=modify_xml).grid(row=13, column=1, columnspan=2,
+                                                                                  sticky='E', padx=15)
 
 export_button = tk.Button(root, text='Export Control4 Driver', width=35, command=export_driver)
 export_button.grid(row=14, column=0, columnspan=3, padx=5, pady=5)
