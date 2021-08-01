@@ -337,6 +337,13 @@ def export_driver():
         temp_str = temp_str.replace(result_str, driver_name)
         driver_xml.getElementsByTagName('Icon')[i].childNodes[0].nodeValue = temp_str
 
+    for i in range(driver_xml.getElementsByTagName('translation_url').length):
+        temp_str = driver_xml.getElementsByTagName('translation_url')[i].childNodes[0].nodeValue
+        result = re.search('driver/(.*)/translations', temp_str)
+        result_str = result.group(1)
+        temp_str = temp_str.replace(result_str, driver_name)
+        driver_xml.getElementsByTagName('translation_url')[i].childNodes[0].nodeValue = temp_str
+
     with open(temp_dir + '/driver/driver.xml', "w") as fs:
         fs.write(driver_xml.toxml())
         fs.close()
