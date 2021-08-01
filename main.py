@@ -25,10 +25,20 @@ class Icon:
         self.index = index
         self.icon_family = icon_family
         self.icon_sizes = []
-        self.icon_names = icon_names
-        self.icon_paths = icon_paths
+        self.icon_names = []
+        self.icon_paths = []
+
+        for path in icon_paths:
+            if str(path).endswith('.orig'):
+                continue
+            else:
+                self.icon_paths.append(path)
 
         for name in icon_names:
+            if str(name).endswith('.orig'):
+                continue
+            else:
+                self.icon_names.append(name)
             temp_size = ''
             for l in range(len(name)):
                 if name[l] == '.':
@@ -76,6 +86,7 @@ def upload_c4z():
 
     file_entry_field['state'] = NORMAL
     file_entry_field.delete(0, 'end')
+    file_entry_field['state'] = 'readonly'
 
     if os.path.isdir(temp_dir + '/driver'):
         shutil.rmtree(temp_dir + '/driver')
@@ -106,6 +117,7 @@ def upload_c4z():
                 children_paths.append(icon_dir + '/' + icons_list[j])
 
             icon_objects.append(Icon(i, icon_families[i], children_names, children_paths))
+        file_entry_field['state'] = NORMAL
         file_entry_field.insert(0, filename)
 
         icon_objects[0].show_icon()
@@ -115,6 +127,7 @@ def upload_c4z():
 
         driver_selected = True
     else:
+        file_entry_field['state'] = NORMAL
         file_entry_field.insert(0, 'no valid icons found')
         driver_selected = False
 
@@ -122,12 +135,7 @@ def upload_c4z():
         temp_button2.grid(row=2, column=1)
         temp_button2['state'] = DISABLED
 
-        # driver_icon2 = ImageTk.PhotoImage(Image.open('white_70.png'))
-        # driver_icon_label2 = tk.Label(image=driver_icon2)
-        # driver_icon_label2.image = driver_icon2
-        # driver_icon_label2.grid(row=2, column=1)
-
-    file_entry_field['state'] = DISABLED
+    file_entry_field['state'] = 'readonly'
     if driver_selected:
         if replacement_selected:
             replace_icon_button['state'] = ACTIVE
@@ -145,7 +153,7 @@ def upload_replacement():
     filename = filedialog.askopenfilename(filetypes=[("Image", "*.png"), ("Image", "*.jpg"), ("Image", "*.gif"),
                                                      ("Image", "*.jpeg"), ("Image", "*.tiff"), ("Image", "*.bmp")])
     replacement_entry_field.insert(0, filename)
-    replacement_entry_field['state'] = DISABLED
+    replacement_entry_field['state'] = 'readonly'
 
     replacement_image = Image.open(filename)
 
@@ -172,10 +180,9 @@ def replace_icon():
 
     replacement_icon2 = Image.open(replacement_entry_field.get())
     for i in range(len(icon_objects[current_icon - 1].icon_sizes)):
-        new_icon = replacement_icon2.resize((icon_objects[current_icon - 1].icon_sizes[i],
-                                            icon_objects[current_icon - 1].icon_sizes[i]))
-        new_path = replacement_dir + '/' + icon_objects[current_icon - 1].icon_family + '_' + \
-            str(icon_objects[current_icon - 1].icon_sizes[i]) + '.png'
+        size = icon_objects[current_icon - 1].icon_sizes[i]
+        new_icon = replacement_icon2.resize((size, size))
+        new_path = replacement_dir + '/' + icon_objects[current_icon - 1].icon_names[i]
         new_icon.save(new_path)
 
     replacement_dir = temp_dir + '/replacement_icon/'
@@ -255,6 +262,8 @@ def export_driver():
         pop = Toplevel(root)
         pop.title('Overwrite')
         pop.geometry('239x50')
+        pop.grab_set()
+        pop.transient(root)
 
         confirm_label = Label(pop, text='Would you like to overwrite the existing file?')
         confirm_label.grid(row=0, column=0, columnspan=2)
@@ -290,7 +299,7 @@ file_entry_title.grid(row=0, column=1)
 
 file_entry_field = tk.Entry(root, text='', width=30)
 file_entry_field.grid(row=1, column=0, columnspan=2, sticky='E')
-file_entry_field['state'] = DISABLED
+file_entry_field['state'] = 'readonly'
 
 open_file_button = tk.Button(root, text='Open', command=upload_c4z)
 open_file_button.grid(row=1, column=2, sticky='W')
@@ -321,7 +330,7 @@ replacement_entry_title.grid(row=6, column=1)
 
 replacement_entry_field = tk.Entry(root, text='', width=30)
 replacement_entry_field.grid(row=7, column=0, columnspan=2, sticky='E')
-replacement_entry_field['state'] = DISABLED
+replacement_entry_field['state'] = 'readonly'
 
 open_file2_button = tk.Button(root, text='Open', command=upload_replacement)
 open_file2_button.grid(row=7, column=2, sticky='W')
