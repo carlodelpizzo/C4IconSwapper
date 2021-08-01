@@ -163,6 +163,7 @@ def upload_c4z():
                 driver_name = result.group(1).replace(' ', '')
                 break
 
+        driver_name_entry.delete(0, 'end')
         driver_name_entry.insert(0, driver_name)
     if len(icon_objects) == 1:
         prev_icon_button['state'] = DISABLED
