@@ -7,7 +7,13 @@ import shutil
 import xml.dom.minidom as md
 import base64
 
-version = 2.2
+version = 2.3
+
+cur_dir = os.getcwd()
+temp_dir = os.getcwd() + '/temp'
+
+if not os.path.isdir(temp_dir):
+    os.mkdir(temp_dir)
 
 # The Base64 icon version as a string
 win_icon = \
@@ -16,8 +22,8 @@ AAABAAEAICAAAAEAIACoEAAAFgAAACgAAAAgAAAAQAAAAAEAIAAAAAAAABAAABMLAAATCwAAAAAAAAAA
 """
 icon_data = base64.b64decode(win_icon)
 # The temp file is icon.ico
-tempFile = "icon.ico"
-icon_file = open(tempFile, "wb")
+temp_icon_file = temp_dir + '/icon.ico'
+icon_file = open(temp_icon_file, "wb")
 # Extract the icon
 icon_file.write(icon_data)
 icon_file.close()
@@ -27,10 +33,8 @@ root = tk.Tk()
 root.geometry('290x460')
 root.title('C4 Icon Swapper')
 root.resizable(False, False)
+root.wm_iconbitmap(temp_icon_file)
 
-root.wm_iconbitmap(tempFile)
-# Delete the temp file
-os.remove(tempFile)
 
 entry_font = 'Helvetica'
 
@@ -426,13 +430,6 @@ def export_driver():
         shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
         base = os.path.splitext(cur_dir + '/' + driver_name + '.zip')[0]
         os.rename(cur_dir + '/' + driver_name + '.zip', base + '.c4z')
-
-
-cur_dir = os.getcwd()
-temp_dir = os.getcwd() + '/temp'
-
-if not os.path.isdir(temp_dir):
-    os.mkdir(temp_dir)
 
 
 temp_button = Button(root, text='', width=9, height=4, bg='white')
