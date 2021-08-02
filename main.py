@@ -33,7 +33,7 @@ root = tk.Tk()
 root.geometry('290x460')
 root.title('C4 Icon Swapper')
 root.resizable(False, False)
-root.wm_iconbitmap(temp_icon_file)
+# root.wm_iconbitmap(temp_icon_file)
 
 
 entry_font = 'Helvetica'
