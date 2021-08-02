@@ -24,7 +24,7 @@ icon_file.close()
 
 
 root = tk.Tk()
-root.geometry('290x450')
+root.geometry('290x460')
 root.title('C4 Icon Swapper')
 root.resizable(False, False)
 
