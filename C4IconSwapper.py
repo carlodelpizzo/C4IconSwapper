@@ -12,7 +12,7 @@ version = '3.0'
 
 # Root Window
 root = tk.Tk()
-root.geometry('1000x380')
+root.geometry('915x250')
 root.title('C4 Icon Swapper')
 root.resizable(False, False)
 # root.wm_iconbitmap(temp_icon_file)
@@ -54,7 +54,7 @@ blank_image.close()
 
 # 'Upload Control4 Driver' Frame
 c4z_frame = Frame(root).place(x=0, y=0)
-c4z_x = 10
+c4z_x = 5
 c4z_y = 5
 
 # 'Upload Replacement Image' Frame
@@ -71,7 +71,119 @@ global modify_xml
 driver_selected = False
 replacement_selected = False
 
-# Icon Class
+
+class C4zPanel:
+    def __init__(self):
+        self.x = 5
+        self.y = 5
+
+        # Labels
+        self.blank_image_label = tk.Label(c4z_frame, image=blank)
+        self.blank_image_label.image = blank
+        self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+
+        self.icon_label = tk.Label(c4z_frame, text='0 of 0')
+        self.icon_label.place(x=108 + self.x, y=176 + self.y, anchor='n')
+
+        self.icon_name_label = tk.Label(c4z_frame, text='icon name')
+        self.icon_name_label.place(x=108 + self.x, y=197 + self.y, anchor='n')
+
+        # Buttons
+        self.open_file_button = tk.Button(c4z_frame, text='Open', width=10, command=upload_c4z)
+        self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
+
+        self.restore_button = tk.Button(c4z_frame, text='Restore \n Original Icon', command=restore_icon)
+        self.restore_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
+        self.restore_button['state'] = DISABLED
+
+        self.restore_all_button = tk.Button(c4z_frame, text='Restore All', command=restore_all)
+        self.restore_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
+        self.restore_all_button['state'] = DISABLED
+
+        self.prev_icon_button = tk.Button(c4z_frame, text='Prev', command=prev_icon, width=5)
+        self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
+        self.prev_icon_button['state'] = DISABLED
+
+        self.next_icon_button = tk.Button(c4z_frame, text='Next', command=next_icon, width=5)
+        self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
+        self.next_icon_button['state'] = DISABLED
+
+        # Entry
+        self.file_entry_field = tk.Entry(c4z_frame, width=25)
+        self.file_entry_field.insert(0, 'Select .c4z file...')
+        self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
+        self.file_entry_field['state'] = DISABLED
+
+    def update_pos(self, new_x=None, new_y=None):
+        if new_x:
+            self.x = new_x
+        if new_y:
+            self.y = new_y
+        # Labels
+        self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+        self.icon_label.place(x=108 + self.x, y=176 + self.y, anchor='n')
+        self.icon_name_label.place(x=108 + self.x, y=197 + self.y, anchor='n')
+        # Buttons
+        self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
+        self.restore_button.place(x=228 + self.x, y=71 + self.y, anchor='n')
+        self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
+        self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
+        # Entry
+        self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
+
+
+class ReplacementPanel:
+    def __init__(self):
+        self.x = 310
+        self.y = 5
+
+        # Labels
+        self.blank_image_label = tk.Label(c4z_frame, image=blank)
+        self.blank_image_label.image = blank
+        self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+
+        # Buttons
+        self.open_file_button = tk.Button(c4z_frame, text='Open', width=10, command=upload_replacement)
+        self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
+
+        self.replace_all_button = tk.Button(c4z_frame, text='Replace All', command=replace_icon)
+        self.replace_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
+        self.replace_all_button['state'] = DISABLED
+
+        self.replace_button = tk.Button(c4z_frame, text='Replace \n Current Icon', command=replace_all)
+        self.replace_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
+        self.replace_button['state'] = DISABLED
+
+        self.prev_icon_button = tk.Button(c4z_frame, text='Prev', command=prev_icon, width=5)
+        self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
+        self.prev_icon_button['state'] = DISABLED
+
+        self.next_icon_button = tk.Button(c4z_frame, text='Next', command=next_icon, width=5)
+        self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
+        self.next_icon_button['state'] = DISABLED
+
+        # Entry
+        self.file_entry_field = tk.Entry(c4z_frame, width=25)
+        self.file_entry_field.insert(0, 'Select Image file...')
+        self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
+        self.file_entry_field['state'] = DISABLED
+
+    def update_pos(self, new_x=None, new_y=None):
+        if new_x:
+            self.x = new_x
+        if new_y:
+            self.y = new_y
+        # Labels
+        self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+        # Buttons
+        self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
+        self.replace_button.place(x=228 + self.x, y=71 + self.y, anchor='n')
+        self.replace_all_button.place(x=228 + self.x, y=71 + self.y, anchor='n')
+        self.replace_button.place(x=228 + self.x, y=71 + self.y, anchor='n')
+        self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
+        self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
+        # Entry
+        self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
 
 
 # Functions
@@ -91,49 +203,35 @@ def next_icon():
     pass
 
 
-# Labels
-version_label = Label(root, text=version).place(relx=1, rely=1.01, anchor='se')
+def restore_all():
+    pass
 
-blank_image_label = tk.Label(c4z_frame, image=blank)
-blank_image_label.image = blank
-blank_image_label.place(x=42 + c4z_x, y=42 + c4z_y)
 
-icon_label = tk.Label(c4z_frame, text='icon: 0 of 0')
-icon_label.place(x=75 + c4z_x, y=176 + c4z_y)
+def replace_all():
+    pass
 
-icon_name_label = tk.Label(c4z_frame, text='icon name:')
-icon_name_label.place(x=75 + c4z_x, y=197 + c4z_y)
 
-# Buttons
-open_file_button = tk.Button(c4z_frame, text='Open', width=10, command=upload_c4z)
-open_file_button.place(x=187 + c4z_x, y=20 + c4z_y)
+def replace_icon():
+    pass
 
-restore_button = tk.Button(c4z_frame, text='Restore \n Original Icon', command=restore_icon)
-restore_button.place(x=187 + c4z_x, y=71 + c4z_y)
-restore_button['state'] = DISABLED
 
-prev_icon_button = tk.Button(c4z_frame, text='Prev', command=prev_icon, width=5)
-prev_icon_button.place(x=180 + c4z_x, y=145 + c4z_y)
-prev_icon_button['state'] = DISABLED
+def upload_replacement():
+    pass
 
-next_icon_button = tk.Button(c4z_frame, text='Next', command=next_icon, width=5)
-next_icon_button.place(x=230 + c4z_x, y=145 + c4z_y)
-next_icon_button['state'] = DISABLED
-
-# Entry Fields
-file_entry_field = tk.Entry(c4z_frame, width=25)
-file_entry_field.insert(0, 'Select .c4z file...')
-file_entry_field.place(x=30 + c4z_x, y=23 + c4z_y)
-file_entry_field['state'] = DISABLED
-
-# Checkboxes
 
 # Separators
 separator0 = ttk.Separator(root, orient='vertical')
-separator0.place(x=326, y=0, relwidth=0.2, relheight=1)
+separator0.place(x=305, y=0, relwidth=0.2, relheight=1)
 
 separator1 = ttk.Separator(root, orient='vertical')
-separator1.place(relx=0.667, y=0, relwidth=0.2, relheight=1)
+separator1.place(x=610, y=0, relwidth=0.2, relheight=1)
+
+# Version Label
+version_label = Label(root, text=version).place(relx=1, rely=1.01, anchor='se')
+
+# Initialize
+c4z_panel = C4zPanel()
+replacement_panel = ReplacementPanel()
 
 root.mainloop()
 
