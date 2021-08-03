@@ -93,6 +93,7 @@ class C4Driver:
                     temp_counter += 1
                     if temp_counter == 2:
                         self.shown_icons.pop()
+                        continue
         self.current_icon = 0
 
     def inc_current_icon(self, step=1):
