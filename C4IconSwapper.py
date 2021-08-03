@@ -68,6 +68,10 @@ global driver_name
 global current_icon
 global replacement_image
 global modify_xml
+global icon_objects
+
+navigator_icon_dir = temp_dir + '/driver/www/icons/device'
+composer_icon_dir = temp_dir + '/driver/www/icons'
 driver_selected = False
 replacement_selected = False
 
@@ -188,18 +192,47 @@ class ReplacementPanel:
 
 # Functions
 def upload_c4z():
-    pass
+    global icon_objects
+    global current_icon
+    global driver_selected
+    global replacement_selected
+    global driver_name
+
+    icon_objects = []
+    filename = filedialog.askopenfilename(filetypes=[("Control4 Drivers", "*.c4z")])
+
+    if filename:
+        if os.path.isdir(temp_dir + '/driver'):
+            shutil.rmtree(temp_dir + '/driver')
+
+        c4z_panel.file_entry_field['state'] = NORMAL
+        c4z_panel.file_entry_field.delete(0, 'end')
+        c4z_panel.file_entry_field.insert(0, filename)
+        c4z_panel.file_entry_field['state'] = 'readonly'
+        shutil.unpack_archive(filename, temp_dir + '/driver', 'zip')
+        driver_selected = True
+
+
+def upload_replacement():
+    global driver_selected
+    global replacement_selected
+
+    filename = filedialog.askopenfilename(filetypes=[("Image", "*.png"), ("Image", "*.jpg"), ("Image", "*.gif"),
+                                                     ("Image", "*.jpeg")])
+
+    if filename:
+        replacement_panel.file_entry_field['state'] = NORMAL
+        replacement_panel.file_entry_field.delete(0, 'end')
+        replacement_panel.file_entry_field.insert(0, filename)
+        replacement_panel.file_entry_field['state'] = 'readonly'
+        replacement_selected = True
 
 
 def restore_icon():
     pass
 
 
-def prev_icon():
-    pass
-
-
-def next_icon():
+def replace_icon():
     pass
 
 
@@ -211,11 +244,11 @@ def replace_all():
     pass
 
 
-def replace_icon():
+def prev_icon():
     pass
 
 
-def upload_replacement():
+def next_icon():
     pass
 
 
