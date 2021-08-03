@@ -191,6 +191,8 @@ class C4zPanel:
         self.icon_name_label.config(text='name:')
         self.prev_icon_button['state'] = DISABLED
         self.next_icon_button['state'] = DISABLED
+        replacement_panel.prev_icon_button['state'] = DISABLED
+        replacement_panel.next_icon_button['state'] = DISABLED
 
 
 class ReplacementPanel:
@@ -323,9 +325,13 @@ def upload_c4z():
         if len(c4_driver.shown_icons) <= 1:
             c4z_panel.prev_icon_button['state'] = DISABLED
             c4z_panel.next_icon_button['state'] = DISABLED
+            replacement_panel.prev_icon_button['state'] = DISABLED
+            replacement_panel.next_icon_button['state'] = DISABLED
         elif len(c4_driver.shown_icons) > 1:
             c4z_panel.prev_icon_button['state'] = ACTIVE
             c4z_panel.next_icon_button['state'] = ACTIVE
+            replacement_panel.prev_icon_button['state'] = ACTIVE
+            replacement_panel.next_icon_button['state'] = ACTIVE
 
 
 def upload_replacement():
