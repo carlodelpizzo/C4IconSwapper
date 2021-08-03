@@ -183,6 +183,15 @@ class C4zPanel:
                                     ' of ' + str(len(c4_driver.shown_icons)))
         self.icon_name_label.config(text='name: ' + c4_driver.shown_icons[c4_driver.current_icon].name)
 
+    def blank_icon(self):
+        self.blank_image_label = tk.Label(c4z_frame, image=blank)
+        self.blank_image_label.image = blank
+        self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+        self.icon_label.config(text='icon: 0 of 0')
+        self.icon_name_label.config(text='name:')
+        self.prev_icon_button['state'] = DISABLED
+        self.next_icon_button['state'] = DISABLED
+
 
 class ReplacementPanel:
     def __init__(self):
@@ -251,41 +260,67 @@ def upload_c4z():
         if os.path.isdir(temp_dir + 'driver'):
             shutil.rmtree(temp_dir + 'driver')
 
-        c4z_panel.file_entry_field['state'] = NORMAL
-        c4z_panel.file_entry_field.delete(0, 'end')
-        c4z_panel.file_entry_field.insert(0, filename)
-        c4z_panel.file_entry_field['state'] = 'readonly'
         shutil.unpack_archive(filename, temp_dir + 'driver', 'zip')
 
-        icon_list = os.listdir(device_icon_dir)
-        for i in range(len(icon_list)):
-            temp_name = ''
-            temp_size = ''
-            get_size = False
-            for letter in icon_list[i]:
-                if letter == '.':
-                    break
-                else:
-                    if get_size:
-                        temp_size += letter
-                    if letter == '_':
-                        get_size = True
-                    elif not get_size:
-                        temp_name += letter
-            icon_objects.append(Icon(device_icon_dir + str(icon_list[i]), temp_name, int(temp_size)))
-
-        icon_list = os.listdir(icon_dir)
-        for i in range(len(icon_list)):
-            if 'device_lg' in icon_list[i]:
-                icon_objects.append(Icon(icon_dir + str(icon_list[i]), 'device', 32))
-            if 'device_sm' in icon_list[i]:
-                icon_objects.append(Icon(icon_dir + str(icon_list[i]), 'device', 16))
-        driver_selected = True
+        if os.path.isdir(device_icon_dir):
+            icon_list = os.listdir(device_icon_dir)
+            for i in range(len(icon_list)):
+                temp_name = ''
+                temp_size = ''
+                get_size = False
+                for letter in icon_list[i]:
+                    if letter == '.':
+                        break
+                    else:
+                        if get_size:
+                            temp_size += letter
+                        if letter == '_':
+                            get_size = True
+                        elif not get_size:
+                            temp_name += letter
+                icon_objects.append(Icon(device_icon_dir + str(icon_list[i]), temp_name, int(temp_size)))
+        if os.path.isdir(icon_dir):
+            icon_list = os.listdir(icon_dir)
+            for i in range(len(icon_list)):
+                if icon_list[i][len(icon_list[i]) - 4] == '.':
+                    if 'device_lg' not in icon_list[i] and 'device_sm' not in icon_list[i]:
+                        temp_name = ''
+                        temp_size = ''
+                        get_size = False
+                        for letter in icon_list[i]:
+                            if letter == '.':
+                                break
+                            else:
+                                if get_size:
+                                    temp_size += letter
+                                if letter == '_':
+                                    get_size = True
+                                elif not get_size:
+                                    temp_name += letter
+                        icon_objects.append(Icon(icon_dir + str(icon_list[i]), temp_name, int(temp_size)))
+            for i in range(len(icon_list)):
+                if icon_list[i][len(icon_list[i]) - 4] == '.':
+                    if 'device_lg' in icon_list[i]:
+                        icon_objects.append(Icon(icon_dir + str(icon_list[i]), 'device', 32))
+                    elif 'device_sm' in icon_list[i]:
+                        icon_objects.append(Icon(icon_dir + str(icon_list[i]), 'device', 16))
 
         c4_driver = C4Driver(icon_objects)
-        c4z_panel.update_icon()
+        if len(c4_driver.icons) > 0:
+            c4z_panel.file_entry_field['state'] = NORMAL
+            c4z_panel.file_entry_field.delete(0, 'end')
+            c4z_panel.file_entry_field.insert(0, filename)
+            c4z_panel.file_entry_field['state'] = 'readonly'
+            driver_selected = True
+            c4z_panel.update_icon()
+        else:
+            c4z_panel.file_entry_field['state'] = NORMAL
+            c4z_panel.file_entry_field.delete(0, 'end')
+            c4z_panel.file_entry_field.insert(0, 'Invalid driver selected...')
+            c4z_panel.file_entry_field['state'] = DISABLED
+            c4z_panel.blank_icon()
 
-        if len(c4_driver.shown_icons) == 1:
+        if len(c4_driver.shown_icons) <= 1:
             c4z_panel.prev_icon_button['state'] = DISABLED
             c4z_panel.next_icon_button['state'] = DISABLED
         elif len(c4_driver.shown_icons) > 1:
