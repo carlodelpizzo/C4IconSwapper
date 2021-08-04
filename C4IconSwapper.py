@@ -8,7 +8,7 @@ import shutil
 # import xml.dom.minidom as md
 import base64
 
-version = '3.0'
+version = '3.0a'
 
 # Root Window
 root = tk.Tk()
@@ -53,12 +53,10 @@ blank = ImageTk.PhotoImage(blank)
 blank_image.close()
 
 # 'Upload Control4 Driver' Frame
-c4z_frame = Frame(root).place(x=0, y=0)
 c4z_x = 5
 c4z_y = 5
 
 # 'Upload Replacement Image' Frame
-replacement_frame = Frame(root).place(x=0, y=0)
 replacement_x = 0
 replacement_y = 0
 
@@ -66,6 +64,7 @@ replacement_y = 0
 global c4_driver
 device_icon_dir = temp_dir + 'driver/www/icons/device/'
 icon_dir = temp_dir + 'driver/www/icons/'
+replacement_image_path = temp_dir + 'replacement_icon.png'
 driver_selected = False
 replacement_selected = False
 
@@ -81,30 +80,36 @@ class Icon:
                 self.type = path[i: len(path)]
 
 
+class IconGroup:
+    def __init__(self, icons: list):
+        self.name = icons[0].name
+        self.path = icons[0].path
+        self.icons = icons
+        self.replacements = []
+        for _ in self.icons:
+            self.replacements.append('')
+
+    def replace_icon(self):
+        pass
+
+    def restore_icon(self):
+        pass
+
+
 class C4Driver:
     def __init__(self, icons: list):
-        self.icons = icons
-        self.shown_icons = []
-        for icon in self.icons:
-            self.shown_icons.append(icon)
-            temp_counter = 0
-            for shown_icon in self.shown_icons:
-                if icon.name == shown_icon.name:
-                    temp_counter += 1
-                    if temp_counter == 2:
-                        self.shown_icons.pop()
-                        continue
+        self.icon_groups = icons
         self.current_icon = 0
 
     def inc_current_icon(self, step=1):
         if step > 0:
-            if self.current_icon + step >= len(self.shown_icons):
-                self.current_icon = self.current_icon + step - len(self.shown_icons)
+            if self.current_icon + step >= len(self.icon_groups):
+                self.current_icon = self.current_icon + step - len(self.icon_groups)
             else:
                 self.current_icon += 1
         else:
             if self.current_icon + step < 0:
-                self.current_icon = self.current_icon + step + len(self.shown_icons)
+                self.current_icon = self.current_icon + step + len(self.icon_groups)
             else:
                 self.current_icon -= 1
 
@@ -117,38 +122,38 @@ class C4zPanel:
         self.y = 5
 
         # Labels
-        self.blank_image_label = tk.Label(c4z_frame, image=blank)
+        self.blank_image_label = tk.Label(root, image=blank)
         self.blank_image_label.image = blank
         self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
 
-        self.icon_label = tk.Label(c4z_frame, text='0 of 0')
+        self.icon_label = tk.Label(root, text='0 of 0')
         self.icon_label.place(x=108 + self.x, y=176 + self.y, anchor='n')
 
-        self.icon_name_label = tk.Label(c4z_frame, text='icon name')
+        self.icon_name_label = tk.Label(root, text='icon name')
         self.icon_name_label.place(x=108 + self.x, y=197 + self.y, anchor='n')
 
         # Buttons
-        self.open_file_button = tk.Button(c4z_frame, text='Open', width=10, command=upload_c4z)
+        self.open_file_button = tk.Button(root, text='Open', width=10, command=upload_c4z)
         self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
 
-        self.restore_button = tk.Button(c4z_frame, text='Restore \n Original Icon', command=restore_icon)
+        self.restore_button = tk.Button(root, text='Restore \n Original Icon', command=restore_icon)
         self.restore_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
         self.restore_button['state'] = DISABLED
 
-        self.restore_all_button = tk.Button(c4z_frame, text='Restore All', command=restore_all)
+        self.restore_all_button = tk.Button(root, text='Restore All', command=restore_all)
         self.restore_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
         self.restore_all_button['state'] = DISABLED
 
-        self.prev_icon_button = tk.Button(c4z_frame, text='Prev', command=prev_icon, width=5)
+        self.prev_icon_button = tk.Button(root, text='Prev', command=prev_icon, width=5)
         self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
         self.prev_icon_button['state'] = DISABLED
 
-        self.next_icon_button = tk.Button(c4z_frame, text='Next', command=next_icon, width=5)
+        self.next_icon_button = tk.Button(root, text='Next', command=next_icon, width=5)
         self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
         self.next_icon_button['state'] = DISABLED
 
         # Entry
-        self.file_entry_field = tk.Entry(c4z_frame, width=25)
+        self.file_entry_field = tk.Entry(root, width=25)
         self.file_entry_field.insert(0, 'Select .c4z file...')
         self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
         self.file_entry_field['state'] = DISABLED
@@ -171,20 +176,20 @@ class C4zPanel:
         self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
 
     def update_icon(self):
-        icon_image = Image.open(c4_driver.shown_icons[c4_driver.current_icon].path)
+        icon_image = Image.open(c4_driver.icon_groups[c4_driver.current_icon][0].path)
 
         icon = icon_image.resize((128, 128), Image.ANTIALIAS)
         icon = ImageTk.PhotoImage(icon)
-        self.blank_image_label = tk.Label(c4z_frame, image=icon)
+        self.blank_image_label = tk.Label(root, image=icon)
         self.blank_image_label.image = icon
         self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
 
         self.icon_label.config(text='icon: ' + str(c4_driver.current_icon + 1) +
-                                    ' of ' + str(len(c4_driver.shown_icons)))
-        self.icon_name_label.config(text='name: ' + c4_driver.shown_icons[c4_driver.current_icon].name)
+                                    ' of ' + str(len(c4_driver.icon_groups)))
+        self.icon_name_label.config(text='name: ' + c4_driver.icon_groups[c4_driver.current_icon][0].name)
 
     def blank_icon(self):
-        self.blank_image_label = tk.Label(c4z_frame, image=blank)
+        self.blank_image_label = tk.Label(root, image=blank)
         self.blank_image_label.image = blank
         self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
         self.icon_label.config(text='icon: 0 of 0')
@@ -201,32 +206,32 @@ class ReplacementPanel:
         self.y = 5
 
         # Labels
-        self.blank_image_label = tk.Label(c4z_frame, image=blank)
+        self.blank_image_label = tk.Label(root, image=blank)
         self.blank_image_label.image = blank
         self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
 
         # Buttons
-        self.open_file_button = tk.Button(c4z_frame, text='Open', width=10, command=upload_replacement)
+        self.open_file_button = tk.Button(root, text='Open', width=10, command=upload_replacement)
         self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
 
-        self.replace_all_button = tk.Button(c4z_frame, text='Replace All', command=replace_icon)
+        self.replace_all_button = tk.Button(root, text='Replace All', command=replace_icon)
         self.replace_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
         self.replace_all_button['state'] = DISABLED
 
-        self.replace_button = tk.Button(c4z_frame, text='Replace \n Current Icon', command=replace_all)
+        self.replace_button = tk.Button(root, text='Replace \n Current Icon', command=replace_all)
         self.replace_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
         self.replace_button['state'] = DISABLED
 
-        self.prev_icon_button = tk.Button(c4z_frame, text='Prev', command=prev_icon, width=5)
+        self.prev_icon_button = tk.Button(root, text='Prev', command=prev_icon, width=5)
         self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
         self.prev_icon_button['state'] = DISABLED
 
-        self.next_icon_button = tk.Button(c4z_frame, text='Next', command=next_icon, width=5)
+        self.next_icon_button = tk.Button(root, text='Next', command=next_icon, width=5)
         self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
         self.next_icon_button['state'] = DISABLED
 
         # Entry
-        self.file_entry_field = tk.Entry(c4z_frame, width=25)
+        self.file_entry_field = tk.Entry(root, width=25)
         self.file_entry_field.insert(0, 'Select Image file...')
         self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
         self.file_entry_field['state'] = DISABLED
@@ -247,6 +252,25 @@ class ReplacementPanel:
         self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
         # Entry
         self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
+
+    def update_icon(self):
+        if replacement_selected:
+            icon_image = Image.open(replacement_image_path)
+            icon = icon_image.resize((128, 128), Image.ANTIALIAS)
+            icon = ImageTk.PhotoImage(icon)
+            self.blank_image_label = tk.Label(root, image=icon)
+            self.blank_image_label.image = icon
+            self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+
+
+class ExportPanel:
+    def __init__(self):
+        self.x = 615
+        self.y = 0
+
+        # Buttons
+        self.export_button = tk.Button(root, text='Export', width=10, command=export_c4z)
+        self.export_button.place(x=10 + self.x, y=135 + self.y, anchor='w')
 
 
 # Functions
@@ -307,8 +331,22 @@ def upload_c4z():
                     elif 'device_sm' in icon_list[i]:
                         icon_objects.append(Icon(icon_dir + str(icon_list[i]), 'device', 16))
 
-        c4_driver = C4Driver(icon_objects)
-        if len(c4_driver.icons) > 0:
+        icon_groups = []
+        temp_list = []
+        for i in range(len(icon_objects)):
+            if not temp_list:
+                temp_list.append(icon_objects[i])
+            elif icon_objects[i].name == temp_list[0].name:
+                temp_list.append(icon_objects[i])
+            else:
+                icon_groups.append(temp_list)
+                temp_list = [icon_objects[i]]
+            if i == len(icon_objects) - 1:
+                icon_groups.append(temp_list)
+                temp_list = ''
+
+        c4_driver = C4Driver(icon_groups)
+        if len(c4_driver.icon_groups) > 0:
             c4z_panel.file_entry_field['state'] = NORMAL
             c4z_panel.file_entry_field.delete(0, 'end')
             c4z_panel.file_entry_field.insert(0, filename)
@@ -322,16 +360,24 @@ def upload_c4z():
             c4z_panel.file_entry_field['state'] = DISABLED
             c4z_panel.blank_icon()
 
-        if len(c4_driver.shown_icons) <= 1:
+        if len(c4_driver.icon_groups) <= 1:
             c4z_panel.prev_icon_button['state'] = DISABLED
             c4z_panel.next_icon_button['state'] = DISABLED
             replacement_panel.prev_icon_button['state'] = DISABLED
             replacement_panel.next_icon_button['state'] = DISABLED
-        elif len(c4_driver.shown_icons) > 1:
+        elif len(c4_driver.icon_groups) > 1:
             c4z_panel.prev_icon_button['state'] = ACTIVE
             c4z_panel.next_icon_button['state'] = ACTIVE
             replacement_panel.prev_icon_button['state'] = ACTIVE
             replacement_panel.next_icon_button['state'] = ACTIVE
+
+        if replacement_selected:
+            if driver_selected:
+                replacement_panel.replace_button['state'] = ACTIVE
+                replacement_panel.replace_all_button['state'] = ACTIVE
+            else:
+                replacement_panel.replace_button['state'] = DISABLED
+                replacement_panel.replace_all_button['state'] = DISABLED
 
 
 def upload_replacement():
@@ -342,11 +388,23 @@ def upload_replacement():
                                                      ("Image", "*.jpeg")])
 
     if filename:
+        shutil.copy(filename, temp_dir + 'replacement_icon.png')
+
         replacement_panel.file_entry_field['state'] = NORMAL
         replacement_panel.file_entry_field.delete(0, 'end')
         replacement_panel.file_entry_field.insert(0, filename)
         replacement_panel.file_entry_field['state'] = 'readonly'
-        replacement_selected = True
+
+        if driver_selected:
+            replacement_panel.replace_button['state'] = ACTIVE
+            replacement_panel.replace_all_button['state'] = ACTIVE
+        else:
+            replacement_panel.replace_button['state'] = DISABLED
+            replacement_panel.replace_all_button['state'] = DISABLED
+
+        if os.path.isfile(temp_dir + 'replacement_icon.png'):
+            replacement_selected = True
+            replacement_panel.update_icon()
 
 
 def restore_icon():
@@ -373,6 +431,12 @@ def next_icon():
     c4_driver.inc_current_icon()
 
 
+def export_c4z():
+    shutil.make_archive('new driver', 'zip', temp_dir + '/driver')
+    base = os.path.splitext(cur_dir + '/new driver.zip')[0]
+    os.rename(cur_dir + '/new driver.zip', base + '.c4z')
+
+
 # Separators
 separator0 = ttk.Separator(root, orient='vertical')
 separator0.place(x=305, y=0, relwidth=0.2, relheight=1)
@@ -386,6 +450,7 @@ version_label = Label(root, text=version).place(relx=1, rely=1.01, anchor='se')
 # Initialize
 c4z_panel = C4zPanel()
 replacement_panel = ReplacementPanel()
+export_panel = ExportPanel()
 
 root.mainloop()
 
