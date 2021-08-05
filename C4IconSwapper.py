@@ -489,6 +489,21 @@ def next_icon():
 
 
 def export_c4z():
+    dir_list = os.listdir(icon_dir)
+    for i in range(len(dir_list)):
+        if '.orig' in dir_list[i]:
+            if not os.path.isdir(icon_dir + '/original_icons'):
+                os.mkdir(icon_dir + '/original_icons')
+            shutil.copy(icon_dir + dir_list[i], icon_dir + '/original_icons/' + dir_list[i].replace('.orig', ''))
+            os.remove(icon_dir + dir_list[i])
+    dir_list = os.listdir(device_icon_dir)
+    for i in range(len(dir_list)):
+        if '.orig' in dir_list[i]:
+            if not os.path.isdir(device_icon_dir + '/original_icons'):
+                os.mkdir(device_icon_dir + '/original_icons')
+            shutil.copy(device_icon_dir + dir_list[i], device_icon_dir + '/original_icons/' +
+                        dir_list[i].replace('.orig', ''))
+            os.remove(device_icon_dir + dir_list[i])
     shutil.make_archive('new driver', 'zip', temp_dir + '/driver')
     base = os.path.splitext(cur_dir + '/new driver.zip')[0]
     os.rename(cur_dir + '/new driver.zip', base + '.c4z')
