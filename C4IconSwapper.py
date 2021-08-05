@@ -85,12 +85,17 @@ class IconGroup:
         self.name = icons[0].name
         self.path = icons[0].path
         self.icons = icons
-        self.replacements = []
-        for _ in self.icons:
-            self.replacements.append('')
 
     def replace_icon(self):
-        pass
+        print('reached')
+        replacement_icon = Image.open(replacement_image_path)
+        for icon in self.icons:
+            shutil.copy(icon.path, icon.path + '.orig')
+            new_icon = replacement_icon.resize((icon.size, icon.size))
+            new_icon.save(icon.path)
+        c4z_panel.restore_button['state'] = ACTIVE
+        c4z_panel.restore_all_button['state'] = ACTIVE
+        c4z_panel.update_icon()
 
     def restore_icon(self):
         pass
@@ -176,7 +181,7 @@ class C4zPanel:
         self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
 
     def update_icon(self):
-        icon_image = Image.open(c4_driver.icon_groups[c4_driver.current_icon][0].path)
+        icon_image = Image.open(c4_driver.icon_groups[c4_driver.current_icon].path)
 
         icon = icon_image.resize((128, 128), Image.ANTIALIAS)
         icon = ImageTk.PhotoImage(icon)
@@ -186,7 +191,7 @@ class C4zPanel:
 
         self.icon_label.config(text='icon: ' + str(c4_driver.current_icon + 1) +
                                     ' of ' + str(len(c4_driver.icon_groups)))
-        self.icon_name_label.config(text='name: ' + c4_driver.icon_groups[c4_driver.current_icon][0].name)
+        self.icon_name_label.config(text='name: ' + c4_driver.icon_groups[c4_driver.current_icon].name)
 
     def blank_icon(self):
         self.blank_image_label = tk.Label(root, image=blank)
@@ -214,11 +219,11 @@ class ReplacementPanel:
         self.open_file_button = tk.Button(root, text='Open', width=10, command=upload_replacement)
         self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
 
-        self.replace_all_button = tk.Button(root, text='Replace All', command=replace_icon)
+        self.replace_all_button = tk.Button(root, text='Replace All', command=replace_all)
         self.replace_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
         self.replace_all_button['state'] = DISABLED
 
-        self.replace_button = tk.Button(root, text='Replace \n Current Icon', command=replace_all)
+        self.replace_button = tk.Button(root, text='Replace \n Current Icon', command=replace_icon)
         self.replace_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
         self.replace_button['state'] = DISABLED
 
@@ -339,10 +344,12 @@ def upload_c4z():
             elif icon_objects[i].name == temp_list[0].name:
                 temp_list.append(icon_objects[i])
             else:
-                icon_groups.append(temp_list)
+                new_icon_group = IconGroup(temp_list)
+                icon_groups.append(new_icon_group)
                 temp_list = [icon_objects[i]]
             if i == len(icon_objects) - 1:
-                icon_groups.append(temp_list)
+                new_icon_group = IconGroup(temp_list)
+                icon_groups.append(new_icon_group)
                 temp_list = ''
 
         c4_driver = C4Driver(icon_groups)
@@ -412,7 +419,7 @@ def restore_icon():
 
 
 def replace_icon():
-    pass
+    c4_driver.icon_groups[c4_driver.current_icon].replace_icon()
 
 
 def restore_all():
