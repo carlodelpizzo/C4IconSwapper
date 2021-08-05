@@ -7,6 +7,7 @@ import os
 import shutil
 # import xml.dom.minidom as md
 import base64
+import time
 
 version = '3.0a'
 
@@ -67,6 +68,9 @@ icon_dir = temp_dir + 'driver/www/icons/'
 replacement_image_path = temp_dir + 'replacement_icon.png'
 driver_selected = False
 replacement_selected = False
+schedule_entry_restore = False
+restore_entry_string = ''
+time_var = 0
 
 
 class Icon:
@@ -87,10 +91,10 @@ class IconGroup:
         self.icons = icons
 
     def replace_icon(self):
-        print('reached')
         replacement_icon = Image.open(replacement_image_path)
         for icon in self.icons:
-            shutil.copy(icon.path, icon.path + '.orig')
+            if not os.path.isfile(icon.path + '.orig'):
+                shutil.copy(icon.path, icon.path + '.orig')
             new_icon = replacement_icon.resize((icon.size, icon.size))
             new_icon.save(icon.path)
         c4z_panel.restore_button['state'] = ACTIVE
@@ -98,7 +102,18 @@ class IconGroup:
         c4z_panel.update_icon()
 
     def restore_icon(self):
-        pass
+        for icon in self.icons:
+            if os.path.isfile(icon.path + '.orig'):
+                shutil.copy(icon.path + '.orig', icon.path)
+                os.remove(icon.path + '.orig')
+        c4z_panel.restore_button['state'] = DISABLED
+        disable_all_button = True
+        for group in c4_driver.icon_groups:
+            if os.path.isfile(group.icons[0].path + '.orig'):
+                disable_all_button = False
+        if disable_all_button:
+            c4z_panel.restore_all_button['state'] = DISABLED
+        c4z_panel.update_icon()
 
 
 class C4Driver:
@@ -117,6 +132,11 @@ class C4Driver:
                 self.current_icon = self.current_icon + step + len(self.icon_groups)
             else:
                 self.current_icon -= 1
+
+        if os.path.isfile(self.icon_groups[self.current_icon].path + '.orig'):
+            c4z_panel.restore_button['state'] = ACTIVE
+        else:
+            c4z_panel.restore_button['state'] = DISABLED
 
         c4z_panel.update_icon()
 
@@ -283,6 +303,14 @@ def upload_c4z():
     global driver_selected
     global replacement_selected
     global c4_driver
+    global schedule_entry_restore
+    global restore_entry_string
+
+    if c4z_panel.file_entry_field.get() != 'Select .c4z file...' and \
+            c4z_panel.file_entry_field.get() != 'Invalid driver selected...':
+        c4_driver_bak = c4_driver
+        if os.path.isdir(temp_dir + 'driver'):
+            shutil.copytree(temp_dir + 'driver', temp_dir + '/bak/')
 
     icon_objects = []
     filename = filedialog.askopenfilename(filetypes=[("Control4 Drivers", "*.c4z")])
@@ -353,6 +381,7 @@ def upload_c4z():
                 temp_list = ''
 
         c4_driver = C4Driver(icon_groups)
+        preserve_prev_next = False
         if len(c4_driver.icon_groups) > 0:
             c4z_panel.file_entry_field['state'] = NORMAL
             c4z_panel.file_entry_field.delete(0, 'end')
@@ -362,21 +391,31 @@ def upload_c4z():
             c4z_panel.update_icon()
         else:
             c4z_panel.file_entry_field['state'] = NORMAL
+            if c4z_panel.file_entry_field.get() != 'Select .c4z file...' and \
+                    c4z_panel.file_entry_field.get() != 'Invalid driver selected...':
+                # noinspection PyUnboundLocalVariable
+                c4_driver = c4_driver_bak
+                schedule_entry_restore = True
+                restore_entry_string = c4z_panel.file_entry_field.get()
+                preserve_prev_next = True
+                if os.path.isdir(temp_dir + '/driver/'):
+                    shutil.rmtree(temp_dir + '/driver/')
+                shutil.copytree(temp_dir + '/bak/', temp_dir + '/driver/')
             c4z_panel.file_entry_field.delete(0, 'end')
             c4z_panel.file_entry_field.insert(0, 'Invalid driver selected...')
             c4z_panel.file_entry_field['state'] = DISABLED
-            c4z_panel.blank_icon()
 
-        if len(c4_driver.icon_groups) <= 1:
-            c4z_panel.prev_icon_button['state'] = DISABLED
-            c4z_panel.next_icon_button['state'] = DISABLED
-            replacement_panel.prev_icon_button['state'] = DISABLED
-            replacement_panel.next_icon_button['state'] = DISABLED
-        elif len(c4_driver.icon_groups) > 1:
-            c4z_panel.prev_icon_button['state'] = ACTIVE
-            c4z_panel.next_icon_button['state'] = ACTIVE
-            replacement_panel.prev_icon_button['state'] = ACTIVE
-            replacement_panel.next_icon_button['state'] = ACTIVE
+        if not preserve_prev_next:
+            if len(c4_driver.icon_groups) <= 1:
+                c4z_panel.prev_icon_button['state'] = DISABLED
+                c4z_panel.next_icon_button['state'] = DISABLED
+                replacement_panel.prev_icon_button['state'] = DISABLED
+                replacement_panel.next_icon_button['state'] = DISABLED
+            elif len(c4_driver.icon_groups) > 1:
+                c4z_panel.prev_icon_button['state'] = ACTIVE
+                c4z_panel.next_icon_button['state'] = ACTIVE
+                replacement_panel.prev_icon_button['state'] = ACTIVE
+                replacement_panel.next_icon_button['state'] = ACTIVE
 
         if replacement_selected:
             if driver_selected:
@@ -385,6 +424,9 @@ def upload_c4z():
             else:
                 replacement_panel.replace_button['state'] = DISABLED
                 replacement_panel.replace_all_button['state'] = DISABLED
+
+        if os.path.isdir(temp_dir + '/bak/'):
+            shutil.rmtree(temp_dir + '/bak/')
 
 
 def upload_replacement():
@@ -415,7 +457,7 @@ def upload_replacement():
 
 
 def restore_icon():
-    pass
+    c4_driver.icon_groups[c4_driver.current_icon].restore_icon()
 
 
 def replace_icon():
@@ -423,11 +465,19 @@ def replace_icon():
 
 
 def restore_all():
-    pass
+    for group in c4_driver.icon_groups:
+        group.restore_icon()
+    c4z_panel.restore_button['state'] = DISABLED
+    c4z_panel.restore_all_button['state'] = DISABLED
+    c4z_panel.update_icon()
 
 
 def replace_all():
-    pass
+    for group in c4_driver.icon_groups:
+        group.replace_icon()
+    c4z_panel.restore_button['state'] = ACTIVE
+    c4z_panel.restore_all_button['state'] = ACTIVE
+    c4z_panel.update_icon()
 
 
 def prev_icon():
@@ -442,6 +492,26 @@ def export_c4z():
     shutil.make_archive('new driver', 'zip', temp_dir + '/driver')
     base = os.path.splitext(cur_dir + '/new driver.zip')[0]
     os.rename(cur_dir + '/new driver.zip', base + '.c4z')
+
+
+def restore_entry_text():
+    global restore_entry_string
+    global schedule_entry_restore
+    global time_var
+
+    if schedule_entry_restore:
+        time_var = int(round(time.time() * 100))
+        schedule_entry_restore = False
+    elif time_var != 0:
+        if int(round(time.time() * 100)) - time_var > 3:
+            c4z_panel.file_entry_field['state'] = NORMAL
+            c4z_panel.file_entry_field.delete(0, 'end')
+            c4z_panel.file_entry_field.insert(0, restore_entry_string)
+            c4z_panel.file_entry_field['state'] = 'readonly'
+            restore_entry_string = ''
+            time_var = 0
+
+    root.after(2000, restore_entry_text)
 
 
 # Separators
@@ -459,6 +529,7 @@ c4z_panel = C4zPanel()
 replacement_panel = ReplacementPanel()
 export_panel = ExportPanel()
 
+root.after(0, restore_entry_text)
 root.mainloop()
 
 shutil.rmtree(temp_dir)
