@@ -5,7 +5,7 @@ from tkinter import filedialog
 from PIL import ImageTk, Image
 import os
 import shutil
-# import xml.dom.minidom as md
+import xml.dom.minidom as md
 import base64
 import time
 
@@ -293,9 +293,25 @@ class ExportPanel:
         self.x = 615
         self.y = 0
 
+        # Labels
+        self.driver_name_label = tk.Label(root, text='Driver Name:')
+        self.driver_name_label.place(x=65 + self.x, y=160 + self.y, anchor='w')
+
         # Buttons
-        self.export_button = tk.Button(root, text='Export', width=10, command=export_c4z)
-        self.export_button.place(x=10 + self.x, y=135 + self.y, anchor='w')
+        self.export_button = tk.Button(root, text='Export', width=20, command=export_c4z)
+        self.export_button.place(x=145 + self.x, y=195 + self.y, anchor='n')
+        self.export_button['state'] = DISABLED
+
+        # Entry
+        self.driver_name_entry = tk.Entry(root, width=25)
+        self.driver_name_entry.insert(0, 'New Driver')
+        self.driver_name_entry.place(x=145 + self.x, y=170 + self.y, anchor='n')
+
+        # Checkboxes
+        self.modify_xml = IntVar()
+        self.modify_xml_check = Checkbutton(root,
+                                            text="modify xml",
+                                            variable=self.modify_xml).place(x=65 + self.x, y=130 + self.y, anchor='w')
 
 
 # Functions
@@ -424,6 +440,8 @@ def upload_c4z():
             else:
                 replacement_panel.replace_button['state'] = DISABLED
                 replacement_panel.replace_all_button['state'] = DISABLED
+        if driver_selected:
+            export_panel.export_button['state'] = ACTIVE
 
         if os.path.isdir(temp_dir + '/bak/'):
             shutil.rmtree(temp_dir + '/bak/')
@@ -489,6 +507,15 @@ def next_icon():
 
 
 def export_c4z():
+    driver_name = export_panel.driver_name_entry.get()
+    temp = ''
+    for letter in driver_name:
+        if str(letter).isalnum() or str(letter) == '_' or str(letter) == '-' or str(letter) == ' ':
+            temp += str(letter)
+    driver_name = temp
+    export_panel.driver_name_entry.delete(0, 'end')
+    export_panel.driver_name_entry.insert(0, driver_name)
+
     dir_list = os.listdir(icon_dir)
     for i in range(len(dir_list)):
         if '.orig' in dir_list[i]:
@@ -504,9 +531,72 @@ def export_c4z():
             shutil.copy(device_icon_dir + dir_list[i], device_icon_dir + '/original_icons/' +
                         dir_list[i].replace('.orig', ''))
             os.remove(device_icon_dir + dir_list[i])
-    shutil.make_archive('new driver', 'zip', temp_dir + '/driver')
-    base = os.path.splitext(cur_dir + '/new driver.zip')[0]
-    os.rename(cur_dir + '/new driver.zip', base + '.c4z')
+
+    if export_panel.modify_xml.get() > 0:
+        if not os.path.isfile(temp_dir + '/driver/driver.xml.orig'):
+            shutil.copy(temp_dir + '/driver/driver.xml', temp_dir + '/driver/driver.xml.orig')
+        # replace xml data
+        # driver_tree = ET.parse(temp_dir + '/driver/driver.xml')
+        # driver_root = driver_tree.getroot()
+        # driver_root.find('name').text = driver_name
+        # driver_tree.write(temp_dir + '/driver/driver.xml')
+
+        driver_xml = md.parse(temp_dir + '/driver/driver.xml')
+        driver_xml.getElementsByTagName('name')[0].childNodes[0].nodeValue = driver_name
+        for i in range(driver_xml.getElementsByTagName('Icon').length):
+            temp_str = driver_xml.getElementsByTagName('Icon')[i].childNodes[0].nodeValue
+            result = re.search('driver/(.*)/icons', temp_str)
+            result_str = result.group(1)
+            temp_str = temp_str.replace(result_str, driver_name)
+            driver_xml.getElementsByTagName('Icon')[i].childNodes[0].nodeValue = temp_str
+
+        for i in range(driver_xml.getElementsByTagName('translation_url').length):
+            temp_str = driver_xml.getElementsByTagName('translation_url')[i].childNodes[0].nodeValue
+            result = re.search('driver/(.*)/translations', temp_str)
+            result_str = result.group(1)
+            temp_str = temp_str.replace(result_str, driver_name)
+            driver_xml.getElementsByTagName('translation_url')[i].childNodes[0].nodeValue = temp_str
+
+        for i in range(driver_xml.getElementsByTagName('proxy').length):
+            temp_str = driver_xml.getElementsByTagName('proxy')[i]
+            temp_str.setAttribute('name', driver_name)
+
+        with open(temp_dir + '/driver/driver.xml', "w") as fs:
+            fs.write(driver_xml.toxml())
+            fs.close()
+
+    def confirm_write():
+        if os.path.isfile(cur_dir + '/' + driver_name + '.c4z'):
+            os.remove(cur_dir + '/' + driver_name + '.c4z')
+        if os.path.isfile(cur_dir + '/' + driver_name + '.zip'):
+            os.remove(cur_dir + '/' + driver_name + '.zip')
+        shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
+        base_path = os.path.splitext(cur_dir + '/' + driver_name + '.zip')[0]
+        os.rename(cur_dir + '/' + driver_name + '.zip', base_path + '.c4z')
+
+        pop.destroy()
+
+    if os.path.isfile(cur_dir + '/' + driver_name + '.c4z') or os.path.isfile(
+            cur_dir + '/' + driver_name + '.zip'):
+        pop = Toplevel(root)
+        pop.title('Overwrite')
+        pop.geometry('239x50')
+        pop.grab_set()
+        pop.transient(root)
+        pop.resizable(False, False)
+
+        confirm_label = Label(pop, text='Would you like to overwrite the existing file?')
+        confirm_label.grid(row=0, column=0, columnspan=2)
+
+        no_button = tk.Button(pop, text='No', width='10', command=pop.destroy)
+        no_button.grid(row=1, column=0)
+
+        yes_button = tk.Button(pop, text='Yes', width='10', command=confirm_write)
+        yes_button.grid(row=1, column=1)
+    else:
+        shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
+        base = os.path.splitext(cur_dir + '/' + driver_name + '.zip')[0]
+        os.rename(cur_dir + '/' + driver_name + '.zip', base + '.c4z')
 
 
 def restore_entry_text():
