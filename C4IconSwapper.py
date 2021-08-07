@@ -3,10 +3,12 @@ from tkinter import *
 from tkinter import ttk
 from tkinter import filedialog
 from PIL import ImageTk, Image
+from datetime import datetime
 import os
 import shutil
 import base64
 import time
+import datetime as dt
 
 version = '3.0a'
 
@@ -506,6 +508,10 @@ def next_icon():
 
 
 def export_c4z():
+    def append_line(array: list, string: str):
+        encoded_str = string.encode("ascii", "ignore")
+        decoded_str = encoded_str.decode()
+        array.append(decoded_str)
     driver_name = export_panel.driver_name_entry.get()
     temp = ''
     for letter in driver_name:
@@ -533,31 +539,82 @@ def export_c4z():
 
     if export_panel.modify_xml.get() == 1:
         os.rename(temp_dir + '/driver/driver.xml', temp_dir + '/driver/driver.txt')
-        driver_xml_file = open(temp_dir + '/driver/driver.txt')
+        driver_xml_file = open(temp_dir + '/driver/driver.txt', errors='ignore')
         driver_xml_lines = driver_xml_file.readlines()
         driver_xml_file.close()
         modified_xml_lines = []
-        for line in driver_xml_lines:
-            if '<name>' in line:
-                result = re.search('<name>(.*)</name>', line)
-                if result:
-                    line = line.replace(result.group(1), driver_name)
-                modified_xml_lines.append(line)
-                continue
-            elif '<proxy' in line:
-                temp_str = ''
-                for l in line:
-                    if len(temp_str) < 6:
-                        temp_str += l
-                    else:
-                        temp_str = temp_str[1:len(temp_str)]
-                        temp_str += l
-                    if temp_str == 'name="':
-                        print('True')
-            else:
-                modified_xml_lines.append(line)
 
-        driver_xml_file = open(temp_dir + '/driver/driver.txt', 'w')
+        do_name_swap = True
+        update_modified_date = True
+        proxy_step2 = False
+        icon_step2 = False
+        old_driver_name = ''
+        old_icon_path = ''
+        for line in driver_xml_lines:
+            printed_line = False
+            if do_name_swap:
+                if '<name>' in line:
+                    result = re.search('<name>(.*)</name>', line)
+                    if result:
+                        line = line.replace(result.group(1), driver_name)
+                    do_name_swap = False
+                    append_line(modified_xml_lines, line)
+                    printed_line = True
+            if update_modified_date:
+                if '<modified>' in line:
+                    result = re.search('<modified>(.*)</modified>', line)
+                    if result:
+                        today = dt.date.today()
+                        current_time = datetime.now().strftime("%H:%M")
+                        modified_datestamp = str(today.month) + '/' + str(today.day) + '/' + str(today.year) + \
+                                             ' ' + current_time
+                        line = line.replace(result.group(1), modified_datestamp)
+                        append_line(modified_xml_lines, line)
+                        printed_line = True
+            if '<proxy' in line:
+                if not proxy_step2:
+                    temp_str = ''
+                    temp_step2 = False
+                    for l in line:
+                        if not temp_step2:
+                            if len(temp_str) < 6:
+                                temp_str += l
+                            else:
+                                temp_str = temp_str[1:len(temp_str)]
+                                temp_str += l
+                        else:
+                            if l != '"':
+                                old_driver_name += l
+                            else:
+                                break
+                        if temp_str == 'name="':
+                            temp_step2 = True
+                    line = line.replace(old_driver_name, driver_name)
+                    append_line(modified_xml_lines, line)
+                    printed_line = True
+                    proxy_step2 = True
+                else:
+                    if 'name="' + old_driver_name + '"' in line:
+                        line = line.replace('name="' + old_driver_name + '"', 'name="' + driver_name + '"')
+                        append_line(modified_xml_lines, line)
+                        printed_line = True
+            if '<Icon' in line:
+                if not icon_step2:
+                    result = re.search('driver/(.*)/icons', line)
+                    if result:
+                        old_icon_path = result.group(1)
+                        line = line.replace(old_icon_path, driver_name)
+                        append_line(modified_xml_lines, line)
+                        printed_line = True
+                else:
+                    if old_icon_path in line:
+                        line = line.replace(old_icon_path, driver_name)
+                        append_line(modified_xml_lines, line)
+                        printed_line = True
+            if not printed_line:
+                append_line(modified_xml_lines, line)
+
+        driver_xml_file = open(temp_dir + '/driver/driver.txt', 'w', errors='ignore')
         driver_xml_file.writelines(modified_xml_lines)
         driver_xml_file.close()
         os.rename(temp_dir + '/driver/driver.txt', temp_dir + '/driver/driver.xml')
