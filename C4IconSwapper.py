@@ -10,14 +10,14 @@ import base64
 import time
 import datetime as dt
 
-version = '3.0a'
+# exe made with pyinstaller --onefile -w
+version = '3.0b'
 
 # Root Window
 root = tk.Tk()
 root.geometry('915x250')
 root.title('C4 Icon Swapper')
 root.resizable(False, False)
-# root.wm_iconbitmap(temp_icon_file)
 entry_font = 'Helvetica'
 
 # Creating temporary directory
@@ -37,6 +37,7 @@ temp_icon_file = temp_dir + 'icon.ico'
 icon_file = open(temp_icon_file, 'wb')
 icon_file.write(icon_data)
 icon_file.close()
+# root.wm_iconbitmap(temp_icon_file)  # Windows defender flags pyinstaller exe if this is enabled
 
 # Base64 encoded blank image
 # Decoding and creating a temporary image file
@@ -309,10 +310,10 @@ class ExportPanel:
         self.driver_name_entry.place(x=145 + self.x, y=170 + self.y, anchor='n')
 
         # Checkboxes
-        self.modify_xml = IntVar()
+        self.modify_xml = IntVar(value=1)
         self.modify_xml_check = Checkbutton(root,
-                                            text="modify xml",
-                                            variable=self.modify_xml).place(x=65 + self.x, y=130 + self.y, anchor='w')
+                                            text="modify driver.xml",
+                                            variable=self.modify_xml).place(x=63 + self.x, y=135 + self.y, anchor='w')
 
 
 # Functions
