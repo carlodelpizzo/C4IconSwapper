@@ -612,6 +612,18 @@ def export_c4z():
                         line = line.replace(old_icon_path, driver_name)
                         append_line(modified_xml_lines, line)
                         printed_line = True
+            if '<creator>' in line:
+                result = re.search('<creator>(.*)</creator>', line)
+                if result:
+                    line = line.replace(result.group(1), 'C4IconSwapper')
+                    append_line(modified_xml_lines, line)
+                    printed_line = True
+            if '<manufacturer>' in line:
+                result = re.search('<manufacturer>(.*)</manufacturer>', line)
+                if result:
+                    line = line.replace(result.group(1), 'C4IconSwapper')
+                    append_line(modified_xml_lines, line)
+                    printed_line = True
             if not printed_line:
                 append_line(modified_xml_lines, line)
 
