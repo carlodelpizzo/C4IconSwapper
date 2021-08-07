@@ -535,11 +535,6 @@ def export_c4z():
     if export_panel.modify_xml.get() > 0:
         if not os.path.isfile(temp_dir + '/driver/driver.xml.orig'):
             shutil.copy(temp_dir + '/driver/driver.xml', temp_dir + '/driver/driver.xml.orig')
-        # replace xml data
-        # driver_tree = ET.parse(temp_dir + '/driver/driver.xml')
-        # driver_root = driver_tree.getroot()
-        # driver_root.find('name').text = driver_name
-        # driver_tree.write(temp_dir + '/driver/driver.xml')
 
         driver_xml = md.parse(temp_dir + '/driver/driver.xml')
         driver_xml.getElementsByTagName('name')[0].childNodes[0].nodeValue = driver_name
