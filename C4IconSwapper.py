@@ -5,7 +5,6 @@ from tkinter import filedialog
 from PIL import ImageTk, Image
 import os
 import shutil
-import xml.dom.minidom as md
 import base64
 import time
 
@@ -532,33 +531,36 @@ def export_c4z():
                         dir_list[i].replace('.orig', ''))
             os.remove(device_icon_dir + dir_list[i])
 
-    if export_panel.modify_xml.get() > 0:
-        if not os.path.isfile(temp_dir + '/driver/driver.xml.orig'):
-            shutil.copy(temp_dir + '/driver/driver.xml', temp_dir + '/driver/driver.xml.orig')
+    if export_panel.modify_xml.get() == 1:
+        os.rename(temp_dir + '/driver/driver.xml', temp_dir + '/driver/driver.txt')
+        driver_xml_file = open(temp_dir + '/driver/driver.txt')
+        driver_xml_lines = driver_xml_file.readlines()
+        driver_xml_file.close()
+        modified_xml_lines = []
+        for line in driver_xml_lines:
+            if '<name>' in line:
+                result = re.search('<name>(.*)</name>', line)
+                if result:
+                    line = line.replace(result.group(1), driver_name)
+                modified_xml_lines.append(line)
+                continue
+            elif '<proxy' in line:
+                temp_str = ''
+                for l in line:
+                    if len(temp_str) < 6:
+                        temp_str += l
+                    else:
+                        temp_str = temp_str[1:len(temp_str)]
+                        temp_str += l
+                    if temp_str == 'name="':
+                        print('True')
+            else:
+                modified_xml_lines.append(line)
 
-        driver_xml = md.parse(temp_dir + '/driver/driver.xml')
-        driver_xml.getElementsByTagName('name')[0].childNodes[0].nodeValue = driver_name
-        for i in range(driver_xml.getElementsByTagName('Icon').length):
-            temp_str = driver_xml.getElementsByTagName('Icon')[i].childNodes[0].nodeValue
-            result = re.search('driver/(.*)/icons', temp_str)
-            result_str = result.group(1)
-            temp_str = temp_str.replace(result_str, driver_name)
-            driver_xml.getElementsByTagName('Icon')[i].childNodes[0].nodeValue = temp_str
-
-        for i in range(driver_xml.getElementsByTagName('translation_url').length):
-            temp_str = driver_xml.getElementsByTagName('translation_url')[i].childNodes[0].nodeValue
-            result = re.search('driver/(.*)/translations', temp_str)
-            result_str = result.group(1)
-            temp_str = temp_str.replace(result_str, driver_name)
-            driver_xml.getElementsByTagName('translation_url')[i].childNodes[0].nodeValue = temp_str
-
-        for i in range(driver_xml.getElementsByTagName('proxy').length):
-            temp_str = driver_xml.getElementsByTagName('proxy')[i]
-            temp_str.setAttribute('name', driver_name)
-
-        with open(temp_dir + '/driver/driver.xml', "w") as fs:
-            fs.write(driver_xml.toxml())
-            fs.close()
+        driver_xml_file = open(temp_dir + '/driver/driver.txt', 'w')
+        driver_xml_file.writelines(modified_xml_lines)
+        driver_xml_file.close()
+        os.rename(temp_dir + '/driver/driver.txt', temp_dir + '/driver/driver.xml')
 
     def confirm_write():
         if os.path.isfile(cur_dir + '/' + driver_name + '.c4z'):
