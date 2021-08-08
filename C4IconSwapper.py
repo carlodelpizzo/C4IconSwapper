@@ -8,7 +8,6 @@ import os
 import shutil
 import base64
 import time
-import datetime as dt
 
 # exe made with pyinstaller --onefile -w
 version = '3.0b'
@@ -565,10 +564,7 @@ def export_c4z():
                 if '<modified>' in line:
                     result = re.search('<modified>(.*)</modified>', line)
                     if result:
-                        today = dt.date.today()
-                        current_time = datetime.now().strftime("%H:%M")
-                        modified_datestamp = str(today.month) + '/' + str(today.day) + '/' + str(today.year) + \
-                                             ' ' + current_time
+                        modified_datestamp = str(datetime.now().strftime("%m/%d/%Y %H:%M"))
                         line = line.replace(result.group(1), modified_datestamp)
                         append_line(modified_xml_lines, line)
                         printed_line = True
