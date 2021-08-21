@@ -1,14 +1,14 @@
+import os
+import shutil
+import base64
+import time
+import random
 import tkinter as tk
 from tkinter import *
 from tkinter import ttk
 from tkinter import filedialog
 from PIL import ImageTk, Image
 from datetime import datetime
-import os
-import shutil
-import base64
-import time
-import random
 
 version = '3.1b'
 
