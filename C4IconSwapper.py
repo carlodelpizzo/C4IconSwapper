@@ -142,7 +142,7 @@ class C4zPanel:
         self.icon_name_label.place(x=108 + self.x, y=197 + self.y, anchor='n')
 
         # Buttons
-        self.open_file_button = tk.Button(root, text='Open', width=10, command=upload_c4z)
+        self.open_file_button = tk.Button(root, text='Open', width=10, command=self.upload_c4z)
         self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
 
         self.restore_button = tk.Button(root, text='Restore \n Original Icon', command=restore_icon)
@@ -191,6 +191,154 @@ class C4zPanel:
         replacement_panel.prev_icon_button['state'] = DISABLED
         replacement_panel.next_icon_button['state'] = DISABLED
 
+    def upload_c4z(self):
+        global driver_selected
+        global replacement_selected
+        global c4_driver
+        global schedule_entry_restore
+        global restore_entry_string
+        global orig_file_dir
+        global orig_file_path
+
+        if self.file_entry_field.get() != 'Select .c4z file...' and \
+                self.file_entry_field.get() != 'Invalid driver selected...':
+            c4_driver_bak = c4_driver
+            if os.path.isdir(temp_dir + 'driver'):
+                shutil.copytree(temp_dir + 'driver', temp_dir + '/bak/')
+
+        icon_objects = []
+        filename = filedialog.askopenfilename(filetypes=[("Control4 Drivers", "*.c4z")])
+
+        if filename:
+            if os.path.isdir(temp_dir + 'driver'):
+                shutil.rmtree(temp_dir + 'driver')
+
+            shutil.unpack_archive(filename, temp_dir + 'driver', 'zip')
+
+            if os.path.isdir(device_icon_dir):
+                icon_list = os.listdir(device_icon_dir)
+                for i in range(len(icon_list)):
+                    temp_name = ''
+                    temp_size = ''
+                    get_size = False
+                    for letter in icon_list[i]:
+                        if letter == '.':
+                            break
+                        else:
+                            if get_size:
+                                temp_size += letter
+                            if letter == '_':
+                                get_size = True
+                            elif not get_size:
+                                temp_name += letter
+                    icon_objects.append(Icon(device_icon_dir + str(icon_list[i]), temp_name, int(temp_size)))
+            if os.path.isdir(icon_dir):
+                icon_list = os.listdir(icon_dir)
+                for i in range(len(icon_list)):
+                    if icon_list[i][len(icon_list[i]) - 4] == '.':
+                        if 'device_lg' not in icon_list[i] and 'device_sm' not in icon_list[i]:
+                            temp_name = ''
+                            temp_size = ''
+                            get_size = False
+                            for letter in icon_list[i]:
+                                if letter == '.':
+                                    break
+                                else:
+                                    if get_size:
+                                        temp_size += letter
+                                    if letter == '_':
+                                        get_size = True
+                                    elif not get_size:
+                                        temp_name += letter
+                            icon_objects.append(Icon(icon_dir + str(icon_list[i]), temp_name, int(temp_size)))
+                for i in range(len(icon_list)):
+                    if icon_list[i][len(icon_list[i]) - 4] == '.':
+                        if 'device_lg' in icon_list[i]:
+                            icon_objects.append(Icon(icon_dir + str(icon_list[i]), 'device', 32))
+                        elif 'device_sm' in icon_list[i]:
+                            icon_objects.append(Icon(icon_dir + str(icon_list[i]), 'device', 16))
+
+            icon_groups = []
+            temp_list = []
+            for i in range(len(icon_objects)):
+                if not temp_list:
+                    temp_list.append(icon_objects[i])
+                elif icon_objects[i].name == temp_list[0].name:
+                    temp_list.append(icon_objects[i])
+                else:
+                    new_icon_group = IconGroup(temp_list)
+                    icon_groups.append(new_icon_group)
+                    temp_list = [icon_objects[i]]
+                if i == len(icon_objects) - 1:
+                    new_icon_group = IconGroup(temp_list)
+                    icon_groups.append(new_icon_group)
+                    temp_list = ''
+
+            c4_driver = C4Driver(icon_groups)
+            preserve_prev_next = False
+            if len(c4_driver.icon_groups) > 0:
+                self.file_entry_field['state'] = NORMAL
+                self.file_entry_field.delete(0, 'end')
+                self.file_entry_field.insert(0, filename)
+                self.file_entry_field['state'] = 'readonly'
+                orig_file_path = filename
+                orig_driver_name = ''
+                for i in reversed(range(len(orig_file_path))):
+                    if orig_file_path[i] == '/':
+                        orig_file_dir = orig_file_path[0:i + 1]
+                        break
+                    if orig_file_path[i] == '.':
+                        orig_driver_name = '.'
+                    if orig_driver_name != '':
+                        if orig_driver_name == '.':
+                            orig_driver_name = orig_file_path[i]
+                        else:
+                            orig_driver_name = orig_file_path[i] + orig_driver_name
+                export_panel.driver_name_entry.delete(0, 'end')
+                export_panel.driver_name_entry.insert(0, orig_driver_name)
+                driver_selected = True
+                self.update_icon()
+            else:
+                self.file_entry_field['state'] = NORMAL
+                if self.file_entry_field.get() != 'Select .c4z file...' and \
+                        self.file_entry_field.get() != 'Invalid driver selected...':
+                    # noinspection PyUnboundLocalVariable
+                    c4_driver = c4_driver_bak
+                    schedule_entry_restore = True
+                    restore_entry_string = self.file_entry_field.get()
+                    preserve_prev_next = True
+                    if os.path.isdir(temp_dir + '/driver/'):
+                        shutil.rmtree(temp_dir + '/driver/')
+                    shutil.copytree(temp_dir + '/bak/', temp_dir + '/driver/')
+                self.file_entry_field.delete(0, 'end')
+                self.file_entry_field.insert(0, 'Invalid driver selected...')
+                self.file_entry_field['state'] = DISABLED
+
+            if not preserve_prev_next:
+                if len(c4_driver.icon_groups) <= 1:
+                    self.prev_icon_button['state'] = DISABLED
+                    self.next_icon_button['state'] = DISABLED
+                    replacement_panel.prev_icon_button['state'] = DISABLED
+                    replacement_panel.next_icon_button['state'] = DISABLED
+                elif len(c4_driver.icon_groups) > 1:
+                    self.prev_icon_button['state'] = ACTIVE
+                    self.next_icon_button['state'] = ACTIVE
+                    replacement_panel.prev_icon_button['state'] = ACTIVE
+                    replacement_panel.next_icon_button['state'] = ACTIVE
+
+            if replacement_selected:
+                if driver_selected:
+                    replacement_panel.replace_button['state'] = ACTIVE
+                    replacement_panel.replace_all_button['state'] = ACTIVE
+                else:
+                    replacement_panel.replace_button['state'] = DISABLED
+                    replacement_panel.replace_all_button['state'] = DISABLED
+            if driver_selected:
+                export_panel.export_button['state'] = ACTIVE
+
+            if os.path.isdir(temp_dir + '/bak/'):
+                shutil.rmtree(temp_dir + '/bak/')
+
 
 class ReplacementPanel:
     def __init__(self):
@@ -203,7 +351,7 @@ class ReplacementPanel:
         self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
 
         # Buttons
-        self.open_file_button = tk.Button(root, text='Open', width=10, command=upload_replacement)
+        self.open_file_button = tk.Button(root, text='Open', width=10, command=self.upload_replacement)
         self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
 
         self.replace_all_button = tk.Button(root, text='Replace All', command=replace_all)
@@ -237,18 +385,44 @@ class ReplacementPanel:
             self.blank_image_label.image = icon
             self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
 
+    def upload_replacement(self):
+        global driver_selected
+        global replacement_selected
+
+        filename = filedialog.askopenfilename(filetypes=[("Image", "*.png"), ("Image", "*.jpg"), ("Image", "*.gif"),
+                                                         ("Image", "*.jpeg")])
+
+        if filename:
+            shutil.copy(filename, temp_dir + 'replacement_icon.png')
+
+            self.file_entry_field['state'] = NORMAL
+            self.file_entry_field.delete(0, 'end')
+            self.file_entry_field.insert(0, filename)
+            self.file_entry_field['state'] = 'readonly'
+
+            if driver_selected:
+                self.replace_button['state'] = ACTIVE
+                self.replace_all_button['state'] = ACTIVE
+            else:
+                self.replace_button['state'] = DISABLED
+                self.replace_all_button['state'] = DISABLED
+
+            if os.path.isfile(temp_dir + 'replacement_icon.png'):
+                replacement_selected = True
+                self.update_icon()
+
 
 class ExportPanel:
     def __init__(self):
         self.x = 615
-        self.y = 0
+        self.y = -20
 
         # Labels
         self.driver_name_label = tk.Label(root, text='Driver Name:')
         self.driver_name_label.place(x=65 + self.x, y=160 + self.y, anchor='w')
 
         # Buttons
-        self.export_button = tk.Button(root, text='Export', width=20, command=export_c4z)
+        self.export_button = tk.Button(root, text='Export', width=20, command=self.export_c4z)
         self.export_button.place(x=145 + self.x, y=195 + self.y, anchor='n')
         self.export_button['state'] = DISABLED
 
@@ -267,171 +441,214 @@ class ExportPanel:
                                             text="overwrite original file",
                                             variable=self.over_orig).place(x=63 + self.x, y=105 + self.y, anchor='w')
 
+    def export_c4z(self):
+        def append_line(array: list, string: str):
+            encoded_str = string.encode("ascii", "ignore")
+            decoded_str = encoded_str.decode()
+            array.append(decoded_str)
 
-def upload_c4z():
-    global driver_selected
-    global replacement_selected
-    global c4_driver
-    global schedule_entry_restore
-    global restore_entry_string
-    global orig_file_dir
-    global orig_file_path
+        driver_name = self.driver_name_entry.get()
+        temp = ''
+        for letter in driver_name:
+            if str(letter).isalnum() or str(letter) == '_' or str(letter) == '-' or str(letter) == ' ':
+                temp += str(letter)
+        driver_name = temp
+        self.driver_name_entry.delete(0, 'end')
+        self.driver_name_entry.insert(0, driver_name)
 
-    if c4z_panel.file_entry_field.get() != 'Select .c4z file...' and \
-            c4z_panel.file_entry_field.get() != 'Invalid driver selected...':
-        c4_driver_bak = c4_driver
-        if os.path.isdir(temp_dir + 'driver'):
-            shutil.copytree(temp_dir + 'driver', temp_dir + '/bak/')
+        dir_list = os.listdir(icon_dir)
+        for i in range(len(dir_list)):
+            if '.orig' in dir_list[i]:
+                if not os.path.isdir(icon_dir + '/original_icons'):
+                    os.mkdir(icon_dir + '/original_icons')
+                shutil.copy(icon_dir + dir_list[i], icon_dir + '/original_icons/' + dir_list[i].replace('.orig', ''))
+                os.remove(icon_dir + dir_list[i])
+        dir_list = os.listdir(device_icon_dir)
+        for i in range(len(dir_list)):
+            if '.orig' in dir_list[i]:
+                if not os.path.isdir(device_icon_dir + '/original_icons'):
+                    os.mkdir(device_icon_dir + '/original_icons')
+                shutil.copy(device_icon_dir + dir_list[i], device_icon_dir + '/original_icons/' +
+                            dir_list[i].replace('.orig', ''))
+                os.remove(device_icon_dir + dir_list[i])
 
-    icon_objects = []
-    filename = filedialog.askopenfilename(filetypes=[("Control4 Drivers", "*.c4z")])
+        if self.modify_xml.get() == 1:
+            os.rename(temp_dir + '/driver/driver.xml', temp_dir + '/driver/driver.txt')
+            driver_xml_file = open(temp_dir + '/driver/driver.txt', errors='ignore')
+            driver_xml_lines = driver_xml_file.readlines()
+            driver_xml_file.close()
+            modified_xml_lines = []
 
-    if filename:
-        if os.path.isdir(temp_dir + 'driver'):
-            shutil.rmtree(temp_dir + 'driver')
-
-        shutil.unpack_archive(filename, temp_dir + 'driver', 'zip')
-
-        if os.path.isdir(device_icon_dir):
-            icon_list = os.listdir(device_icon_dir)
-            for i in range(len(icon_list)):
-                temp_name = ''
-                temp_size = ''
-                get_size = False
-                for letter in icon_list[i]:
-                    if letter == '.':
-                        break
-                    else:
-                        if get_size:
-                            temp_size += letter
-                        if letter == '_':
-                            get_size = True
-                        elif not get_size:
-                            temp_name += letter
-                icon_objects.append(Icon(device_icon_dir + str(icon_list[i]), temp_name, int(temp_size)))
-        if os.path.isdir(icon_dir):
-            icon_list = os.listdir(icon_dir)
-            for i in range(len(icon_list)):
-                if icon_list[i][len(icon_list[i]) - 4] == '.':
-                    if 'device_lg' not in icon_list[i] and 'device_sm' not in icon_list[i]:
-                        temp_name = ''
-                        temp_size = ''
-                        get_size = False
-                        for letter in icon_list[i]:
-                            if letter == '.':
-                                break
+            do_name_swap = True
+            update_modified_date = True
+            proxy_step2 = False
+            icon_step2 = False
+            old_driver_name = ''
+            old_icon_path = ''
+            for line in driver_xml_lines:
+                printed_line = False
+                if do_name_swap:
+                    if '<name>' in line:
+                        result = re.search('<name>(.*)</name>', line)
+                        if result:
+                            line = line.replace(result.group(1), driver_name)
+                        do_name_swap = False
+                        append_line(modified_xml_lines, line)
+                        printed_line = True
+                if update_modified_date:
+                    if '<modified>' in line:
+                        result = re.search('<modified>(.*)</modified>', line)
+                        if result:
+                            modified_datestamp = str(datetime.now().strftime("%m/%d/%Y %H:%M"))
+                            line = line.replace(result.group(1), modified_datestamp)
+                            append_line(modified_xml_lines, line)
+                            printed_line = True
+                if '<proxy' in line:
+                    if not proxy_step2:
+                        temp_str = ''
+                        temp_step2 = False
+                        for l in line:
+                            if not temp_step2:
+                                if len(temp_str) < 6:
+                                    temp_str += l
+                                else:
+                                    temp_str = temp_str[1:len(temp_str)]
+                                    temp_str += l
                             else:
-                                if get_size:
-                                    temp_size += letter
-                                if letter == '_':
-                                    get_size = True
-                                elif not get_size:
-                                    temp_name += letter
-                        icon_objects.append(Icon(icon_dir + str(icon_list[i]), temp_name, int(temp_size)))
-            for i in range(len(icon_list)):
-                if icon_list[i][len(icon_list[i]) - 4] == '.':
-                    if 'device_lg' in icon_list[i]:
-                        icon_objects.append(Icon(icon_dir + str(icon_list[i]), 'device', 32))
-                    elif 'device_sm' in icon_list[i]:
-                        icon_objects.append(Icon(icon_dir + str(icon_list[i]), 'device', 16))
+                                if l != '"':
+                                    old_driver_name += l
+                                else:
+                                    break
+                            if temp_str == 'name="':
+                                temp_step2 = True
+                        line = line.replace(old_driver_name, driver_name)
+                        append_line(modified_xml_lines, line)
+                        printed_line = True
+                        proxy_step2 = True
+                    else:
+                        if 'name="' + old_driver_name + '"' in line:
+                            line = line.replace('name="' + old_driver_name + '"', 'name="' + driver_name + '"')
+                            append_line(modified_xml_lines, line)
+                            printed_line = True
+                if '<Icon' in line:
+                    if not icon_step2:
+                        result = re.search('driver/(.*)/icons', line)
+                        if result:
+                            old_icon_path = result.group(1)
+                            line = line.replace(old_icon_path, driver_name)
+                            append_line(modified_xml_lines, line)
+                            printed_line = True
+                    else:
+                        if old_icon_path in line:
+                            line = line.replace(old_icon_path, driver_name)
+                            append_line(modified_xml_lines, line)
+                            printed_line = True
+                if '<creator>' in line:
+                    result = re.search('<creator>(.*)</creator>', line)
+                    if result:
+                        line = line.replace(result.group(1), 'C4IconSwapper')
+                        append_line(modified_xml_lines, line)
+                        printed_line = True
+                if '<manufacturer>' in line:
+                    result = re.search('<manufacturer>(.*)</manufacturer>', line)
+                    if result:
+                        line = line.replace(result.group(1), 'C4IconSwapper')
+                        append_line(modified_xml_lines, line)
+                        printed_line = True
+                if not printed_line:
+                    append_line(modified_xml_lines, line)
 
-        icon_groups = []
-        temp_list = []
-        for i in range(len(icon_objects)):
-            if not temp_list:
-                temp_list.append(icon_objects[i])
-            elif icon_objects[i].name == temp_list[0].name:
-                temp_list.append(icon_objects[i])
+            driver_xml_file = open(temp_dir + '/driver/driver.txt', 'w', errors='ignore')
+            driver_xml_file.writelines(modified_xml_lines)
+            driver_xml_file.close()
+            os.rename(temp_dir + '/driver/driver.txt', temp_dir + '/driver/driver.xml')
+
+        def confirm_write(ran_name=False):
+            if ran_name:
+                ran_file_name = 'IcnSwp_'
+                for _ in range(0, 6):
+                    ran_file_name += str(random.randint(0, 9))
+                if os.path.isfile(cur_dir + ran_file_name + '.c4z'):
+                    os.remove(cur_dir + ran_file_name + '.c4z')
+                if os.path.isfile(cur_dir + ran_file_name + '.zip'):
+                    os.remove(cur_dir + ran_file_name + '.zip')
+                shutil.make_archive(ran_file_name, 'zip', temp_dir + '/driver')
+                base_path = os.path.splitext(cur_dir + ran_file_name + '.zip')[0]
+                os.rename(cur_dir + ran_file_name + '.zip', base_path + '.c4z')
             else:
-                new_icon_group = IconGroup(temp_list)
-                icon_groups.append(new_icon_group)
-                temp_list = [icon_objects[i]]
-            if i == len(icon_objects) - 1:
-                new_icon_group = IconGroup(temp_list)
-                icon_groups.append(new_icon_group)
-                temp_list = ''
+                if os.path.isfile(cur_dir + driver_name + '.c4z'):
+                    os.remove(cur_dir + driver_name + '.c4z')
+                if os.path.isfile(cur_dir + driver_name + '.zip'):
+                    os.remove(cur_dir + driver_name + '.zip')
+                shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
+                base_path = os.path.splitext(cur_dir + driver_name + '.zip')[0]
+                os.rename(cur_dir + driver_name + '.zip', base_path + '.c4z')
 
-        c4_driver = C4Driver(icon_groups)
-        preserve_prev_next = False
-        if len(c4_driver.icon_groups) > 0:
-            c4z_panel.file_entry_field['state'] = NORMAL
-            c4z_panel.file_entry_field.delete(0, 'end')
-            c4z_panel.file_entry_field.insert(0, filename)
-            c4z_panel.file_entry_field['state'] = 'readonly'
-            orig_file_path = filename
-            for i in reversed(range(len(orig_file_path))):
-                if orig_file_path[i] == '/':
-                    orig_file_dir = orig_file_path[0:i + 1]
-                    break
-            driver_selected = True
-            c4z_panel.update_icon()
+            pop.destroy()
+
+        if self.over_orig.get() == 1:
+            temp_name = 'IcnSwp'
+            for _ in range(0, 6):
+                temp_name += str(random.randint(0, 9))
+            try:
+                if not os.path.isfile(orig_file_path + '.orig'):
+                    shutil.copy(orig_file_path, orig_file_path + '.orig')
+                else:
+                    shutil.copy(orig_file_path, orig_file_path + '.' + temp_name)
+                    os.remove(orig_file_path + '.' + temp_name)
+                shutil.make_archive(temp_name, 'zip', temp_dir + '/driver')
+                base = os.path.splitext(cur_dir + temp_name + '.zip')[0]
+                os.rename(cur_dir + temp_name + '.zip', base + '.c4z')
+                os.remove(orig_file_path)
+                shutil.copy(base + '.c4z', orig_file_path)
+                os.remove(base + '.c4z')
+            except IOError as _:
+                pop = Toplevel(root)
+                pop.title('Cannot Overwrite Original File')
+                pop.geometry('239x95')
+                pop.grab_set()
+                pop.transient(root)
+                pop.resizable(False, False)
+
+                label_text = 'Access Denied to: ' + orig_file_dir
+                access_label = Label(pop, text=label_text)
+                access_label.grid(row=0, column=0, columnspan=2, sticky='w')
+                pop.update()
+                if 240 <= access_label.winfo_width():
+                    new_size = str(access_label.winfo_width()) + 'x95'
+                    pop.geometry(new_size)
+                    pop.update()
+
+                write_label = Label(pop, text='Export to Current Directory Instead?')
+                write_label.grid(row=1, column=0, columnspan=2, sticky='w', pady=10)
+
+                no_button = tk.Button(pop, text='No', width='10', command=pop.destroy)
+                no_button.grid(row=2, column=0, sticky='w', padx=5)
+
+                yes_button = tk.Button(pop, text='Yes', width='10', command=confirm_write)
+                yes_button.grid(row=2, column=0, sticky='w', padx=90)
         else:
-            c4z_panel.file_entry_field['state'] = NORMAL
-            if c4z_panel.file_entry_field.get() != 'Select .c4z file...' and \
-                    c4z_panel.file_entry_field.get() != 'Invalid driver selected...':
-                # noinspection PyUnboundLocalVariable
-                c4_driver = c4_driver_bak
-                schedule_entry_restore = True
-                restore_entry_string = c4z_panel.file_entry_field.get()
-                preserve_prev_next = True
-                if os.path.isdir(temp_dir + '/driver/'):
-                    shutil.rmtree(temp_dir + '/driver/')
-                shutil.copytree(temp_dir + '/bak/', temp_dir + '/driver/')
-            c4z_panel.file_entry_field.delete(0, 'end')
-            c4z_panel.file_entry_field.insert(0, 'Invalid driver selected...')
-            c4z_panel.file_entry_field['state'] = DISABLED
+            if os.path.isfile(cur_dir + driver_name + '.c4z') or os.path.isfile(
+                    cur_dir + driver_name + '.zip'):
+                pop = Toplevel(root)
+                pop.title('Overwrite')
+                pop.geometry('239x70')
+                pop.grab_set()
+                pop.transient(root)
+                pop.resizable(False, False)
 
-        if not preserve_prev_next:
-            if len(c4_driver.icon_groups) <= 1:
-                c4z_panel.prev_icon_button['state'] = DISABLED
-                c4z_panel.next_icon_button['state'] = DISABLED
-                replacement_panel.prev_icon_button['state'] = DISABLED
-                replacement_panel.next_icon_button['state'] = DISABLED
-            elif len(c4_driver.icon_groups) > 1:
-                c4z_panel.prev_icon_button['state'] = ACTIVE
-                c4z_panel.next_icon_button['state'] = ACTIVE
-                replacement_panel.prev_icon_button['state'] = ACTIVE
-                replacement_panel.next_icon_button['state'] = ACTIVE
+                confirm_label = Label(pop, text='Would you like to overwrite the existing file?')
+                confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
 
-        if replacement_selected:
-            if driver_selected:
-                replacement_panel.replace_button['state'] = ACTIVE
-                replacement_panel.replace_all_button['state'] = ACTIVE
+                no_button = tk.Button(pop, text='No', width='10', command=pop.destroy)
+                no_button.grid(row=2, column=0, sticky='e', padx=5)
+
+                yes_button = tk.Button(pop, text='Yes', width='10', command=confirm_write)
+                yes_button.grid(row=2, column=1, sticky='w', padx=5)
             else:
-                replacement_panel.replace_button['state'] = DISABLED
-                replacement_panel.replace_all_button['state'] = DISABLED
-        if driver_selected:
-            export_panel.export_button['state'] = ACTIVE
-
-        if os.path.isdir(temp_dir + '/bak/'):
-            shutil.rmtree(temp_dir + '/bak/')
-
-
-def upload_replacement():
-    global driver_selected
-    global replacement_selected
-
-    filename = filedialog.askopenfilename(filetypes=[("Image", "*.png"), ("Image", "*.jpg"), ("Image", "*.gif"),
-                                                     ("Image", "*.jpeg")])
-
-    if filename:
-        shutil.copy(filename, temp_dir + 'replacement_icon.png')
-
-        replacement_panel.file_entry_field['state'] = NORMAL
-        replacement_panel.file_entry_field.delete(0, 'end')
-        replacement_panel.file_entry_field.insert(0, filename)
-        replacement_panel.file_entry_field['state'] = 'readonly'
-
-        if driver_selected:
-            replacement_panel.replace_button['state'] = ACTIVE
-            replacement_panel.replace_all_button['state'] = ACTIVE
-        else:
-            replacement_panel.replace_button['state'] = DISABLED
-            replacement_panel.replace_all_button['state'] = DISABLED
-
-        if os.path.isfile(temp_dir + 'replacement_icon.png'):
-            replacement_selected = True
-            replacement_panel.update_icon()
+                shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
+                base = os.path.splitext(cur_dir + driver_name + '.zip')[0]
+                os.rename(cur_dir + driver_name + '.zip', base + '.c4z')
 
 
 def restore_icon():
@@ -464,216 +681,6 @@ def prev_icon():
 
 def next_icon():
     c4_driver.inc_current_icon()
-
-
-def export_c4z():
-    def append_line(array: list, string: str):
-        encoded_str = string.encode("ascii", "ignore")
-        decoded_str = encoded_str.decode()
-        array.append(decoded_str)
-
-    driver_name = export_panel.driver_name_entry.get()
-    temp = ''
-    for letter in driver_name:
-        if str(letter).isalnum() or str(letter) == '_' or str(letter) == '-' or str(letter) == ' ':
-            temp += str(letter)
-    driver_name = temp
-    export_panel.driver_name_entry.delete(0, 'end')
-    export_panel.driver_name_entry.insert(0, driver_name)
-
-    dir_list = os.listdir(icon_dir)
-    for i in range(len(dir_list)):
-        if '.orig' in dir_list[i]:
-            if not os.path.isdir(icon_dir + '/original_icons'):
-                os.mkdir(icon_dir + '/original_icons')
-            shutil.copy(icon_dir + dir_list[i], icon_dir + '/original_icons/' + dir_list[i].replace('.orig', ''))
-            os.remove(icon_dir + dir_list[i])
-    dir_list = os.listdir(device_icon_dir)
-    for i in range(len(dir_list)):
-        if '.orig' in dir_list[i]:
-            if not os.path.isdir(device_icon_dir + '/original_icons'):
-                os.mkdir(device_icon_dir + '/original_icons')
-            shutil.copy(device_icon_dir + dir_list[i], device_icon_dir + '/original_icons/' +
-                        dir_list[i].replace('.orig', ''))
-            os.remove(device_icon_dir + dir_list[i])
-
-    if export_panel.modify_xml.get() == 1:
-        os.rename(temp_dir + '/driver/driver.xml', temp_dir + '/driver/driver.txt')
-        driver_xml_file = open(temp_dir + '/driver/driver.txt', errors='ignore')
-        driver_xml_lines = driver_xml_file.readlines()
-        driver_xml_file.close()
-        modified_xml_lines = []
-
-        do_name_swap = True
-        update_modified_date = True
-        proxy_step2 = False
-        icon_step2 = False
-        old_driver_name = ''
-        old_icon_path = ''
-        for line in driver_xml_lines:
-            printed_line = False
-            if do_name_swap:
-                if '<name>' in line:
-                    result = re.search('<name>(.*)</name>', line)
-                    if result:
-                        line = line.replace(result.group(1), driver_name)
-                    do_name_swap = False
-                    append_line(modified_xml_lines, line)
-                    printed_line = True
-            if update_modified_date:
-                if '<modified>' in line:
-                    result = re.search('<modified>(.*)</modified>', line)
-                    if result:
-                        modified_datestamp = str(datetime.now().strftime("%m/%d/%Y %H:%M"))
-                        line = line.replace(result.group(1), modified_datestamp)
-                        append_line(modified_xml_lines, line)
-                        printed_line = True
-            if '<proxy' in line:
-                if not proxy_step2:
-                    temp_str = ''
-                    temp_step2 = False
-                    for l in line:
-                        if not temp_step2:
-                            if len(temp_str) < 6:
-                                temp_str += l
-                            else:
-                                temp_str = temp_str[1:len(temp_str)]
-                                temp_str += l
-                        else:
-                            if l != '"':
-                                old_driver_name += l
-                            else:
-                                break
-                        if temp_str == 'name="':
-                            temp_step2 = True
-                    line = line.replace(old_driver_name, driver_name)
-                    append_line(modified_xml_lines, line)
-                    printed_line = True
-                    proxy_step2 = True
-                else:
-                    if 'name="' + old_driver_name + '"' in line:
-                        line = line.replace('name="' + old_driver_name + '"', 'name="' + driver_name + '"')
-                        append_line(modified_xml_lines, line)
-                        printed_line = True
-            if '<Icon' in line:
-                if not icon_step2:
-                    result = re.search('driver/(.*)/icons', line)
-                    if result:
-                        old_icon_path = result.group(1)
-                        line = line.replace(old_icon_path, driver_name)
-                        append_line(modified_xml_lines, line)
-                        printed_line = True
-                else:
-                    if old_icon_path in line:
-                        line = line.replace(old_icon_path, driver_name)
-                        append_line(modified_xml_lines, line)
-                        printed_line = True
-            if '<creator>' in line:
-                result = re.search('<creator>(.*)</creator>', line)
-                if result:
-                    line = line.replace(result.group(1), 'C4IconSwapper')
-                    append_line(modified_xml_lines, line)
-                    printed_line = True
-            if '<manufacturer>' in line:
-                result = re.search('<manufacturer>(.*)</manufacturer>', line)
-                if result:
-                    line = line.replace(result.group(1), 'C4IconSwapper')
-                    append_line(modified_xml_lines, line)
-                    printed_line = True
-            if not printed_line:
-                append_line(modified_xml_lines, line)
-
-        driver_xml_file = open(temp_dir + '/driver/driver.txt', 'w', errors='ignore')
-        driver_xml_file.writelines(modified_xml_lines)
-        driver_xml_file.close()
-        os.rename(temp_dir + '/driver/driver.txt', temp_dir + '/driver/driver.xml')
-
-    def confirm_write(ran_name=False):
-        if ran_name:
-            ran_file_name = 'IcnSwp_'
-            for _ in range(0, 6):
-                ran_file_name += str(random.randint(0, 9))
-            if os.path.isfile(cur_dir + ran_file_name + '.c4z'):
-                os.remove(cur_dir + ran_file_name + '.c4z')
-            if os.path.isfile(cur_dir + ran_file_name + '.zip'):
-                os.remove(cur_dir + ran_file_name + '.zip')
-            shutil.make_archive(ran_file_name, 'zip', temp_dir + '/driver')
-            base_path = os.path.splitext(cur_dir + ran_file_name + '.zip')[0]
-            os.rename(cur_dir + ran_file_name + '.zip', base_path + '.c4z')
-        else:
-            if os.path.isfile(cur_dir + driver_name + '.c4z'):
-                os.remove(cur_dir + driver_name + '.c4z')
-            if os.path.isfile(cur_dir + driver_name + '.zip'):
-                os.remove(cur_dir + driver_name + '.zip')
-            shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
-            base_path = os.path.splitext(cur_dir + driver_name + '.zip')[0]
-            os.rename(cur_dir + driver_name + '.zip', base_path + '.c4z')
-
-        pop.destroy()
-
-    if export_panel.over_orig.get() == 1:
-        temp_name = 'IcnSwp'
-        for _ in range(0, 6):
-            temp_name += str(random.randint(0, 9))
-        try:
-            if not os.path.isfile(orig_file_path + '.orig'):
-                shutil.copy(orig_file_path, orig_file_path + '.orig')
-            else:
-                shutil.copy(orig_file_path, orig_file_path + '.' + temp_name)
-                os.remove(orig_file_path + '.' + temp_name)
-            shutil.make_archive(temp_name, 'zip', temp_dir + '/driver')
-            base = os.path.splitext(cur_dir + temp_name + '.zip')[0]
-            os.rename(cur_dir + temp_name + '.zip', base + '.c4z')
-            os.remove(orig_file_path)
-            shutil.copy(base + '.c4z', orig_file_path)
-            os.remove(base + '.c4z')
-        except IOError as _:
-            pop = Toplevel(root)
-            pop.title('Cannot Overwrite Original File')
-            pop.geometry('239x95')
-            pop.grab_set()
-            pop.transient(root)
-            pop.resizable(False, False)
-
-            label_text = 'Access Denied to: ' + orig_file_dir
-            access_label = Label(pop, text=label_text)
-            access_label.grid(row=0, column=0, columnspan=2, sticky='w')
-            pop.update()
-            if 240 <= access_label.winfo_width():
-                new_size = str(access_label.winfo_width()) + 'x95'
-                pop.geometry(new_size)
-                pop.update()
-
-            write_label = Label(pop, text='Export to Current Directory Instead?')
-            write_label.grid(row=1, column=0, columnspan=2, sticky='w', pady=10)
-
-            no_button = tk.Button(pop, text='No', width='10', command=pop.destroy)
-            no_button.grid(row=2, column=0, sticky='w', padx=5)
-
-            yes_button = tk.Button(pop, text='Yes', width='10', command=confirm_write)
-            yes_button.grid(row=2, column=0, sticky='w', padx=90)
-    else:
-        if os.path.isfile(cur_dir + driver_name + '.c4z') or os.path.isfile(
-                cur_dir + driver_name + '.zip'):
-            pop = Toplevel(root)
-            pop.title('Overwrite')
-            pop.geometry('239x70')
-            pop.grab_set()
-            pop.transient(root)
-            pop.resizable(False, False)
-
-            confirm_label = Label(pop, text='Would you like to overwrite the existing file?')
-            confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
-
-            no_button = tk.Button(pop, text='No', width='10', command=pop.destroy)
-            no_button.grid(row=2, column=0, sticky='e', padx=5)
-
-            yes_button = tk.Button(pop, text='Yes', width='10', command=confirm_write)
-            yes_button.grid(row=2, column=1, sticky='w', padx=5)
-        else:
-            shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
-            base = os.path.splitext(cur_dir + driver_name + '.zip')[0]
-            os.rename(cur_dir + driver_name + '.zip', base + '.c4z')
 
 
 def restore_entry_text():
