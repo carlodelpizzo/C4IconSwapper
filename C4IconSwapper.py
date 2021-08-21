@@ -8,9 +8,10 @@ import os
 import shutil
 import base64
 import time
+import random
 
 # exe made with pyinstaller --onefile -w
-version = '3.0b'
+version = '3.1b'
 
 # Root Window
 root = tk.Tk()
@@ -67,6 +68,8 @@ global c4_driver
 device_icon_dir = temp_dir + 'driver/www/icons/device/'
 icon_dir = temp_dir + 'driver/www/icons/'
 replacement_image_path = temp_dir + 'replacement_icon.png'
+orig_file_dir = ''
+orig_file_path = ''
 driver_selected = False
 replacement_selected = False
 schedule_entry_restore = False
@@ -313,6 +316,10 @@ class ExportPanel:
         self.modify_xml_check = Checkbutton(root,
                                             text="modify driver.xml",
                                             variable=self.modify_xml).place(x=63 + self.x, y=135 + self.y, anchor='w')
+        self.over_orig = IntVar()
+        self.over_orig_check = Checkbutton(root,
+                                            text="overwrite original file",
+                                            variable=self.over_orig).place(x=63 + self.x, y=105 + self.y, anchor='w')
 
 
 # Functions
@@ -322,6 +329,8 @@ def upload_c4z():
     global c4_driver
     global schedule_entry_restore
     global restore_entry_string
+    global orig_file_dir
+    global orig_file_path
 
     if c4z_panel.file_entry_field.get() != 'Select .c4z file...' and \
             c4z_panel.file_entry_field.get() != 'Invalid driver selected...':
@@ -404,6 +413,11 @@ def upload_c4z():
             c4z_panel.file_entry_field.delete(0, 'end')
             c4z_panel.file_entry_field.insert(0, filename)
             c4z_panel.file_entry_field['state'] = 'readonly'
+            orig_file_path = filename
+            for i in reversed(range(len(orig_file_path))):
+                if orig_file_path[i] == '/':
+                    orig_file_dir = orig_file_path[0:i + 1]
+                    break
             driver_selected = True
             c4z_panel.update_icon()
         else:
@@ -512,6 +526,7 @@ def export_c4z():
         encoded_str = string.encode("ascii", "ignore")
         decoded_str = encoded_str.decode()
         array.append(decoded_str)
+
     driver_name = export_panel.driver_name_entry.get()
     temp = ''
     for letter in driver_name:
@@ -628,38 +643,92 @@ def export_c4z():
         driver_xml_file.close()
         os.rename(temp_dir + '/driver/driver.txt', temp_dir + '/driver/driver.xml')
 
-    def confirm_write():
-        if os.path.isfile(cur_dir + '/' + driver_name + '.c4z'):
-            os.remove(cur_dir + '/' + driver_name + '.c4z')
-        if os.path.isfile(cur_dir + '/' + driver_name + '.zip'):
-            os.remove(cur_dir + '/' + driver_name + '.zip')
-        shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
-        base_path = os.path.splitext(cur_dir + '/' + driver_name + '.zip')[0]
-        os.rename(cur_dir + '/' + driver_name + '.zip', base_path + '.c4z')
+    def confirm_write(ran_name=False):
+        if ran_name:
+            ran_file_name = 'IcnSwp_'
+            for _ in range(0, 6):
+                ran_file_name += str(random.randint(0, 9))
+            if os.path.isfile(cur_dir + '/' + ran_file_name + '.c4z'):
+                os.remove(cur_dir + '/' + ran_file_name + '.c4z')
+            if os.path.isfile(cur_dir + '/' + ran_file_name + '.zip'):
+                os.remove(cur_dir + '/' + ran_file_name + '.zip')
+            shutil.make_archive(ran_file_name, 'zip', temp_dir + '/driver')
+            base_path = os.path.splitext(cur_dir + '/' + ran_file_name + '.zip')[0]
+            os.rename(cur_dir + '/' + ran_file_name + '.zip', base_path + '.c4z')
+        else:
+            if os.path.isfile(cur_dir + '/' + driver_name + '.c4z'):
+                os.remove(cur_dir + '/' + driver_name + '.c4z')
+            if os.path.isfile(cur_dir + '/' + driver_name + '.zip'):
+                os.remove(cur_dir + '/' + driver_name + '.zip')
+            shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
+            base_path = os.path.splitext(cur_dir + '/' + driver_name + '.zip')[0]
+            os.rename(cur_dir + '/' + driver_name + '.zip', base_path + '.c4z')
 
         pop.destroy()
 
-    if os.path.isfile(cur_dir + '/' + driver_name + '.c4z') or os.path.isfile(
-            cur_dir + '/' + driver_name + '.zip'):
-        pop = Toplevel(root)
-        pop.title('Overwrite')
-        pop.geometry('239x50')
-        pop.grab_set()
-        pop.transient(root)
-        pop.resizable(False, False)
+    if export_panel.over_orig.get() == 1:
+        temp_name = 'IcnSwp'
+        for _ in range(0, 6):
+            temp_name += str(random.randint(0, 9))
+        try:
+            if not os.path.isfile(orig_file_path + '.orig'):
+                shutil.copy(orig_file_path, orig_file_path + '.orig')
+            else:
+                shutil.copy(orig_file_path, orig_file_path + '.' + temp_name)
+                os.remove(orig_file_path + '.' + temp_name)
+            shutil.make_archive(temp_name, 'zip', temp_dir + '/driver')
+            base = os.path.splitext(cur_dir + '/' + temp_name + '.zip')[0]
+            os.rename(cur_dir + '/' + temp_name + '.zip', base + '.c4z')
+            os.remove(orig_file_path)
+            shutil.copy(base + '.c4z', orig_file_path)
+            os.remove(base + '.c4z')
+        except IOError as x:
+            pop = Toplevel(root)
+            pop.title('Cannot Overwrite Original File')
+            pop.geometry('239x95')
+            pop.grab_set()
+            pop.transient(root)
+            pop.resizable(False, False)
 
-        confirm_label = Label(pop, text='Would you like to overwrite the existing file?')
-        confirm_label.grid(row=0, column=0, columnspan=2)
+            label_text = 'Access Denied to: ' + orig_file_dir
+            access_label = Label(pop, text=label_text)
+            access_label.grid(row=0, column=0, columnspan=2, sticky='w')
+            pop.update()
+            if 240 <= access_label.winfo_width():
+                new_size = str(access_label.winfo_width()) + 'x95'
+                pop.geometry(new_size)
+                pop.update()
 
-        no_button = tk.Button(pop, text='No', width='10', command=pop.destroy)
-        no_button.grid(row=1, column=0)
+            write_label = Label(pop, text='Export to Current Directory Instead?')
+            write_label.grid(row=1, column=0, columnspan=2, sticky='w', pady=10)
 
-        yes_button = tk.Button(pop, text='Yes', width='10', command=confirm_write)
-        yes_button.grid(row=1, column=1)
+            no_button = tk.Button(pop, text='No', width='10', command=pop.destroy)
+            no_button.grid(row=2, column=0, sticky='w', padx=5)
+
+            yes_button = tk.Button(pop, text='Yes', width='10', command=confirm_write)
+            yes_button.grid(row=2, column=0, sticky='w', padx=90)
     else:
-        shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
-        base = os.path.splitext(cur_dir + '/' + driver_name + '.zip')[0]
-        os.rename(cur_dir + '/' + driver_name + '.zip', base + '.c4z')
+        if os.path.isfile(cur_dir + '/' + driver_name + '.c4z') or os.path.isfile(
+                cur_dir + '/' + driver_name + '.zip'):
+            pop = Toplevel(root)
+            pop.title('Overwrite')
+            pop.geometry('239x70')
+            pop.grab_set()
+            pop.transient(root)
+            pop.resizable(False, False)
+
+            confirm_label = Label(pop, text='Would you like to overwrite the existing file?')
+            confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
+
+            no_button = tk.Button(pop, text='No', width='10', command=pop.destroy)
+            no_button.grid(row=2, column=0, sticky='e', padx=5)
+
+            yes_button = tk.Button(pop, text='Yes', width='10', command=confirm_write)
+            yes_button.grid(row=2, column=1, sticky='w', padx=5)
+        else:
+            shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
+            base = os.path.splitext(cur_dir + '/' + driver_name + '.zip')[0]
+            os.rename(cur_dir + '/' + driver_name + '.zip', base + '.c4z')
 
 
 def restore_entry_text():
