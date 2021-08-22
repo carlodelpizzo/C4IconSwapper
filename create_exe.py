@@ -2,7 +2,8 @@ import PyInstaller.__main__
 import shutil
 import os
 from C4IconSwapper import version
-from C4IconSwapper import cur_dir
+
+cur_dir = os.getcwd() + '/'
 
 
 def clean_up():
@@ -12,8 +13,8 @@ def clean_up():
         shutil.rmtree(cur_dir + 'dist/')
     if os.path.isdir(cur_dir + 'build/'):
         shutil.rmtree(cur_dir + 'build/')
-    if os.path.isdir(cur_dir + '__pycache__'):
-        shutil.rmtree(cur_dir + '__pycache__')
+    if os.path.isdir(cur_dir + '__pycache__/'):
+        shutil.rmtree(cur_dir + '__pycache__/')
 
 
 def move_rename():
