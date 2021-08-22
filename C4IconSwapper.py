@@ -52,6 +52,7 @@ class RootWin:
         blank = blank_image.resize((128, 128), Image.ANTIALIAS)
         self.blank = ImageTk.PhotoImage(blank)
         blank_image.close()
+        os.remove(blank_image_path)
 
         # Base64 encoded icon
         # Decoding and creating a temporary image file
