@@ -338,8 +338,8 @@ class C4IconSwapper:
                 self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
 
         def upload_replacement(self):
-            filename = filedialog.askopenfilename(filetypes=[("Image", "*.png"), ("Image", "*.jpg"), ("Image", "*.gif"),
-                                                             ("Image", "*.jpeg")])
+            filename = filedialog.askopenfilename(filetypes=[("Image", "*.png"), ("Image", "*.jpg"),
+                                                             ("Image", "*.gif"), ("Image", "*.jpeg")])
 
             if filename:
                 shutil.copy(filename, self.uc.temp_dir + 'replacement_icon.png')
