@@ -37,6 +37,7 @@ def make_exe(python_file: str):
     clean_up()
 
 
+# Change to True before running
 execute = False
 if execute:
     overwrite_file = '_'
