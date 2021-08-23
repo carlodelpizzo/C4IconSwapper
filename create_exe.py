@@ -37,10 +37,12 @@ def make_exe(python_file: str):
     clean_up()
 
 
-overwrite_file = '_'
-if os.path.isfile(cur_dir + 'C4IconSwapper.' + version + '.exe'):
-    overwrite_file = input('Overwrite file? (y/n)... ')
-    if overwrite_file[0] == 'y' or overwrite_file[0] == 'Y':
+execute = False
+if execute:
+    overwrite_file = '_'
+    if os.path.isfile(cur_dir + 'C4IconSwapper.' + version + '.exe'):
+        overwrite_file = input('Overwrite file? (y/n)... ')
+        if overwrite_file[0] == 'y' or overwrite_file[0] == 'Y':
+            make_exe('main.py')
+    else:
         make_exe('main.py')
-else:
-    make_exe('main.py')

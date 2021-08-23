@@ -1,3 +1,3 @@
 from C4IconSwapper import *
 
-RootWin()
+C4IconSwapper()
