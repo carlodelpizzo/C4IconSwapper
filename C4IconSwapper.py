@@ -37,7 +37,7 @@ class C4IconSwapper:
             self.y = 5
             self.uc = upper_class
             self.current_icon = 0
-            self.icon_groups = None
+            self.icon_groups = []
 
             # Labels
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
@@ -85,11 +85,8 @@ class C4IconSwapper:
             self.blank_image_label.image = icon
             self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
 
-            self.icon_label.config(text='icon: ' + str(self.current_icon + 1) +
-                                        ' of ' + str(len(self.icon_groups)))
-            self.icon_name_label.config(text='name: ' +
-                                             self.icon_groups[
-                                                 self.current_icon].name)
+            self.icon_label.config(text='icon: ' + str(self.current_icon + 1) + ' of ' + str(len(self.icon_groups)))
+            self.icon_name_label.config(text='name: ' + self.icon_groups[self.current_icon].name)
 
         def blank_icon(self):
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
@@ -103,13 +100,12 @@ class C4IconSwapper:
             self.uc.replacement_panel.next_icon_button['state'] = DISABLED
 
         def upload_c4z(self):
-            if self.file_entry_field.get() != 'Select .c4z file...' and \
-                    self.file_entry_field.get() != 'Invalid driver selected...':
-                c4_driver_bak = self.uc.c4_driver
+            if len(self.icon_groups) != 0:
+                icons_groups_bak = self.icon_groups
                 if os.path.isdir(self.uc.temp_dir + 'driver'):
                     shutil.copytree(self.uc.temp_dir + 'driver', self.uc.temp_dir + '/bak/')
             else:
-                c4_driver_bak = None
+                icons_groups_bak = None
 
             icon_objects = []
             filename = filedialog.askopenfilename(filetypes=[("Control4 Drivers", "*.c4z")])
@@ -208,7 +204,7 @@ class C4IconSwapper:
                     self.file_entry_field['state'] = NORMAL
                     if self.file_entry_field.get() != 'Select .c4z file...' and \
                             self.file_entry_field.get() != 'Invalid driver selected...':
-                        self.uc.c4_driver = c4_driver_bak
+                        self.icon_groups = icons_groups_bak
                         self.uc.schedule_entry_restore = True
                         self.uc.restore_entry_string = self.file_entry_field.get()
                         preserve_prev_next = True
