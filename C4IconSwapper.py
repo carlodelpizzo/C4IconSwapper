@@ -324,7 +324,7 @@ class C4IconSwapper:
 
             # Entry
             self.file_entry_field = tk.Entry(self.uc.root, width=25)
-            self.file_entry_field.insert(0, 'Select Image file...')
+            self.file_entry_field.insert(0, 'Select image file...')
             self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
             self.file_entry_field['state'] = DISABLED
 
