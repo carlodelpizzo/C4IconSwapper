@@ -3,6 +3,7 @@ import shutil
 import base64
 import time
 import random
+import re
 import tkinter as tk
 from tkinter import *
 from tkinter import ttk
@@ -663,11 +664,14 @@ class C4IconSwapper:
         self.export_panel = self.ExportPanel(self)
 
         # Separators
-        self.separator0 = ttk.Separator(self.root, orient='vertical').place(x=305, y=0, relheight=1)
-        self.separator1 = ttk.Separator(self.root, orient='vertical').place(x=610, y=0, relheight=1)
+        self.separator0 = ttk.Separator(self.root, orient='vertical')
+        self.separator0.place(x=305, y=0, relheight=1)
+        self.separator1 = ttk.Separator(self.root, orient='vertical')
+        self.separator1.place(x=610, y=0, relheight=1)
 
         # Version Label
-        self.version_label = Label(self.root, text=version).place(relx=1, rely=1.01, anchor='se')
+        self.version_label = Label(self.root, text=version)
+        self.version_label.place(relx=1, rely=1.01, anchor='se')
 
         # Creating window icon
         temp_icon_file = self.temp_dir + 'icon.ico'
