@@ -418,7 +418,7 @@ class C4IconSwapper:
 
             # Checkboxes
             self.inc_driver_version = IntVar()
-            self.inc_driver_check = Checkbutton(self.uc.root, text="increase driver version",
+            self.inc_driver_check = Checkbutton(self.uc.root, text="update driver version",
                                                 variable=self.inc_driver_version)
             self.inc_driver_check.place(x=63 + self.x, y=75 + self.y, anchor='w')
 
