@@ -12,7 +12,7 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 
-version = '3.2b'
+version = '3.3b'
 
 
 class C4IconSwapper:
@@ -71,11 +71,23 @@ class C4IconSwapper:
             self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
             self.next_icon_button['state'] = DISABLED
 
+            self.gen_driver_button = tk.Button(self.uc.root, text='Load Generic Driver', command=self.load_gen_driver)
+            self.gen_driver_button.place(x=228 + self.x, y=189 + self.y, anchor='n')
+
             # Entry
             self.file_entry_field = tk.Entry(self.uc.root, width=25)
             self.file_entry_field.insert(0, 'Select .c4z file...')
             self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
             self.file_entry_field['state'] = DISABLED
+
+        def load_gen_driver(self):
+            temp_gen_driver = self.uc.temp_dir + 'generic.c4z'
+            if self.file_entry_field.get() == temp_gen_driver:
+                return
+            gen_driver = open(temp_gen_driver, 'wb')
+            gen_driver.write(base64.b64decode(generic_driver))
+            gen_driver.close()
+            self.upload_c4z(temp_gen_driver)
 
         def update_icon(self):
             icon_image = Image.open(self.icon_groups[self.current_icon].path)
@@ -100,7 +112,7 @@ class C4IconSwapper:
             self.uc.replacement_panel.prev_icon_button['state'] = DISABLED
             self.uc.replacement_panel.next_icon_button['state'] = DISABLED
 
-        def upload_c4z(self):
+        def upload_c4z(self, given_path=''):
             if len(self.icon_groups) != 0:
                 icons_groups_bak = self.icon_groups
                 if os.path.isdir(self.uc.temp_dir + 'driver'):
@@ -109,7 +121,10 @@ class C4IconSwapper:
                 icons_groups_bak = None
 
             icon_objects = []
-            filename = filedialog.askopenfilename(filetypes=[("Control4 Drivers", "*.c4z")])
+            if given_path == '':
+                filename = filedialog.askopenfilename(filetypes=[("Control4 Drivers", "*.c4z")])
+            else:
+                filename = given_path
 
             if filename:
                 if os.path.isdir(self.uc.temp_dir + 'driver'):
@@ -402,12 +417,18 @@ class C4IconSwapper:
             self.driver_name_entry.place(x=145 + self.x, y=170 + self.y, anchor='n')
 
             # Checkboxes
-            self.modify_xml = IntVar(value=1)
-            self.modify_xml_check = Checkbutton(self.uc.root, text="modify driver.xml", variable=self.modify_xml)
-            self.modify_xml_check.place(x=63 + self.x, y=135 + self.y, anchor='w')
+            self.inc_driver_version = IntVar()
+            self.inc_driver_check = Checkbutton(self.uc.root, text="increase driver version",
+                                                variable=self.inc_driver_version)
+            self.inc_driver_check.place(x=63 + self.x, y=75 + self.y, anchor='w')
+
             self.over_orig = IntVar()
             self.over_orig_check = Checkbutton(self.uc.root, text="overwrite original file", variable=self.over_orig)
             self.over_orig_check.place(x=63 + self.x, y=105 + self.y, anchor='w')
+
+            self.modify_xml = IntVar(value=1)
+            self.modify_xml_check = Checkbutton(self.uc.root, text="modify driver.xml", variable=self.modify_xml)
+            self.modify_xml_check.place(x=63 + self.x, y=135 + self.y, anchor='w')
 
         def export_c4z(self):
             def append_line(array: list, string: str):
@@ -525,6 +546,14 @@ class C4IconSwapper:
                             line = line.replace(result.group(1), 'C4IconSwapper')
                             append_line(modified_xml_lines, line)
                             printed_line = True
+                    if '<version>' in line and self.inc_driver_version.get():
+                        result = re.search('<version>(.*)</version>', line)
+                        result_int = int(result.group(1))
+                        result_int += 1
+                        if result:
+                            line = line.replace(result.group(1), str(result_int))
+                        append_line(modified_xml_lines, line)
+                        printed_line = True
                     if not printed_line:
                         append_line(modified_xml_lines, line)
 
@@ -620,6 +649,22 @@ class C4IconSwapper:
                     base = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
                     os.rename(self.uc.cur_dir + driver_name + '.zip', base + '.c4z')
 
+        def get_version_number(self):
+            if not os.path.isdir(self.uc.temp_dir + '/driver/driver.xml'):
+                return
+            os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.txt')
+            driver_xml_file = open(self.uc.temp_dir + '/driver/driver.txt', errors='ignore')
+            driver_xml_lines = driver_xml_file.readlines()
+            driver_xml_file.close()
+
+            for line in driver_xml_lines:
+                if '<version>' in line:
+                    result = re.search('<version>(.*)</version>', line)
+                    os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
+                    return result.group(1)
+
+            os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
+
     def __init__(self):
         # Create root window
         self.root = tk.Tk()
@@ -647,8 +692,7 @@ class C4IconSwapper:
         self.restore_entry_string = ''
         self.time_var = 0
 
-        # Panels
-        # Creating blank image for panels
+        # Panels; Creating blank image for panels
         temp_image_file = self.temp_dir + 'blank_img.gif'
         blank_img_file = open(temp_image_file, 'wb')
         blank_img_file.write(base64.b64decode(blank_img_b64))
