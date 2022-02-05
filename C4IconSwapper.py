@@ -12,9 +12,10 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 
-version = '3.3b'
+version = '4.0a'
 
 
+# This shit is a mess
 class C4IconSwapper:
     class C4zPanel:
         class Icon:
@@ -39,6 +40,8 @@ class C4IconSwapper:
             self.uc = upper_class
             self.current_icon = 0
             self.icon_groups = []
+            self.valid_connections = ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI', 'STEREO', 'DIGITAL_OPTICAL',
+                                      'IR_OUT']
 
             # Labels
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
@@ -256,6 +259,8 @@ class C4IconSwapper:
                 if os.path.isdir(self.uc.temp_dir + '/bak/'):
                     shutil.rmtree(self.uc.temp_dir + '/bak/')
 
+            self.update_connections()
+
         def restore_icon(self, index=None):
             if index is None:
                 index = self.current_icon
@@ -307,6 +312,60 @@ class C4IconSwapper:
         def next_icon(self):
             self.inc_current_icon()
 
+        def update_connections(self):
+            if not os.path.isfile(self.uc.temp_dir + '/driver/driver.xml'):
+                return
+            self.uc.connections_panel.reinit()
+
+            os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.txt')
+            driver_xml_file = open(self.uc.temp_dir + '/driver/driver.txt', errors='ignore')
+            driver_xml_lines = driver_xml_file.readlines()
+            driver_xml_file.close()
+
+            in_connection = False
+            name_found = False
+            connections = []
+            conn_name = ''
+            for line in driver_xml_lines:
+                if in_connection:
+                    if '</connection>' in line:
+                        in_connection = False
+                        name_found = False
+                        continue
+                    if not name_found and '<connectionname>' in line:
+                        conn_name = re.search('<connectionname>(.*)</connectionname>', line).group(1)
+                        name_found = True
+                    elif name_found and '<classname>' in line:
+                        connections.append([conn_name, re.search('<classname>(.*)</classname>', line).group(1)])
+                elif '<connection>' in line:
+                    in_connection = True
+
+            os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
+
+            pop_list = []
+            for i in range(len(connections)):
+                if connections[i][1] not in self.valid_connections:
+                    pop_list.insert(0, i)
+            for index in pop_list:
+                connections.pop(index)
+
+            if len(connections) > len(self.uc.connections_panel.connection_types):
+                conn_range = len(self.uc.connections_panel.connection_types)
+            else:
+                conn_range = len(connections)
+
+            self.uc.connections_panel.buttons[conn_range]['state'] = NORMAL
+            if conn_range == 0:
+                return
+            for i in range(0, conn_range):
+                self.uc.connections_panel.buttons[i].place(x=-10000, y=-10000)
+                self.uc.connections_panel.connection_entries[i]['state'] = NORMAL
+                self.uc.connections_panel.connection_entries[i].delete(0, END)
+                self.uc.connections_panel.connection_entries[i].insert(0, connections[i][0])
+                self.uc.connections_panel.connection_entries[i]['state'] = DISABLED
+                self.uc.connections_panel.connection_menus[i]['state'] = DISABLED
+                self.uc.connections_panel.connection_types[i].set(connections[i][1])
+
     class ReplacementPanel:
         def __init__(self, upper_class):
             self.x = 310
@@ -337,6 +396,10 @@ class C4IconSwapper:
             self.next_icon_button = tk.Button(self.uc.root, text='Next', command=self.uc.c4z_panel.next_icon, width=5)
             self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
             self.next_icon_button['state'] = DISABLED
+
+            self.open_conn_button = tk.Button(self.uc.root, text='Open Connections', width=15,
+                                              command=self.open_connections)
+            self.open_conn_button.place(x=95 + self.x, y=227 + self.y, anchor='w')
 
             # Entry
             self.file_entry_field = tk.Entry(self.uc.root, width=25)
@@ -396,11 +459,24 @@ class C4IconSwapper:
             for i in range(len(self.uc.c4z_panel.icon_groups)):
                 self.replace_icon(index=i)
 
+        def open_connections(self):
+            if self.open_conn_button['text'] == 'Open Connections':
+                self.open_conn_button['text'] = 'Close Connections'
+                self.uc.root.geometry('915x500')
+            else:
+                self.open_conn_button['text'] = 'Open Connections'
+                self.uc.root.geometry('915x250')
+
     class ExportPanel:
         def __init__(self, upper_class):
             self.x = 615
             self.y = -20
             self.uc = upper_class
+            self.video_in_count = 0
+            self.video_out_count = 0
+            self.audio_in_count = 0
+            self.audio_out_count = 0
+            self.ir_count = 0
 
             # Labels
             self.driver_name_label = tk.Label(self.uc.root, text='Driver Name:')
@@ -417,18 +493,14 @@ class C4IconSwapper:
             self.driver_name_entry.place(x=145 + self.x, y=170 + self.y, anchor='n')
 
             # Checkboxes
-            self.inc_driver_version = IntVar()
+            self.inc_driver_version = IntVar(value=1)
             self.inc_driver_check = Checkbutton(self.uc.root, text="update driver version",
                                                 variable=self.inc_driver_version)
-            self.inc_driver_check.place(x=63 + self.x, y=75 + self.y, anchor='w')
+            self.inc_driver_check.place(x=63 + self.x, y=135 + self.y, anchor='w')
 
             self.over_orig = IntVar()
             self.over_orig_check = Checkbutton(self.uc.root, text="overwrite original file", variable=self.over_orig)
             self.over_orig_check.place(x=63 + self.x, y=105 + self.y, anchor='w')
-
-            self.modify_xml = IntVar(value=1)
-            self.modify_xml_check = Checkbutton(self.uc.root, text="modify driver.xml", variable=self.modify_xml)
-            self.modify_xml_check.place(x=63 + self.x, y=135 + self.y, anchor='w')
 
         def export_c4z(self):
             def append_line(array: list, string: str):
@@ -463,104 +535,138 @@ class C4IconSwapper:
                                 dir_list[i].replace('.orig', ''))
                     os.remove(self.uc.device_icon_dir + dir_list[i])
 
-            if self.modify_xml.get() == 1:
-                os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.txt')
-                driver_xml_file = open(self.uc.temp_dir + '/driver/driver.txt', errors='ignore')
-                driver_xml_lines = driver_xml_file.readlines()
-                driver_xml_file.close()
-                modified_xml_lines = []
+            shutil.copy(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.xml.bak')
+            os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.txt')
+            driver_xml_file = open(self.uc.temp_dir + '/driver/driver.txt', errors='ignore')
+            driver_xml_lines = driver_xml_file.readlines()
+            driver_xml_file.close()
+            modified_xml_lines = []
 
-                do_name_swap = True
-                update_modified_date = True
-                proxy_step2 = False
-                icon_step2 = False
-                old_driver_name = ''
-                old_icon_path = ''
-                for line in driver_xml_lines:
-                    printed_line = False
-                    if do_name_swap:
-                        if '<name>' in line:
-                            result = re.search('<name>(.*)</name>', line)
-                            if result:
-                                line = line.replace(result.group(1), driver_name)
-                            do_name_swap = False
-                            append_line(modified_xml_lines, line)
-                            printed_line = True
-                    if update_modified_date:
-                        if '<modified>' in line:
-                            result = re.search('<modified>(.*)</modified>', line)
-                            if result:
-                                modified_datestamp = str(datetime.now().strftime("%m/%d/%Y %H:%M"))
-                                line = line.replace(result.group(1), modified_datestamp)
-                                append_line(modified_xml_lines, line)
-                                printed_line = True
-                    if '<proxy' in line:
-                        if not proxy_step2:
-                            temp_str = ''
-                            temp_step2 = False
-                            for l in line:
-                                if not temp_step2:
-                                    if len(temp_str) < 6:
-                                        temp_str += l
-                                    else:
-                                        temp_str = temp_str[1:len(temp_str)]
-                                        temp_str += l
-                                else:
-                                    if l != '"':
-                                        old_driver_name += l
-                                    else:
-                                        break
-                                if temp_str == 'name="':
-                                    temp_step2 = True
-                            line = line.replace(old_driver_name, driver_name)
-                            append_line(modified_xml_lines, line)
-                            printed_line = True
-                            proxy_step2 = True
-                        else:
-                            if 'name="' + old_driver_name + '"' in line:
-                                line = line.replace('name="' + old_driver_name + '"', 'name="' + driver_name + '"')
-                                append_line(modified_xml_lines, line)
-                                printed_line = True
-                    if '<Icon' in line:
-                        if not icon_step2:
-                            result = re.search('driver/(.*)/icons', line)
-                            if result:
-                                old_icon_path = result.group(1)
-                                line = line.replace(old_icon_path, driver_name)
-                                append_line(modified_xml_lines, line)
-                                printed_line = True
-                        else:
-                            if old_icon_path in line:
-                                line = line.replace(old_icon_path, driver_name)
-                                append_line(modified_xml_lines, line)
-                                printed_line = True
-                    if '<creator>' in line:
-                        result = re.search('<creator>(.*)</creator>', line)
-                        if result:
-                            line = line.replace(result.group(1), 'C4IconSwapper')
-                            append_line(modified_xml_lines, line)
-                            printed_line = True
-                    if '<manufacturer>' in line:
-                        result = re.search('<manufacturer>(.*)</manufacturer>', line)
-                        if result:
-                            line = line.replace(result.group(1), 'C4IconSwapper')
-                            append_line(modified_xml_lines, line)
-                            printed_line = True
-                    if '<version>' in line and self.inc_driver_version.get():
-                        result = re.search('<version>(.*)</version>', line)
-                        result_int = int(result.group(1))
-                        result_int += 1
-                        if result:
-                            line = line.replace(result.group(1), str(result_int))
+            do_name_swap = True
+            update_modified_date = True
+            proxy_step2 = False
+            icon_step2 = False
+            old_driver_name = ''
+            old_icon_path = ''
+            insertion = True
+            for line in driver_xml_lines:
+                printed_line = False
+                if '<name>' in line and do_name_swap:
+                    result = re.search('<name>(.*)</name>', line)
+                    if result:
+                        line = line.replace(result.group(1), driver_name)
+                    do_name_swap = False
+                    append_line(modified_xml_lines, line)
+                    printed_line = True
+                elif '<modified>' in line and update_modified_date:
+                    result = re.search('<modified>(.*)</modified>', line)
+                    if result:
+                        modified_datestamp = str(datetime.now().strftime("%m/%d/%Y %H:%M"))
+                        line = line.replace(result.group(1), modified_datestamp)
                         append_line(modified_xml_lines, line)
                         printed_line = True
-                    if not printed_line:
+                elif '<proxy' in line:
+                    if not proxy_step2:
+                        temp_str = ''
+                        temp_step2 = False
+                        for l in line:
+                            if not temp_step2:
+                                if len(temp_str) < 6:
+                                    temp_str += l
+                                else:
+                                    temp_str = temp_str[1:len(temp_str)]
+                                    temp_str += l
+                            else:
+                                if l != '"':
+                                    old_driver_name += l
+                                else:
+                                    break
+                            if temp_str == 'name="':
+                                temp_step2 = True
+                        line = line.replace(old_driver_name, driver_name)
                         append_line(modified_xml_lines, line)
+                        printed_line = True
+                        proxy_step2 = True
+                    else:
+                        if 'name="' + old_driver_name + '"' in line:
+                            line = line.replace('name="' + old_driver_name + '"', 'name="' + driver_name + '"')
+                            append_line(modified_xml_lines, line)
+                            printed_line = True
+                elif '<Icon' in line:
+                    if not icon_step2:
+                        result = re.search('driver/(.*)/icons', line)
+                        if result:
+                            old_icon_path = result.group(1)
+                            line = line.replace(old_icon_path, driver_name)
+                            append_line(modified_xml_lines, line)
+                            printed_line = True
+                    else:
+                        if old_icon_path in line:
+                            line = line.replace(old_icon_path, driver_name)
+                            append_line(modified_xml_lines, line)
+                            printed_line = True
+                elif '<creator>' in line:
+                    result = re.search('<creator>(.*)</creator>', line)
+                    if result:
+                        line = line.replace(result.group(1), 'C4IconSwapper')
+                        append_line(modified_xml_lines, line)
+                        printed_line = True
+                elif '<manufacturer>' in line:
+                    result = re.search('<manufacturer>(.*)</manufacturer>', line)
+                    if result:
+                        line = line.replace(result.group(1), 'C4IconSwapper')
+                        append_line(modified_xml_lines, line)
+                        printed_line = True
+                elif '<version>' in line and self.inc_driver_version.get():
+                    result = re.search('<version>(.*)</version>', line)
+                    result_int = int(result.group(1))
+                    result_int += 1
+                    if result:
+                        line = line.replace(result.group(1), str(result_int))
+                    append_line(modified_xml_lines, line)
+                    printed_line = True
+                if insertion and '</connections>' in line:
+                    insertion = False
+                    for i in range(len(self.uc.connections_panel.buttons)):
+                        if self.uc.connections_panel.connection_entries[i]['state'] == NORMAL:
+                            modified_xml_lines.append('\t\t<connection>\n')
+                            conn_type = self.uc.connections_panel.connection_types[i].get()
+                            value = self.uc.conn_dict[conn_type]
+                            if ' IN' in conn_type:
+                                conn_type = conn_type.replace(' IN', '')
+                                if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
+                                    modified_xml_lines.append('\t\t\t<id>' + str(2000 - self.video_in_count) + '</id>')
+                                    self.video_in_count += 1
+                                elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
+                                    modified_xml_lines.append('\t\t\t<id>' + str(4000 - self.audio_in_count) + '</id>')
+                                    self.audio_in_count += 1
+                            elif ' OUT' in conn_type:
+                                conn_type = conn_type.replace(' OUT', '')
+                                if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
+                                    modified_xml_lines.append('\t\t\t<id>' + str(1900 - self.video_out_count) + '</id>')
+                                    self.video_out_count += 1
+                                elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
+                                    modified_xml_lines.append('\t\t\t<id>' + str(3900 - self.audio_out_count) + '</id>')
+                                    self.audio_out_count += 1
+                            if conn_type == 'IR_OUT':
+                                modified_xml_lines.append('\t\t\t<id>' + str(1 + self.ir_count) + '</id>')
+                                self.ir_count += 1
+                            value = value.replace('REPLACE', self.uc.connections_panel.connection_entries[i].get())
+                            modified_xml_lines.append(value + '\n')
+                            modified_xml_lines.append('\t\t\t<classes>\n')
+                            modified_xml_lines.append('\t\t\t\t<class>\n')
+                            temp_line = '\t\t\t\t\t<classname>' + conn_type + '</classname>\n'
+                            modified_xml_lines.append(temp_line)
+                            modified_xml_lines.append('\t\t\t\t</class>\n')
+                            modified_xml_lines.append('\t\t\t</classes>\n')
+                            modified_xml_lines.append('\t\t</connection>\n')
+                if not printed_line:
+                    append_line(modified_xml_lines, line)
 
-                driver_xml_file = open(self.uc.temp_dir + '/driver/driver.txt', 'w', errors='ignore')
-                driver_xml_file.writelines(modified_xml_lines)
-                driver_xml_file.close()
-                os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
+            driver_xml_file = open(self.uc.temp_dir + '/driver/driver.txt', 'w', errors='ignore')
+            driver_xml_file.writelines(modified_xml_lines)
+            driver_xml_file.close()
+            os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
 
             def confirm_write(ran_name=False):
                 if ran_name:
@@ -649,6 +755,9 @@ class C4IconSwapper:
                     base = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
                     os.rename(self.uc.cur_dir + driver_name + '.zip', base + '.c4z')
 
+            os.remove(self.uc.temp_dir + '/driver/driver.xml')
+            os.rename(self.uc.temp_dir + '/driver/driver.xml.bak', self.uc.temp_dir + '/driver/driver.xml')
+
         def get_version_number(self):
             if not os.path.isdir(self.uc.temp_dir + '/driver/driver.xml'):
                 return
@@ -665,6 +774,76 @@ class C4IconSwapper:
 
             os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
 
+    class ConnectionsPanel:
+        def __init__(self, upper_class):
+            self.x = 30
+            self.y = 257
+            self.uc = upper_class
+            self.connection_entries = []
+            self.connection_menus = []
+            self.connection_types = []
+            self.buttons = []
+
+            x_spacing = 300
+            y_spacing = 40
+            for x in range(0, 3):
+                for i in range(0, 6):
+                    # Entries
+                    self.connection_entries.append(tk.Entry(self.uc.root, width=20))
+                    self.connection_entries[-1].insert(0, 'Connection Name...')
+                    self.connection_entries[-1].place(x=(x * x_spacing) + self.x, y=(i * y_spacing) + 20 + self.y,
+                                                      anchor='w')
+                    self.connection_entries[-1]['state'] = DISABLED
+
+                    # Dropdowns
+                    self.connection_types.append(StringVar(self.uc.root))
+                    self.connection_types[-1].set('HDMI IN')
+                    self.connection_menus.append(OptionMenu(self.uc.root, self.connection_types[-1], 'HDMI IN',
+                                                            'HDMI OUT', 'COMPOSITE IN', 'COMPOSITE OUT', 'VGA IN',
+                                                            'VGA OUT', 'COMPONENT IN', 'COMPONENT OUT', 'DVI IN',
+                                                            'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
+                                                            'DIGITAL_OPTICAL OUT', 'IR_OUT'))
+                    self.connection_menus[-1].place(x=(x * x_spacing) + 120 + self.x, y=(i * y_spacing) + 20 + self.y,
+                                                    anchor='w')
+                    self.connection_menus[-1]['state'] = DISABLED
+
+                    # Buttons
+                    self.buttons.append(tk.Button(self.uc.root, text='Add', width=4, command=self.enable_conn))
+                    self.buttons[-1].place(x=(x * x_spacing) + 220 + self.x, y=(i * y_spacing) + 20 + self.y,
+                                           anchor='w')
+                    self.buttons[-1]['state'] = DISABLED
+
+        def enable_conn(self):
+            for i in range(len(self.buttons)):
+                if self.buttons[i]['state'] == NORMAL and self.connection_entries[i]['state'] == DISABLED:
+                    self.connection_entries[i]['state'] = NORMAL
+                    self.connection_entries[i].delete(0, END)
+                    self.connection_entries[i].insert(0, 'Connection ' + str(i + 1))
+                    self.connection_menus[i]['state'] = NORMAL
+                    self.buttons[i].place(x=-10000, y=-10000)
+                    if i != len(self.connection_entries) - 1:
+                        self.buttons[i + 1]['state'] = NORMAL
+                    break
+
+        def reinit(self):
+            x_spacing = 300
+            y_spacing = 40
+            for x in range(0, 3):
+                for i in range(0, 6):
+                    # Entries
+                    self.connection_entries[6 * x + i].delete(0, END)
+                    self.connection_entries[6 * x + i].insert(0, 'Connection Name...')
+                    self.connection_entries[6 * x + i]['state'] = DISABLED
+
+                    # Dropdowns
+                    self.connection_types[6 * x + i].set('HDMI IN')
+                    self.connection_menus[6 * x + i]['state'] = DISABLED
+
+                    # Buttons
+                    self.buttons[6 * x + i].place(x=(x * x_spacing) + 220 + self.x, y=(i * y_spacing) + 20 + self.y,
+                                                  anchor='w')
+                    self.buttons[6 * x + i]['state'] = DISABLED
+
     def __init__(self):
         # Create root window
         self.root = tk.Tk()
@@ -676,7 +855,7 @@ class C4IconSwapper:
 
         # Creating temporary directory
         self.cur_dir = os.getcwd() + '/'
-        self.temp_dir = self.cur_dir + 'temp/'
+        self.temp_dir = self.cur_dir + 'temp' + str(random.randint(1111111, 9999999)) + '/'
         if not os.path.isdir(self.temp_dir):
             os.mkdir(self.temp_dir)
 
@@ -691,6 +870,29 @@ class C4IconSwapper:
         self.schedule_entry_restore = False
         self.restore_entry_string = ''
         self.time_var = 0
+        self.conn_dict = {}
+        for key in ['HDMI IN', 'COMPOSITE IN', 'VGA IN', 'COMPONENT IN', 'DVI IN']:
+            self.conn_dict[key] = '\t\t\t<type>5</type>\n\t\t\t' \
+                                  '<connectionname>REPLACE</connectionname>\n' \
+                                  '\t\t\t<consumer>True</consumer>\n\t\t\t<linelevel>True</linelevel>'
+        for key in ['HDMI OUT', 'COMPOSITE OUT', 'VGA OUT', 'COMPONENT OUT', 'DVI OUT']:
+            self.conn_dict[key] = '\t\t\t<type>5</type>\n\t\t\t' \
+                                  '<connectionname>REPLACE</connectionname>\n' \
+                                  '\t\t\t<consumer>False</consumer>\n\t\t\t<linelevel>True</linelevel>'
+        for key in ['STEREO IN', 'DIGITAL_OPTICAL IN']:
+            self.conn_dict[key] = '\t\t\t<type>6</type>\n\t\t\t' \
+                                  '<connectionname>REPLACE</connectionname>\n' \
+                                  '\t\t\t<consumer>True</consumer>\n\t\t\t<linelevel>True</linelevel>'
+        for key in ['STEREO OUT', 'DIGITAL_OPTICAL OUT']:
+            self.conn_dict[key] = '\t\t\t<type>6</type>\n\t\t\t' \
+                                  '<connectionname>REPLACE</connectionname>\n' \
+                                  '\t\t\t<consumer>False</consumer>\n\t\t\t<linelevel>True</linelevel>'
+
+        self.conn_dict['IR_OUT'] = '\t\t\t<facing>6</facing>\n\t\t\t' \
+                                   '<connectionname>REPLACE</connectionname>\n' \
+                                   '\t\t\t<type>1</type>\n\t\t\t<consumer>False</consumer>\n\t\t\t' \
+                                   '<audiosource>False</audiosource>\n' \
+                                   '\t\t\t<videosource>False</videosource>\n\t\t\t<linelevel>False</linelevel>'
 
         # Panels; Creating blank image for panels
         temp_image_file = self.temp_dir + 'blank_img.gif'
@@ -706,12 +908,15 @@ class C4IconSwapper:
         self.c4z_panel = self.C4zPanel(self)
         self.replacement_panel = self.ReplacementPanel(self)
         self.export_panel = self.ExportPanel(self)
+        self.connections_panel = self.ConnectionsPanel(self)
 
         # Separators
         self.separator0 = ttk.Separator(self.root, orient='vertical')
-        self.separator0.place(x=305, y=0, relheight=1)
+        self.separator0.place(x=305, y=0, height=250)
         self.separator1 = ttk.Separator(self.root, orient='vertical')
-        self.separator1.place(x=610, y=0, relheight=1)
+        self.separator1.place(x=610, y=0, height=250)
+        self.separator2 = ttk.Separator(self.root, orient='horizontal')
+        self.separator2.place(x=0, y=250, relwidth=1)
 
         # Version Label
         self.version_label = Label(self.root, text=version)
@@ -727,6 +932,7 @@ class C4IconSwapper:
 
         # Main Loop
         self.root.after(0, self.restore_entry_text)
+        self.root.after(100, self.supervisor)
         self.root.mainloop()
         shutil.rmtree(self.temp_dir)
 
@@ -744,3 +950,6 @@ class C4IconSwapper:
                 self.time_var = 0
 
         self.root.after(2000, self.restore_entry_text)
+
+    def supervisor(self):
+        self.root.after(100, self.supervisor)
