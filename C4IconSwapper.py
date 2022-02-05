@@ -508,6 +508,18 @@ class C4IconSwapper:
                 decoded_str = encoded_str.decode()
                 array.append(decoded_str)
 
+            def find_valid_id(id_seed: int, list_of_ids: list, inc_up=True, inc_count=0):
+                if id_seed not in list_of_ids:
+                    return [id_seed, inc_count]
+                if inc_up:
+                    id_seed += 1
+                    inc_count += 1
+                    return find_valid_id(id_seed, list_of_ids, inc_count=inc_count)
+                else:
+                    id_seed -= 1
+                    inc_count += 1
+                    return find_valid_id(id_seed, list_of_ids, inc_count=inc_count)
+
             driver_name = self.driver_name_entry.get()
             temp = ''
             for letter in driver_name:
@@ -540,7 +552,12 @@ class C4IconSwapper:
             driver_xml_lines = driver_xml_file.readlines()
             driver_xml_file.close()
             modified_xml_lines = []
+            id_list = []
             for line in driver_xml_lines:
+                if '<id>' in line:
+                    result = re.search('<id>(.*)</id>', line)
+                    if int(result.group(1)) not in id_list:
+                        id_list.append(int(result.group(1)))
                 if '<version>' in line and self.inc_driver_version.get():
                     result = re.search('<version>(.*)</version>', line)
                     result_int = int(result.group(1))
@@ -643,21 +660,46 @@ class C4IconSwapper:
                             if ' IN' in conn_type:
                                 conn_type = conn_type.replace(' IN', '')
                                 if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
-                                    modified_xml_lines.append('\t\t\t<id>' + str(2000 - self.video_in_count) + '</id>')
+                                    id_temp = 2000 - self.video_in_count
+                                    valid_id = find_valid_id(id_temp, id_list)
+                                    self.video_in_count += valid_id[1]
+                                    id_temp = valid_id[0]
+                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>')
+                                    id_list.append(id_temp)
                                     self.video_in_count += 1
                                 elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
-                                    modified_xml_lines.append('\t\t\t<id>' + str(4000 - self.audio_in_count) + '</id>')
+                                    id_temp = 4000 - self.audio_in_count
+                                    valid_id = find_valid_id(id_temp, id_list)
+                                    self.audio_in_count += valid_id[1]
+                                    id_temp = valid_id[0]
+                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>')
+                                    id_list.append(id_temp)
                                     self.audio_in_count += 1
                             elif ' OUT' in conn_type:
                                 conn_type = conn_type.replace(' OUT', '')
                                 if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
-                                    modified_xml_lines.append('\t\t\t<id>' + str(1900 - self.video_out_count) + '</id>')
+                                    id_temp = 1900 - self.video_out_count
+                                    valid_id = find_valid_id(id_temp, id_list)
+                                    self.video_out_count += valid_id[1]
+                                    id_temp = valid_id[0]
+                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>')
+                                    id_list.append(id_temp)
                                     self.video_out_count += 1
                                 elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
-                                    modified_xml_lines.append('\t\t\t<id>' + str(3900 - self.audio_out_count) + '</id>')
+                                    id_temp = 3900 - self.audio_out_count
+                                    valid_id = find_valid_id(id_temp, id_list)
+                                    self.audio_out_count += valid_id[1]
+                                    id_temp = valid_id[0]
+                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>')
+                                    id_list.append(id_temp)
                                     self.audio_out_count += 1
                             if conn_type == 'IR_OUT':
-                                modified_xml_lines.append('\t\t\t<id>' + str(1 + self.ir_count) + '</id>')
+                                id_temp = 1 + self.ir_count
+                                valid_id = find_valid_id(id_temp, id_list)
+                                self.ir_count += valid_id[1]
+                                id_temp = valid_id[0]
+                                modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>')
+                                id_list.append(id_temp)
                                 self.ir_count += 1
                             value = value.replace('REPLACE', self.uc.connections_panel.connection_entries[i].get())
                             modified_xml_lines.append(value + '\n')
