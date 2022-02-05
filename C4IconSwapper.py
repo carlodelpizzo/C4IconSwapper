@@ -881,11 +881,13 @@ class C4IconSwapper:
             for x in range(0, 3):
                 for i in range(0, 6):
                     # Entries
+                    self.connection_entries[6 * x + i]['state'] = NORMAL
                     self.connection_entries[6 * x + i].delete(0, END)
                     self.connection_entries[6 * x + i].insert(0, 'Connection Name...')
                     self.connection_entries[6 * x + i]['state'] = DISABLED
 
                     # Dropdowns
+                    self.connection_menus[6 * x + i]['state'] = NORMAL
                     self.connection_types[6 * x + i].set('HDMI IN')
                     self.connection_menus[6 * x + i]['state'] = DISABLED
 
