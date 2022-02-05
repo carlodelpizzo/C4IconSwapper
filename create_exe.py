@@ -37,7 +37,7 @@ def make_exe(python_file: str):
     clean_up()
 
 
-# Change to True before running
+# Change to True before running; this is to prevent accidental run
 execute = False
 if execute:
     overwrite_file = '_'
