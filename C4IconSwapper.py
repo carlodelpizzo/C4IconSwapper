@@ -535,8 +535,24 @@ class C4IconSwapper:
                                 dir_list[i].replace('.orig', ''))
                     os.remove(self.uc.device_icon_dir + dir_list[i])
 
-            shutil.copy(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.xml.bak')
             os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.txt')
+            driver_xml_file = open(self.uc.temp_dir + '/driver/driver.txt', errors='ignore')
+            driver_xml_lines = driver_xml_file.readlines()
+            driver_xml_file.close()
+            modified_xml_lines = []
+            for line in driver_xml_lines:
+                if '<version>' in line and self.inc_driver_version.get():
+                    result = re.search('<version>(.*)</version>', line)
+                    result_int = int(result.group(1))
+                    result_int += 1
+                    line = line.replace(result.group(1), str(result_int))
+                append_line(modified_xml_lines, line)
+
+            driver_xml_file = open(self.uc.temp_dir + '/driver/driver.txt', 'w', errors='ignore')
+            driver_xml_file.writelines(modified_xml_lines)
+            driver_xml_file.close()
+
+            shutil.copy(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml.bak')
             driver_xml_file = open(self.uc.temp_dir + '/driver/driver.txt', errors='ignore')
             driver_xml_lines = driver_xml_file.readlines()
             driver_xml_file.close()
@@ -617,17 +633,9 @@ class C4IconSwapper:
                         line = line.replace(result.group(1), 'C4IconSwapper')
                         append_line(modified_xml_lines, line)
                         printed_line = True
-                elif '<version>' in line and self.inc_driver_version.get():
-                    result = re.search('<version>(.*)</version>', line)
-                    result_int = int(result.group(1))
-                    result_int += 1
-                    if result:
-                        line = line.replace(result.group(1), str(result_int))
-                    append_line(modified_xml_lines, line)
-                    printed_line = True
                 if insertion and '</connections>' in line:
                     insertion = False
-                    for i in range(len(self.uc.connections_panel.buttons)):
+                    for i in reversed(range(len(self.uc.connections_panel.buttons))):
                         if self.uc.connections_panel.connection_entries[i]['state'] == NORMAL:
                             modified_xml_lines.append('\t\t<connection>\n')
                             conn_type = self.uc.connections_panel.connection_types[i].get()
