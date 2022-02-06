@@ -8,14 +8,15 @@ import tkinter as tk
 from tkinter import *
 from tkinter import ttk
 from tkinter import filedialog
+from tkinterdnd2 import DND_FILES, TkinterDnD
 from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 
-version = '4.0a'
+version = '4.1a'
 
 
-# This shit is a mess
+# This is a total mess
 class C4IconSwapper:
     class C4zPanel:
         class Icon:
@@ -47,6 +48,8 @@ class C4IconSwapper:
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
             self.blank_image_label.image = self.uc.blank
             self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+            self.blank_image_label.drop_target_register(DND_FILES)
+            self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
             self.icon_label = tk.Label(self.uc.root, text='0 of 0')
             self.icon_label.place(x=108 + self.x, y=176 + self.y, anchor='n')
@@ -100,6 +103,8 @@ class C4IconSwapper:
             self.blank_image_label = tk.Label(self.uc.root, image=icon)
             self.blank_image_label.image = icon
             self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+            self.blank_image_label.drop_target_register(DND_FILES)
+            self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
             self.icon_label.config(text='icon: ' + str(self.current_icon + 1) + ' of ' + str(len(self.icon_groups)))
             self.icon_name_label.config(text='name: ' + self.icon_groups[self.current_icon].name)
@@ -366,6 +371,12 @@ class C4IconSwapper:
                 self.uc.connections_panel.connection_menus[i]['state'] = DISABLED
                 self.uc.connections_panel.connection_types[i].set(connections[i][1])
 
+        def drop_in_c4z(self, event):
+            img_path = event.data.replace('{', '').replace('}', '')
+            if img_path.endswith('.png') or img_path.endswith('.jpg') or \
+                    img_path.endswith('.gif') or img_path.endswith('.jpeg'):
+                self.uc.replacement_panel.replace_icon(given_path=img_path)
+
     class ReplacementPanel:
         def __init__(self, upper_class):
             self.x = 310
@@ -376,6 +387,8 @@ class C4IconSwapper:
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
             self.blank_image_label.image = self.uc.blank
             self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+            self.blank_image_label.drop_target_register(DND_FILES)
+            self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_replacement)
 
             # Buttons
             self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_replacement)
@@ -406,6 +419,8 @@ class C4IconSwapper:
             self.file_entry_field.insert(0, 'Select image file...')
             self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
             self.file_entry_field['state'] = DISABLED
+            self.file_entry_field.drop_target_register(DND_FILES)
+            self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_replacement)
 
         def update_icon(self):
             if self.uc.replacement_selected:
@@ -415,10 +430,15 @@ class C4IconSwapper:
                 self.blank_image_label = tk.Label(self.uc.root, image=icon)
                 self.blank_image_label.image = icon
                 self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+                self.blank_image_label.drop_target_register(DND_FILES)
+                self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_replacement)
 
-        def upload_replacement(self):
-            filename = filedialog.askopenfilename(filetypes=[("Image", "*.png"), ("Image", "*.jpg"),
-                                                             ("Image", "*.gif"), ("Image", "*.jpeg")])
+        def upload_replacement(self, give_path=''):
+            if give_path == '':
+                filename = filedialog.askopenfilename(filetypes=[("Image", "*.png"), ("Image", "*.jpg"),
+                                                                 ("Image", "*.gif"), ("Image", "*.jpeg")])
+            else:
+                filename = give_path
 
             if filename:
                 shutil.copy(filename, self.uc.temp_dir + 'replacement_icon.png')
@@ -439,13 +459,16 @@ class C4IconSwapper:
                     self.uc.replacement_selected = True
                     self.update_icon()
 
-        def replace_icon(self, index=None):
+        def replace_icon(self, index=None, given_path=''):
             if index is None:
                 index = self.uc.c4z_panel.current_icon
             elif 0 > index > len(self.uc.c4z_panel.icon_groups):
                 return print('icon replace index out of range')
 
-            replacement_icon = Image.open(self.uc.replacement_image_path)
+            if given_path == '':
+                replacement_icon = Image.open(self.uc.replacement_image_path)
+            else:
+                replacement_icon = Image.open(given_path)
             for icon in self.uc.c4z_panel.icon_groups[index].icons:
                 if not os.path.isfile(icon.path + '.orig'):
                     shutil.copy(icon.path, icon.path + '.orig')
@@ -466,6 +489,12 @@ class C4IconSwapper:
             else:
                 self.open_conn_button['text'] = 'Open Connections'
                 self.uc.root.geometry('915x250')
+
+        def drop_in_replacement(self, event):
+            img_path = event.data.replace('{', '').replace('}', '')
+            if img_path.endswith('.png') or img_path.endswith('.jpg') or \
+                    img_path.endswith('.gif') or img_path.endswith('.jpeg'):
+                self.upload_replacement(give_path=img_path)
 
     class ExportPanel:
         def __init__(self, upper_class):
@@ -898,7 +927,7 @@ class C4IconSwapper:
 
     def __init__(self):
         # Create root window
-        self.root = tk.Tk()
+        self.root = TkinterDnD.Tk()
 
         # Root window properties
         self.root.geometry('915x250')
