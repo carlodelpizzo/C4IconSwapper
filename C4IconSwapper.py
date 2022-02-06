@@ -13,7 +13,7 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 
-version = '4.2a'
+version = '4.20a'
 
 
 # This is a total mess
@@ -85,6 +85,8 @@ class C4IconSwapper:
             self.file_entry_field.insert(0, 'Select .c4z file...')
             self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
             self.file_entry_field['state'] = DISABLED
+            self.file_entry_field.drop_target_register(DND_FILES)
+            self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
         def load_gen_driver(self):
             temp_gen_driver = self.uc.temp_dir + 'generic.c4z'
@@ -378,10 +380,12 @@ class C4IconSwapper:
                 self.uc.connections_panel.connection_types[i].set(connections[i][1])
 
         def drop_in_c4z(self, event):
-            img_path = event.data.replace('{', '').replace('}', '')
-            if img_path.endswith('.png') or img_path.endswith('.jpg') or \
-                    img_path.endswith('.gif') or img_path.endswith('.jpeg'):
-                self.uc.replacement_panel.replace_icon(given_path=img_path)
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            if dropped_path.endswith('.png') or dropped_path.endswith('.jpg') or \
+                    dropped_path.endswith('.gif') or dropped_path.endswith('.jpeg'):
+                self.uc.replacement_panel.replace_icon(given_path=dropped_path)
+            elif dropped_path.endswith('.c4z'):
+                self.upload_c4z(given_path=dropped_path)
 
     class ReplacementPanel:
         def __init__(self, upper_class):
