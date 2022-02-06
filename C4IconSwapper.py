@@ -13,7 +13,7 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 
-version = '4.1a'
+version = '4.2a'
 
 
 # This is a total mess
@@ -94,6 +94,7 @@ class C4IconSwapper:
             gen_driver.write(base64.b64decode(generic_driver))
             gen_driver.close()
             self.upload_c4z(temp_gen_driver)
+            self.gen_driver_button['state'] = DISABLED
 
         def update_icon(self):
             icon_image = Image.open(self.icon_groups[self.current_icon].path)
@@ -134,135 +135,140 @@ class C4IconSwapper:
             else:
                 filename = given_path
 
-            if filename:
-                if os.path.isdir(self.uc.temp_dir + 'driver'):
-                    shutil.rmtree(self.uc.temp_dir + 'driver')
+            if not filename:
+                return
+            if os.path.isdir(self.uc.temp_dir + 'driver'):
+                shutil.rmtree(self.uc.temp_dir + 'driver')
 
-                shutil.unpack_archive(filename, self.uc.temp_dir + 'driver', 'zip')
+            shutil.unpack_archive(filename, self.uc.temp_dir + 'driver', 'zip')
 
-                if os.path.isdir(self.uc.device_icon_dir):
-                    icon_list = os.listdir(self.uc.device_icon_dir)
-                    for i in range(len(icon_list)):
-                        temp_name = ''
-                        temp_size = ''
-                        get_size = False
-                        for letter in icon_list[i]:
-                            if letter == '.':
-                                break
-                            else:
-                                if get_size:
-                                    temp_size += letter
-                                if letter == '_':
-                                    get_size = True
-                                elif not get_size:
-                                    temp_name += letter
-                        icon_objects.append(self.Icon(self.uc.device_icon_dir + str(icon_list[i]),
-                                                      temp_name, int(temp_size)))
-                if os.path.isdir(self.uc.icon_dir):
-                    icon_list = os.listdir(self.uc.icon_dir)
-                    for i in range(len(icon_list)):
-                        if icon_list[i][len(icon_list[i]) - 4] == '.':
-                            if 'device_lg' not in icon_list[i] and 'device_sm' not in icon_list[i]:
-                                temp_name = ''
-                                temp_size = ''
-                                get_size = False
-                                for letter in icon_list[i]:
-                                    if letter == '.':
-                                        break
-                                    else:
-                                        if get_size:
-                                            temp_size += letter
-                                        if letter == '_':
-                                            get_size = True
-                                        elif not get_size:
-                                            temp_name += letter
-                                icon_objects.append(self.Icon(self.uc.icon_dir + str(icon_list[i]),
-                                                              temp_name, int(temp_size)))
-                    for i in range(len(icon_list)):
-                        if icon_list[i][len(icon_list[i]) - 4] == '.':
-                            if 'device_lg' in icon_list[i]:
-                                icon_objects.append(self.Icon(self.uc.icon_dir + str(icon_list[i]), 'device', 32))
-                            elif 'device_sm' in icon_list[i]:
-                                icon_objects.append(self.Icon(self.uc.icon_dir + str(icon_list[i]), 'device', 16))
-
-                self.icon_groups = []
-                temp_list = []
-                for i in range(len(icon_objects)):
-                    if not temp_list:
-                        temp_list.append(icon_objects[i])
-                    elif icon_objects[i].name == temp_list[0].name:
-                        temp_list.append(icon_objects[i])
-                    else:
-                        new_icon_group = self.IconGroup(temp_list)
-                        self.icon_groups.append(new_icon_group)
-                        temp_list = [icon_objects[i]]
-                    if i == len(icon_objects) - 1:
-                        new_icon_group = self.IconGroup(temp_list)
-                        self.icon_groups.append(new_icon_group)
-                        temp_list = ''
-
-                preserve_prev_next = False
-                if len(self.icon_groups) > 0:
-                    self.file_entry_field['state'] = NORMAL
-                    self.file_entry_field.delete(0, 'end')
-                    self.file_entry_field.insert(0, filename)
-                    self.file_entry_field['state'] = 'readonly'
-                    orig_file_path = filename
-                    orig_driver_name = ''
-                    for i in reversed(range(len(orig_file_path))):
-                        if orig_file_path[i] == '/':
-                            self.uc.orig_file_dir = orig_file_path[0:i + 1]
+            if os.path.isdir(self.uc.device_icon_dir):
+                icon_list = os.listdir(self.uc.device_icon_dir)
+                for i in range(len(icon_list)):
+                    temp_name = ''
+                    temp_size = ''
+                    get_size = False
+                    for letter in icon_list[i]:
+                        if letter == '.':
                             break
-                        if orig_file_path[i] == '.':
-                            orig_driver_name = '.'
-                        if orig_driver_name != '':
-                            if orig_driver_name == '.':
-                                orig_driver_name = orig_file_path[i]
-                            else:
-                                orig_driver_name = orig_file_path[i] + orig_driver_name
-                    self.uc.export_panel.driver_name_entry.delete(0, 'end')
-                    self.uc.export_panel.driver_name_entry.insert(0, orig_driver_name)
-                    self.uc.driver_selected = True
-                    self.update_icon()
+                        else:
+                            if get_size:
+                                temp_size += letter
+                            if letter == '_':
+                                get_size = True
+                            elif not get_size:
+                                temp_name += letter
+                    icon_objects.append(self.Icon(self.uc.device_icon_dir + str(icon_list[i]),
+                                                  temp_name, int(temp_size)))
+            if os.path.isdir(self.uc.icon_dir):
+                icon_list = os.listdir(self.uc.icon_dir)
+                for i in range(len(icon_list)):
+                    if icon_list[i][len(icon_list[i]) - 4] == '.':
+                        if 'device_lg' not in icon_list[i] and 'device_sm' not in icon_list[i]:
+                            temp_name = ''
+                            temp_size = ''
+                            get_size = False
+                            for letter in icon_list[i]:
+                                if letter == '.':
+                                    break
+                                else:
+                                    if get_size:
+                                        temp_size += letter
+                                    if letter == '_':
+                                        get_size = True
+                                    elif not get_size:
+                                        temp_name += letter
+                            icon_objects.append(self.Icon(self.uc.icon_dir + str(icon_list[i]),
+                                                          temp_name, int(temp_size)))
+                for i in range(len(icon_list)):
+                    if icon_list[i][len(icon_list[i]) - 4] == '.':
+                        if 'device_lg' in icon_list[i]:
+                            icon_objects.append(self.Icon(self.uc.icon_dir + str(icon_list[i]), 'device', 32))
+                        elif 'device_sm' in icon_list[i]:
+                            icon_objects.append(self.Icon(self.uc.icon_dir + str(icon_list[i]), 'device', 16))
+
+            self.icon_groups = []
+            temp_list = []
+            for i in range(len(icon_objects)):
+                if not temp_list:
+                    temp_list.append(icon_objects[i])
+                elif icon_objects[i].name == temp_list[0].name:
+                    temp_list.append(icon_objects[i])
                 else:
-                    self.file_entry_field['state'] = NORMAL
-                    if self.file_entry_field.get() != 'Select .c4z file...' and \
-                            self.file_entry_field.get() != 'Invalid driver selected...':
-                        self.icon_groups = icons_groups_bak
-                        self.uc.schedule_entry_restore = True
-                        self.uc.restore_entry_string = self.file_entry_field.get()
-                        preserve_prev_next = True
-                        if os.path.isdir(self.uc.temp_dir + '/driver/'):
-                            shutil.rmtree(self.uc.temp_dir + '/driver/')
-                        shutil.copytree(self.uc.temp_dir + '/bak/', self.uc.temp_dir + '/driver/')
-                    self.file_entry_field.delete(0, 'end')
-                    self.file_entry_field.insert(0, 'Invalid driver selected...')
-                    self.file_entry_field['state'] = DISABLED
+                    new_icon_group = self.IconGroup(temp_list)
+                    self.icon_groups.append(new_icon_group)
+                    temp_list = [icon_objects[i]]
+                if i == len(icon_objects) - 1:
+                    new_icon_group = self.IconGroup(temp_list)
+                    self.icon_groups.append(new_icon_group)
+                    temp_list = ''
 
-                if not preserve_prev_next:
-                    if len(self.icon_groups) <= 1:
-                        self.prev_icon_button['state'] = DISABLED
-                        self.next_icon_button['state'] = DISABLED
-                        self.uc.replacement_panel.prev_icon_button['state'] = DISABLED
-                        self.uc.replacement_panel.next_icon_button['state'] = DISABLED
-                    elif len(self.icon_groups) > 1:
-                        self.prev_icon_button['state'] = ACTIVE
-                        self.next_icon_button['state'] = ACTIVE
-                        self.uc.replacement_panel.prev_icon_button['state'] = ACTIVE
-                        self.uc.replacement_panel.next_icon_button['state'] = ACTIVE
+            preserve_prev_next = False
+            if len(self.icon_groups) > 0:
+                self.file_entry_field['state'] = NORMAL
+                self.file_entry_field.delete(0, 'end')
+                self.file_entry_field.insert(0, filename)
+                self.file_entry_field['state'] = 'readonly'
+                orig_file_path = filename
+                orig_driver_name = ''
+                for i in reversed(range(len(orig_file_path))):
+                    if orig_file_path[i] == '/':
+                        self.uc.orig_file_dir = orig_file_path[0:i + 1]
+                        break
+                    if orig_file_path[i] == '.':
+                        orig_driver_name = '.'
+                    if orig_driver_name != '':
+                        if orig_driver_name == '.':
+                            orig_driver_name = orig_file_path[i]
+                        else:
+                            orig_driver_name = orig_file_path[i] + orig_driver_name
+                self.uc.export_panel.driver_name_entry.delete(0, 'end')
+                self.uc.export_panel.driver_name_entry.insert(0, orig_driver_name)
+                self.uc.driver_selected = True
+                self.update_icon()
+            else:
+                self.file_entry_field['state'] = NORMAL
+                if self.file_entry_field.get() != 'Select .c4z file...' and \
+                        self.file_entry_field.get() != 'Invalid driver selected...':
+                    self.icon_groups = icons_groups_bak
+                    self.uc.schedule_entry_restore = True
+                    self.uc.restore_entry_string = self.file_entry_field.get()
+                    preserve_prev_next = True
+                    if os.path.isdir(self.uc.temp_dir + '/driver/'):
+                        shutil.rmtree(self.uc.temp_dir + '/driver/')
+                    shutil.copytree(self.uc.temp_dir + '/bak/', self.uc.temp_dir + '/driver/')
+                self.file_entry_field.delete(0, 'end')
+                self.file_entry_field.insert(0, 'Invalid driver selected...')
+                self.file_entry_field['state'] = DISABLED
 
-                if self.uc.replacement_selected:
-                    if self.uc.driver_selected:
-                        self.uc.replacement_panel.replace_button['state'] = ACTIVE
-                        self.uc.replacement_panel.replace_all_button['state'] = ACTIVE
-                    else:
-                        self.uc.replacement_panel.replace_button['state'] = DISABLED
-                        self.uc.replacement_panel.replace_all_button['state'] = DISABLED
+            if not self.file_entry_field.get().endswith('generic.c4z') and not\
+                    self.file_entry_field.get() == 'Invalid driver selected...':
+                self.gen_driver_button['state'] = NORMAL
+
+            if not preserve_prev_next:
+                if len(self.icon_groups) <= 1:
+                    self.prev_icon_button['state'] = DISABLED
+                    self.next_icon_button['state'] = DISABLED
+                    self.uc.replacement_panel.prev_icon_button['state'] = DISABLED
+                    self.uc.replacement_panel.next_icon_button['state'] = DISABLED
+                elif len(self.icon_groups) > 1:
+                    self.prev_icon_button['state'] = ACTIVE
+                    self.next_icon_button['state'] = ACTIVE
+                    self.uc.replacement_panel.prev_icon_button['state'] = ACTIVE
+                    self.uc.replacement_panel.next_icon_button['state'] = ACTIVE
+
+            if self.uc.replacement_selected:
                 if self.uc.driver_selected:
-                    self.uc.export_panel.export_button['state'] = ACTIVE
+                    self.uc.replacement_panel.replace_button['state'] = ACTIVE
+                    self.uc.replacement_panel.replace_all_button['state'] = ACTIVE
+                else:
+                    self.uc.replacement_panel.replace_button['state'] = DISABLED
+                    self.uc.replacement_panel.replace_all_button['state'] = DISABLED
+            if self.uc.driver_selected:
+                self.uc.export_panel.export_button['state'] = ACTIVE
 
-                if os.path.isdir(self.uc.temp_dir + '/bak/'):
-                    shutil.rmtree(self.uc.temp_dir + '/bak/')
+            if os.path.isdir(self.uc.temp_dir + '/bak/'):
+                shutil.rmtree(self.uc.temp_dir + '/bak/')
 
             self.update_connections()
 
@@ -318,7 +324,7 @@ class C4IconSwapper:
             self.inc_current_icon()
 
         def update_connections(self):
-            if not os.path.isfile(self.uc.temp_dir + '/driver/driver.xml'):
+            if not os.path.isfile(self.uc.temp_dir + '/driver/driver.xml') or not self.uc.driver_selected:
                 return
             self.uc.connections_panel.reinit()
 
@@ -862,6 +868,7 @@ class C4IconSwapper:
             self.connection_menus = []
             self.connection_types = []
             self.buttons = []
+            self.x_buttons = []
 
             x_spacing = 300
             y_spacing = 40
@@ -892,6 +899,10 @@ class C4IconSwapper:
                                            anchor='w')
                     self.buttons[-1]['state'] = DISABLED
 
+                    self.x_buttons.append(tk.Button(self.uc.root, text='x', width=1, command=self.disable_conn))
+                    self.x_buttons[-1].place(x=-10000, y=-10000)
+                    self.x_buttons[-1]['state'] = DISABLED
+
         def enable_conn(self):
             for i in range(len(self.buttons)):
                 if self.buttons[i]['state'] == NORMAL and self.connection_entries[i]['state'] == DISABLED:
@@ -900,9 +911,32 @@ class C4IconSwapper:
                     self.connection_entries[i].insert(0, 'Connection ' + str(i + 1))
                     self.connection_menus[i]['state'] = NORMAL
                     self.buttons[i].place(x=-10000, y=-10000)
+                    self.x_buttons[i].place(x=(int(i / 6) * 300) - 20 + self.x, y=((i % 6) * 40) + 20 + self.y,
+                                            anchor='w')
+                    self.x_buttons[i]['state'] = NORMAL
                     if i != len(self.connection_entries) - 1:
                         self.buttons[i + 1]['state'] = NORMAL
                     break
+
+        def disable_conn(self):
+            last_case = True
+            for i in range(len(self.connection_entries)):
+                if self.connection_entries[i]['state'] == DISABLED and self.buttons[i]['state'] == NORMAL:
+                    self.connection_entries[i - 1]['state'] = DISABLED
+                    self.connection_menus[i - 1]['state'] = DISABLED
+                    self.x_buttons[i - 1].place(x=-10000, y=-10000)
+                    self.buttons[i - 1].place(x=(int((i - 1) / 6) * 300) + 220 + self.x,
+                                              y=(((i - 1) % 6) * 40) + 20 + self.y, anchor='w')
+                    self.buttons[i]['state'] = DISABLED
+                    last_case = False
+                    break
+            if last_case:
+                self.connection_entries[-1]['state'] = DISABLED
+                self.connection_menus[-1]['state'] = DISABLED
+                self.x_buttons[-1].place(x=-10000, y=-10000)
+                self.buttons[-1].place(x=(int(17 / 6) * 300) + 220 + self.x,
+                                          y=((17 % 6) * 40) + 20 + self.y, anchor='w')
+                self.buttons[-1]['state'] = NORMAL
 
         def reinit(self):
             x_spacing = 300
@@ -924,6 +958,8 @@ class C4IconSwapper:
                     self.buttons[6 * x + i].place(x=(x * x_spacing) + 220 + self.x, y=(i * y_spacing) + 20 + self.y,
                                                   anchor='w')
                     self.buttons[6 * x + i]['state'] = DISABLED
+
+                    self.x_buttons[6 * x + i].place(x=-10000, y=-10000)
 
     def __init__(self):
         # Create root window
