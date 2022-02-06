@@ -1086,7 +1086,7 @@ class C4IconSwapper:
                 self.connection_menus[-1]['state'] = DISABLED
                 self.x_buttons[-1].place(x=-10000, y=-10000)
                 self.buttons[-1].place(x=(int(17 / 6) * 300) + 220 + self.x,
-                                          y=((17 % 6) * 40) + 20 + self.y, anchor='w')
+                                       y=((17 % 6) * 40) + 20 + self.y, anchor='w')
                 self.buttons[-1]['state'] = NORMAL
 
         def reinit(self):
