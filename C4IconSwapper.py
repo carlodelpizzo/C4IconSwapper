@@ -595,7 +595,7 @@ class C4IconSwapper:
 
         def select_stack0(self, event):
             if len(self.img_stack) == 0:
-                return
+                return event
             in_stack = False
             if len(self.img_stack) >= 4:
                 for img in self.img_stack:
@@ -610,7 +610,7 @@ class C4IconSwapper:
 
         def select_stack1(self, event):
             if len(self.img_stack) <= 1:
-                return
+                return event
             in_stack = False
             if len(self.img_stack) >= 4:
                 for img in self.img_stack:
@@ -625,7 +625,7 @@ class C4IconSwapper:
 
         def select_stack2(self, event):
             if len(self.img_stack) <= 2:
-                return
+                return event
             in_stack = False
             if len(self.img_stack) >= 4:
                 for img in self.img_stack:
@@ -640,7 +640,7 @@ class C4IconSwapper:
 
         def select_stack3(self, event):
             if len(self.img_stack) <= 3:
-                return
+                return event
             in_stack = False
             if len(self.img_stack) >= 4:
                 for img in self.img_stack:
