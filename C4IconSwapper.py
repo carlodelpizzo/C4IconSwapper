@@ -1,3 +1,4 @@
+import filecmp
 import os
 import shutil
 import base64
@@ -37,7 +38,7 @@ class C4IconSwapper:
 
         def __init__(self, upper_class):
             self.x = 5
-            self.y = 5
+            self.y = 0
             self.uc = upper_class
             self.current_icon = 0
             self.icon_groups = []
@@ -100,22 +101,17 @@ class C4IconSwapper:
 
         def update_icon(self):
             icon_image = Image.open(self.icon_groups[self.current_icon].path)
-
             icon = icon_image.resize((128, 128), Image.ANTIALIAS)
             icon = ImageTk.PhotoImage(icon)
-            self.blank_image_label = tk.Label(self.uc.root, image=icon)
+            self.blank_image_label.configure(image=icon)
             self.blank_image_label.image = icon
-            self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
-            self.blank_image_label.drop_target_register(DND_FILES)
-            self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
             self.icon_label.config(text='icon: ' + str(self.current_icon + 1) + ' of ' + str(len(self.icon_groups)))
             self.icon_name_label.config(text='name: ' + self.icon_groups[self.current_icon].name)
 
         def blank_icon(self):
-            self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
+            self.blank_image_label.configure(image=self.uc.blank)
             self.blank_image_label.image = self.uc.blank
-            self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
             self.icon_label.config(text='icon: 0 of 0')
             self.icon_name_label.config(text='name:')
             self.prev_icon_button['state'] = DISABLED
@@ -320,9 +316,13 @@ class C4IconSwapper:
             self.update_icon()
 
         def prev_icon(self):
+            if not self.uc.driver_selected:
+                return
             self.inc_current_icon(step=-1)
 
         def next_icon(self):
+            if not self.uc.driver_selected:
+                return
             self.inc_current_icon()
 
         def update_connections(self):
@@ -381,17 +381,38 @@ class C4IconSwapper:
 
         def drop_in_c4z(self, event):
             dropped_path = event.data.replace('{', '').replace('}', '')
+            if dropped_path.endswith('.c4z'):
+                self.upload_c4z(given_path=dropped_path)
+                return
+            elif not self.uc.driver_selected:
+                return
             if dropped_path.endswith('.png') or dropped_path.endswith('.jpg') or \
                     dropped_path.endswith('.gif') or dropped_path.endswith('.jpeg'):
                 self.uc.replacement_panel.replace_icon(given_path=dropped_path)
-            elif dropped_path.endswith('.c4z'):
-                self.upload_c4z(given_path=dropped_path)
+
+        def get_version_number(self):
+            if not os.path.isdir(self.uc.temp_dir + '/driver/driver.xml'):
+                return
+            os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.txt')
+            driver_xml_file = open(self.uc.temp_dir + '/driver/driver.txt', errors='ignore')
+            driver_xml_lines = driver_xml_file.readlines()
+            driver_xml_file.close()
+
+            for line in driver_xml_lines:
+                if '<version>' in line:
+                    result = re.search('<version>(.*)</version>', line)
+                    os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
+                    return result.group(1)
+
+            os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
 
     class ReplacementPanel:
         def __init__(self, upper_class):
-            self.x = 310
-            self.y = 5
+            self.x = 303
+            self.y = 0
             self.uc = upper_class
+            self.img_stack = []
+            self.stack_labels = []
 
             # Labels
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
@@ -399,6 +420,34 @@ class C4IconSwapper:
             self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
             self.blank_image_label.drop_target_register(DND_FILES)
             self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_replacement)
+
+            self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
+            self.stack_labels[-1].image = self.uc.stack_blank
+            self.stack_labels[-1].place(x=31 + self.x, y=176 + self.y, anchor='nw')
+            self.stack_labels[-1].bind('<Button>', self.select_stack0)
+            self.stack_labels[-1].drop_target_register(DND_FILES)
+            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack0)
+
+            self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
+            self.stack_labels[-1].image = self.uc.stack_blank
+            self.stack_labels[-1].place(x=92 + self.x, y=176 + self.y, anchor='nw')
+            self.stack_labels[-1].bind('<Button>', self.select_stack1)
+            self.stack_labels[-1].drop_target_register(DND_FILES)
+            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack1)
+
+            self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
+            self.stack_labels[-1].image = self.uc.stack_blank
+            self.stack_labels[-1].place(x=153 + self.x, y=176 + self.y, anchor='nw')
+            self.stack_labels[-1].bind('<Button>', self.select_stack2)
+            self.stack_labels[-1].drop_target_register(DND_FILES)
+            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack2)
+
+            self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
+            self.stack_labels[-1].image = self.uc.stack_blank
+            self.stack_labels[-1].place(x=214 + self.x, y=176 + self.y, anchor='nw')
+            self.stack_labels[-1].bind('<Button>', self.select_stack3)
+            self.stack_labels[-1].drop_target_register(DND_FILES)
+            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack3)
 
             # Buttons
             self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_replacement)
@@ -420,10 +469,6 @@ class C4IconSwapper:
             self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
             self.next_icon_button['state'] = DISABLED
 
-            self.open_conn_button = tk.Button(self.uc.root, text='Open Connections', width=15,
-                                              command=self.open_connections)
-            self.open_conn_button.place(x=95 + self.x, y=227 + self.y, anchor='w')
-
             # Entry
             self.file_entry_field = tk.Entry(self.uc.root, width=25)
             self.file_entry_field.insert(0, 'Select image file...')
@@ -431,17 +476,6 @@ class C4IconSwapper:
             self.file_entry_field['state'] = DISABLED
             self.file_entry_field.drop_target_register(DND_FILES)
             self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_replacement)
-
-        def update_icon(self):
-            if self.uc.replacement_selected:
-                icon_image = Image.open(self.uc.replacement_image_path)
-                icon = icon_image.resize((128, 128), Image.ANTIALIAS)
-                icon = ImageTk.PhotoImage(icon)
-                self.blank_image_label = tk.Label(self.uc.root, image=icon)
-                self.blank_image_label.image = icon
-                self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
-                self.blank_image_label.drop_target_register(DND_FILES)
-                self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_replacement)
 
         def upload_replacement(self, give_path=''):
             if give_path == '':
@@ -451,6 +485,8 @@ class C4IconSwapper:
                 filename = give_path
 
             if filename:
+                if self.uc.replacement_selected:
+                    self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png')
                 shutil.copy(filename, self.uc.temp_dir + 'replacement_icon.png')
 
                 self.file_entry_field['state'] = NORMAL
@@ -467,7 +503,66 @@ class C4IconSwapper:
 
                 if os.path.isfile(self.uc.temp_dir + 'replacement_icon.png'):
                     self.uc.replacement_selected = True
-                    self.update_icon()
+                    icon_image = Image.open(self.uc.replacement_image_path)
+                    icon = icon_image.resize((128, 128), Image.ANTIALIAS)
+                    icon = ImageTk.PhotoImage(icon)
+                    self.blank_image_label.configure(image=icon)
+                    self.blank_image_label.image = icon
+
+        def add_to_img_stack(self, img_path: str, index=None):
+            if not os.path.isfile(img_path):
+                return
+            if img_path.endswith('.png') or img_path.endswith('.jpg') or \
+                    img_path.endswith('.gif') or img_path.endswith('.jpeg'):
+                for img in self.img_stack:
+                    if filecmp.cmp(img, img_path):
+                        return
+                if index is None:
+                    new_img_path = self.uc.temp_dir + 'stack' + str(len(self.img_stack)) + '.png'
+                    self.img_stack.insert(0, new_img_path)
+                    shutil.copy(img_path, new_img_path)
+                else:
+                    new_img_path = self.uc.temp_dir + 'stack' + str(len(self.img_stack)) + '.png'
+                    if not -len(self.img_stack) < index < len(self.img_stack):
+                        self.img_stack.append(new_img_path)
+                        shutil.copy(img_path, new_img_path)
+                        self.refresh_img_stack()
+                        return
+                    temp = self.img_stack[index]
+                    self.img_stack.pop(index)
+                    self.img_stack.insert(index, new_img_path)
+                    self.img_stack.append(temp)
+                    shutil.copy(img_path, new_img_path)
+
+            self.refresh_img_stack()
+
+        def refresh_img_stack(self):
+            if len(self.img_stack) == 0:
+                return
+            x = 0
+            for img in self.img_stack:
+                if x == 4:
+                    break
+                icon_image = Image.open(img)
+                icon = icon_image.resize((60, 60), Image.ANTIALIAS)
+                icon = ImageTk.PhotoImage(icon)
+                self.stack_labels[x].configure(image=icon)
+                self.stack_labels[x].image = icon
+                x += 1
+
+        def inc_img_stack(self, inc=1):
+            if len(self.img_stack) <= 4:
+                return
+            if inc >= 0:
+                temp = self.img_stack[0]
+                self.img_stack.pop(0)
+                self.img_stack.append(temp)
+            else:
+                temp = self.img_stack[-1]
+                self.img_stack.pop(-1)
+                self.img_stack.insert(0, temp)
+
+            self.refresh_img_stack()
 
         def replace_icon(self, index=None, given_path=''):
             if index is None:
@@ -492,24 +587,92 @@ class C4IconSwapper:
             for i in range(len(self.uc.c4z_panel.icon_groups)):
                 self.replace_icon(index=i)
 
-        def open_connections(self):
-            if self.open_conn_button['text'] == 'Open Connections':
-                self.open_conn_button['text'] = 'Close Connections'
-                self.uc.root.geometry('915x500')
-            else:
-                self.open_conn_button['text'] = 'Open Connections'
-                self.uc.root.geometry('915x250')
-
         def drop_in_replacement(self, event):
             img_path = event.data.replace('{', '').replace('}', '')
             if img_path.endswith('.png') or img_path.endswith('.jpg') or \
                     img_path.endswith('.gif') or img_path.endswith('.jpeg'):
                 self.upload_replacement(give_path=img_path)
 
+        def select_stack0(self, event):
+            if len(self.img_stack) == 0:
+                return
+            in_stack = False
+            if len(self.img_stack) >= 4:
+                for img in self.img_stack:
+                    if filecmp.cmp(img, self.uc.temp_dir + 'replacement_icon.png'):
+                        in_stack = True
+                        break
+            if not in_stack:
+                self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=0)
+                self.upload_replacement(give_path=self.img_stack[-1])
+                return
+            self.upload_replacement(give_path=self.img_stack[0])
+
+        def select_stack1(self, event):
+            if len(self.img_stack) <= 1:
+                return
+            in_stack = False
+            if len(self.img_stack) >= 4:
+                for img in self.img_stack:
+                    if filecmp.cmp(img, self.uc.temp_dir + 'replacement_icon.png'):
+                        in_stack = True
+                        break
+            if not in_stack:
+                self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=1)
+                self.upload_replacement(give_path=self.img_stack[-1])
+                return
+            self.upload_replacement(give_path=self.img_stack[1])
+
+        def select_stack2(self, event):
+            if len(self.img_stack) <= 2:
+                return
+            in_stack = False
+            if len(self.img_stack) >= 4:
+                for img in self.img_stack:
+                    if filecmp.cmp(img, self.uc.temp_dir + 'replacement_icon.png'):
+                        in_stack = True
+                        break
+            if not in_stack:
+                self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=2)
+                self.upload_replacement(give_path=self.img_stack[-1])
+                return
+            self.upload_replacement(give_path=self.img_stack[2])
+
+        def select_stack3(self, event):
+            if len(self.img_stack) <= 3:
+                return
+            in_stack = False
+            if len(self.img_stack) >= 4:
+                for img in self.img_stack:
+                    if filecmp.cmp(img, self.uc.temp_dir + 'replacement_icon.png'):
+                        in_stack = True
+                        break
+            if not in_stack:
+                self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=3)
+                self.upload_replacement(give_path=self.img_stack[-1])
+                return
+            self.upload_replacement(give_path=self.img_stack[3])
+
+        def drop_stack0(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            self.add_to_img_stack(dropped_path, index=0)
+
+        def drop_stack1(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            self.add_to_img_stack(dropped_path, index=1)
+
+        def drop_stack2(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            self.add_to_img_stack(dropped_path, index=2)
+
+        def drop_stack3(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            self.add_to_img_stack(dropped_path, index=3)
+
     class ExportPanel:
         def __init__(self, upper_class):
             self.x = 615
-            self.y = -20
+            self.y = -25
             self.uc = upper_class
             self.video_in_count = 0
             self.video_out_count = 0
@@ -533,7 +696,7 @@ class C4IconSwapper:
 
             # Checkboxes
             self.inc_driver_version = IntVar(value=1)
-            self.inc_driver_check = Checkbutton(self.uc.root, text="update driver version",
+            self.inc_driver_check = Checkbutton(self.uc.root, text='update driver version',
                                                 variable=self.inc_driver_version)
             self.inc_driver_check.place(x=63 + self.x, y=135 + self.y, anchor='w')
 
@@ -847,22 +1010,6 @@ class C4IconSwapper:
             os.remove(self.uc.temp_dir + '/driver/driver.xml')
             os.rename(self.uc.temp_dir + '/driver/driver.xml.bak', self.uc.temp_dir + '/driver/driver.xml')
 
-        def get_version_number(self):
-            if not os.path.isdir(self.uc.temp_dir + '/driver/driver.xml'):
-                return
-            os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.txt')
-            driver_xml_file = open(self.uc.temp_dir + '/driver/driver.txt', errors='ignore')
-            driver_xml_lines = driver_xml_file.readlines()
-            driver_xml_file.close()
-
-            for line in driver_xml_lines:
-                if '<version>' in line:
-                    result = re.search('<version>(.*)</version>', line)
-                    os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
-                    return result.group(1)
-
-            os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
-
     class ConnectionsPanel:
         def __init__(self, upper_class):
             self.x = 30
@@ -968,6 +1115,7 @@ class C4IconSwapper:
     def __init__(self):
         # Create root window
         self.root = TkinterDnD.Tk()
+        self.root.bind('<KeyRelease>', self.key_release)
 
         # Root window properties
         self.root.geometry('915x250')
@@ -1023,6 +1171,8 @@ class C4IconSwapper:
         blank_image = Image.open(temp_image_file)
         blank = blank_image.resize((128, 128), Image.ANTIALIAS)
         self.blank = ImageTk.PhotoImage(blank)
+        stack_blank = blank_image.resize((60, 60), Image.ANTIALIAS)
+        self.stack_blank = ImageTk.PhotoImage(stack_blank)
         blank_image.close()
         os.remove(temp_image_file)
 
@@ -1038,6 +1188,11 @@ class C4IconSwapper:
         self.separator1.place(x=610, y=0, height=250)
         self.separator2 = ttk.Separator(self.root, orient='horizontal')
         self.separator2.place(x=0, y=250, relwidth=1)
+
+        # Buttons
+        self.open_conn_button = tk.Button(self.root, text='Open Connections', width=15,
+                                          command=self.open_connections)
+        self.open_conn_button.place(x=760, y=220, anchor='n')
 
         # Version Label
         self.version_label = Label(self.root, text=version)
@@ -1057,6 +1212,14 @@ class C4IconSwapper:
         self.root.mainloop()
         shutil.rmtree(self.temp_dir)
 
+    def open_connections(self):
+        if self.open_conn_button['text'] == 'Open Connections':
+            self.open_conn_button['text'] = 'Close Connections'
+            self.root.geometry('915x510')
+        else:
+            self.open_conn_button['text'] = 'Open Connections'
+            self.root.geometry('915x250')
+
     def restore_entry_text(self):
         if self.schedule_entry_restore:
             self.time_var = int(round(time.time() * 100))
@@ -1074,3 +1237,13 @@ class C4IconSwapper:
 
     def supervisor(self):
         self.root.after(100, self.supervisor)
+
+    def key_release(self, event):
+        if event.keysym == 'Right':
+            self.c4z_panel.next_icon()
+        elif event.keysym == 'Left':
+            self.c4z_panel.prev_icon()
+        elif event.keysym == 'Up':
+            self.replacement_panel.inc_img_stack()
+        elif event.keysym == 'Down':
+            self.replacement_panel.inc_img_stack(-1)
