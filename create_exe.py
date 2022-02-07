@@ -37,7 +37,7 @@ def make_exe(python_file: str):
     clean_up()
 
 
-# Change to True before running; this is to prevent accidental run
+# Change to True before running; this is to prevent accidental run; add tkdnd2.8\ to Python\Python38\tcl\tcl8.6\
 execute = False
 if execute:
     overwrite_file = '_'
