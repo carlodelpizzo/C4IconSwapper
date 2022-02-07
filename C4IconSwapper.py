@@ -14,7 +14,7 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 
-version = '4.20a'
+version = '4.3a'
 
 
 # This is a total mess
@@ -100,6 +100,10 @@ class C4IconSwapper:
             self.gen_driver_button['state'] = DISABLED
 
         def update_icon(self):
+            if len(self.icon_groups) == 0:
+                return
+            if abs(self.current_icon) >= len(self.icon_groups):
+                self.current_icon = abs(self.current_icon) % len(self.icon_groups)
             icon_image = Image.open(self.icon_groups[self.current_icon].path)
             icon = icon_image.resize((128, 128), Image.ANTIALIAS)
             icon = ImageTk.PhotoImage(icon)
@@ -120,10 +124,11 @@ class C4IconSwapper:
             self.uc.replacement_panel.next_icon_button['state'] = DISABLED
 
         def upload_c4z(self, given_path=''):
+            temp_bak = '/bak' + str(random.randint(11111111, 99999999)) + '/'
             if len(self.icon_groups) != 0:
                 icons_groups_bak = self.icon_groups
                 if os.path.isdir(self.uc.temp_dir + 'driver'):
-                    shutil.copytree(self.uc.temp_dir + 'driver', self.uc.temp_dir + '/bak/')
+                    shutil.copytree(self.uc.temp_dir + 'driver', self.uc.temp_dir + temp_bak)
             else:
                 icons_groups_bak = None
 
@@ -202,6 +207,8 @@ class C4IconSwapper:
                     temp_list = ''
 
             preserve_prev_next = False
+            self.uc.schedule_entry_restore = False
+            self.uc.restore_entry_string = filename
             if len(self.icon_groups) > 0:
                 self.file_entry_field['state'] = NORMAL
                 self.file_entry_field.delete(0, 'end')
@@ -234,7 +241,7 @@ class C4IconSwapper:
                     preserve_prev_next = True
                     if os.path.isdir(self.uc.temp_dir + '/driver/'):
                         shutil.rmtree(self.uc.temp_dir + '/driver/')
-                    shutil.copytree(self.uc.temp_dir + '/bak/', self.uc.temp_dir + '/driver/')
+                    shutil.copytree(self.uc.temp_dir + temp_bak, self.uc.temp_dir + '/driver/')
                 self.file_entry_field.delete(0, 'end')
                 self.file_entry_field.insert(0, 'Invalid driver selected...')
                 self.file_entry_field['state'] = DISABLED
@@ -247,13 +254,13 @@ class C4IconSwapper:
                 if len(self.icon_groups) <= 1:
                     self.prev_icon_button['state'] = DISABLED
                     self.next_icon_button['state'] = DISABLED
-                    self.uc.replacement_panel.prev_icon_button['state'] = DISABLED
-                    self.uc.replacement_panel.next_icon_button['state'] = DISABLED
+                    # self.uc.replacement_panel.prev_icon_button['state'] = DISABLED
+                    # self.uc.replacement_panel.next_icon_button['state'] = DISABLED
                 elif len(self.icon_groups) > 1:
                     self.prev_icon_button['state'] = ACTIVE
                     self.next_icon_button['state'] = ACTIVE
-                    self.uc.replacement_panel.prev_icon_button['state'] = ACTIVE
-                    self.uc.replacement_panel.next_icon_button['state'] = ACTIVE
+                    # self.uc.replacement_panel.prev_icon_button['state'] = ACTIVE
+                    # self.uc.replacement_panel.next_icon_button['state'] = ACTIVE
 
             if self.uc.replacement_selected:
                 if self.uc.driver_selected:
@@ -265,8 +272,8 @@ class C4IconSwapper:
             if self.uc.driver_selected:
                 self.uc.export_panel.export_button['state'] = ACTIVE
 
-            if os.path.isdir(self.uc.temp_dir + '/bak/'):
-                shutil.rmtree(self.uc.temp_dir + '/bak/')
+            if os.path.isdir(self.uc.temp_dir + temp_bak):
+                shutil.rmtree(self.uc.temp_dir + temp_bak)
 
             self.update_connections()
 
@@ -461,11 +468,11 @@ class C4IconSwapper:
             self.replace_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
             self.replace_button['state'] = DISABLED
 
-            self.prev_icon_button = tk.Button(self.uc.root, text='Prev', command=self.uc.c4z_panel.prev_icon, width=5)
+            self.prev_icon_button = tk.Button(self.uc.root, text='Prev', command=self.dec_img_stack, width=5)
             self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
             self.prev_icon_button['state'] = DISABLED
 
-            self.next_icon_button = tk.Button(self.uc.root, text='Next', command=self.uc.c4z_panel.next_icon, width=5)
+            self.next_icon_button = tk.Button(self.uc.root, text='Next', command=self.inc_img_stack, width=5)
             self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
             self.next_icon_button['state'] = DISABLED
 
@@ -517,6 +524,9 @@ class C4IconSwapper:
                 for img in self.img_stack:
                     if filecmp.cmp(img, img_path):
                         return
+                if len(self.img_stack) >= 4:
+                    self.prev_icon_button['state'] = NORMAL
+                    self.next_icon_button['state'] = NORMAL
                 if index is None:
                     new_img_path = self.uc.temp_dir + 'stack' + str(len(self.img_stack)) + '.png'
                     self.img_stack.insert(0, new_img_path)
@@ -550,18 +560,20 @@ class C4IconSwapper:
                 self.stack_labels[x].image = icon
                 x += 1
 
-        def inc_img_stack(self, inc=1):
+        def dec_img_stack(self):
             if len(self.img_stack) <= 4:
                 return
-            if inc >= 0:
-                temp = self.img_stack[0]
-                self.img_stack.pop(0)
-                self.img_stack.append(temp)
-            else:
-                temp = self.img_stack[-1]
-                self.img_stack.pop(-1)
-                self.img_stack.insert(0, temp)
+            temp = self.img_stack[0]
+            self.img_stack.pop(0)
+            self.img_stack.append(temp)
+            self.refresh_img_stack()
 
+        def inc_img_stack(self):
+            if len(self.img_stack) <= 4:
+                return
+            temp = self.img_stack[-1]
+            self.img_stack.pop(-1)
+            self.img_stack.insert(0, temp)
             self.refresh_img_stack()
 
         def replace_icon(self, index=None, given_path=''):
@@ -1124,7 +1136,7 @@ class C4IconSwapper:
 
         # Creating temporary directory
         self.cur_dir = os.getcwd() + '/'
-        self.temp_dir = self.cur_dir + 'temp' + str(random.randint(1111111, 9999999)) + '/'
+        self.temp_dir = self.cur_dir + 'temp' + str(random.randint(111, 999)) + '/'
         if not os.path.isdir(self.temp_dir):
             os.mkdir(self.temp_dir)
 
@@ -1246,4 +1258,4 @@ class C4IconSwapper:
         elif event.keysym == 'Up':
             self.replacement_panel.inc_img_stack()
         elif event.keysym == 'Down':
-            self.replacement_panel.inc_img_stack(-1)
+            self.replacement_panel.dec_img_stack()
