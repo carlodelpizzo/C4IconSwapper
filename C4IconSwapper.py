@@ -312,13 +312,13 @@ class C4IconSwapper:
                 return print('icon restore index out of range')
 
             for icon in self.icon_groups[index].icons:
-                if os.path.isfile(icon.path + '.orig'):
-                    shutil.copy(icon.path + '.orig', icon.path)
-                    os.remove(icon.path + '.orig')
+                if os.path.isfile(icon.path + '.bak'):
+                    shutil.copy(icon.path + '.bak', icon.path)
+                    os.remove(icon.path + '.bak')
             self.restore_button['state'] = DISABLED
             disable_all_button = True
             for group in self.icon_groups:
-                if os.path.isfile(group.icons[0].path + '.orig'):
+                if os.path.isfile(group.icons[0].path + '.bak'):
                     disable_all_button = False
             if disable_all_button:
                 self.restore_all_button['state'] = DISABLED
@@ -339,7 +339,7 @@ class C4IconSwapper:
             else:
                 self.current_icon -= 1
 
-            if os.path.isfile(self.icon_groups[self.current_icon].path + '.orig'):
+            if os.path.isfile(self.icon_groups[self.current_icon].path + '.bak'):
                 self.restore_button['state'] = ACTIVE
             else:
                 self.restore_button['state'] = DISABLED
@@ -354,7 +354,7 @@ class C4IconSwapper:
             else:
                 self.current_icon += 1
 
-            if os.path.isfile(self.icon_groups[self.current_icon].path + '.orig'):
+            if os.path.isfile(self.icon_groups[self.current_icon].path + '.bak'):
                 self.restore_button['state'] = ACTIVE
             else:
                 self.restore_button['state'] = DISABLED
@@ -621,8 +621,8 @@ class C4IconSwapper:
             else:
                 replacement_icon = Image.open(given_path)
             for icon in self.uc.c4z_panel.icon_groups[index].icons:
-                if not os.path.isfile(icon.path + '.orig'):
-                    shutil.copy(icon.path, icon.path + '.orig')
+                if not os.path.isfile(icon.path + '.bak'):
+                    shutil.copy(icon.path, icon.path + '.bak')
                 new_icon = replacement_icon.resize((icon.size, icon.size))
                 new_icon.save(icon.path)
             self.uc.c4z_panel.restore_button['state'] = ACTIVE
@@ -829,20 +829,20 @@ class C4IconSwapper:
 
             dir_list = os.listdir(self.uc.icon_dir)
             for i in range(len(dir_list)):
-                if '.orig' in dir_list[i]:
+                if '.bak' in dir_list[i]:
                     if not os.path.isdir(self.uc.icon_dir + '/original_icons'):
                         os.mkdir(self.uc.icon_dir + '/original_icons')
                     shutil.copy(self.uc.icon_dir + dir_list[i],
-                                self.uc.icon_dir + '/original_icons/' + dir_list[i].replace('.orig', ''))
+                                self.uc.icon_dir + '/original_icons/' + dir_list[i].replace('.bak', ''))
                     os.remove(self.uc.icon_dir + dir_list[i])
             dir_list = os.listdir(self.uc.device_icon_dir)
             for i in range(len(dir_list)):
-                if '.orig' in dir_list[i]:
+                if '.bak' in dir_list[i]:
                     if not os.path.isdir(self.uc.device_icon_dir + '/original_icons'):
                         os.mkdir(self.uc.device_icon_dir + '/original_icons')
                     shutil.copy(self.uc.device_icon_dir + dir_list[i],
                                 self.uc.device_icon_dir + '/original_icons/' +
-                                dir_list[i].replace('.orig', ''))
+                                dir_list[i].replace('.bak', ''))
                     os.remove(self.uc.device_icon_dir + dir_list[i])
 
             os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.txt')
@@ -1044,8 +1044,8 @@ class C4IconSwapper:
                 for _ in range(0, 6):
                     temp_name += str(random.randint(0, 9))
                 try:
-                    if not os.path.isfile(self.uc.orig_file_path + '.orig'):
-                        shutil.copy(self.uc.orig_file_path, self.uc.orig_file_path + '.orig')
+                    if not os.path.isfile(self.uc.orig_file_path + '.bak'):
+                        shutil.copy(self.uc.orig_file_path, self.uc.orig_file_path + '.bak')
                     else:
                         shutil.copy(self.uc.orig_file_path, self.uc.orig_file_path + '.' + temp_name)
                         os.remove(self.uc.orig_file_path + '.' + temp_name)
@@ -1343,3 +1343,20 @@ class C4IconSwapper:
             self.replacement_panel.inc_img_stack()
         elif event.keysym == 'Down':
             self.replacement_panel.dec_img_stack()
+
+
+def list_all_sub_directories(directory):
+    subs = []
+    for dir_name in os.listdir(directory):
+        if '.' not in dir_name:
+            subs.append(directory + '/' + dir_name)
+    if len(subs) != 0:
+        new_subs = []
+        for sub_dir in subs:
+            temp0 = list_all_sub_directories(sub_dir)
+            for new_sub in temp0:
+                new_subs.append(new_sub)
+        for new_sub in new_subs:
+            subs.append(new_sub)
+        return subs
+    return subs
