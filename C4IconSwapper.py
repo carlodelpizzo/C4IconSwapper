@@ -14,7 +14,7 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 
-version = '4.4a'
+version = '4.5a'
 
 
 class C4IconSwapper:
@@ -407,7 +407,7 @@ class C4IconSwapper:
             if conn_range == 0:
                 return
             for i in range(0, conn_range):
-                self.uc.connections_panel.buttons[i].place(x=-10000, y=-10000)
+                self.uc.connections_panel.buttons[i].place(x=-420, y=-420)
                 self.uc.connections_panel.connection_entries[i]['state'] = NORMAL
                 self.uc.connections_panel.connection_entries[i].delete(0, END)
                 self.uc.connections_panel.connection_entries[i].insert(0, connections[i][0])
@@ -1140,7 +1140,7 @@ class C4IconSwapper:
                     self.buttons[-1]['state'] = DISABLED
 
                     self.x_buttons.append(tk.Button(self.uc.root, text='x', width=1, command=self.disable_conn))
-                    self.x_buttons[-1].place(x=-10000, y=-10000)
+                    self.x_buttons[-1].place(x=-420, y=-420)
                     self.x_buttons[-1]['state'] = DISABLED
 
         def enable_conn(self):
@@ -1150,7 +1150,7 @@ class C4IconSwapper:
                     self.connection_entries[i].delete(0, END)
                     self.connection_entries[i].insert(0, 'Connection ' + str(i + 1))
                     self.connection_menus[i]['state'] = NORMAL
-                    self.buttons[i].place(x=-10000, y=-10000)
+                    self.buttons[i].place(x=-420, y=-420)
                     self.x_buttons[i].place(x=(int(i / 6) * 300) - 20 + self.x, y=((i % 6) * 40) + 20 + self.y,
                                             anchor='w')
                     self.x_buttons[i]['state'] = NORMAL
@@ -1164,7 +1164,7 @@ class C4IconSwapper:
                 if self.connection_entries[i]['state'] == DISABLED and self.buttons[i]['state'] == NORMAL:
                     self.connection_entries[i - 1]['state'] = DISABLED
                     self.connection_menus[i - 1]['state'] = DISABLED
-                    self.x_buttons[i - 1].place(x=-10000, y=-10000)
+                    self.x_buttons[i - 1].place(x=-420, y=-420)
                     self.buttons[i - 1].place(x=(int((i - 1) / 6) * 300) + 220 + self.x,
                                               y=(((i - 1) % 6) * 40) + 20 + self.y, anchor='w')
                     self.buttons[i]['state'] = DISABLED
@@ -1173,7 +1173,7 @@ class C4IconSwapper:
             if last_case:
                 self.connection_entries[-1]['state'] = DISABLED
                 self.connection_menus[-1]['state'] = DISABLED
-                self.x_buttons[-1].place(x=-10000, y=-10000)
+                self.x_buttons[-1].place(x=-420, y=-420)
                 self.buttons[-1].place(x=(int(17 / 6) * 300) + 220 + self.x,
                                        y=((17 % 6) * 40) + 20 + self.y, anchor='w')
                 self.buttons[-1]['state'] = NORMAL
@@ -1199,7 +1199,7 @@ class C4IconSwapper:
                                                   anchor='w')
                     self.buttons[6 * x + i]['state'] = DISABLED
 
-                    self.x_buttons[6 * x + i].place(x=-10000, y=-10000)
+                    self.x_buttons[6 * x + i].place(x=-420, y=-420)
 
     def __init__(self):
         # Create root window

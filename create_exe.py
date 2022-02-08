@@ -38,7 +38,7 @@ def make_exe(python_file: str):
 
 
 # Change to True before running; this is to prevent accidental run; add tkdnd2.8\ to Python\Python38\tcl\tcl8.6\
-execute = True
+execute = False
 if execute:
     overwrite_file = '_'
     if os.path.isfile(cur_dir + 'C4IconSwapper.' + version + '.exe'):
