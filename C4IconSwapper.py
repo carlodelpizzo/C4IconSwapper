@@ -55,7 +55,7 @@ class C4IconSwapper:
             self.icon_label.place(x=108 + self.x, y=176 + self.y, anchor='n')
 
             self.icon_name_label = tk.Label(self.uc.root, text='icon name')
-            self.icon_name_label.place(x=108 + self.x, y=197 + self.y, anchor='n')
+            self.icon_name_label.place(x=108 + self.x, y=193 + self.y, anchor='n')
 
             # Buttons
             self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_c4z)
@@ -161,13 +161,12 @@ class C4IconSwapper:
                     for letter in icon_list[i]:
                         if letter == '.':
                             break
-                        else:
-                            if get_size:
-                                temp_size += letter
-                            if letter == '_':
-                                get_size = True
-                            elif not get_size:
-                                temp_name += letter
+                        if get_size:
+                            temp_size += letter
+                        if letter == '_':
+                            get_size = True
+                        elif not get_size:
+                            temp_name += letter
                     icon_objects.append(self.Icon(self.uc.device_icon_dir + str(icon_list[i]),
                                                   temp_name, int(temp_size)))
 
@@ -182,11 +181,10 @@ class C4IconSwapper:
                             for letter in icon_list[i]:
                                 if letter == '.':
                                     break
-                                else:
-                                    if get_size:
-                                        temp_size += letter
-                                    if letter == '_':
-                                        get_size = True
+                                if get_size:
+                                    temp_size += letter
+                                if letter == '_':
+                                    get_size = True
                             icon_objects.append(self.Icon(self.uc.device_icon_dir + '/' + sub_dir + '/' +
                                                           str(icon_list[i]), sub_dir, int(temp_size)))
 
