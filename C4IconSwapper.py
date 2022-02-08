@@ -1016,6 +1016,21 @@ class C4IconSwapper:
             driver_xml_file.close()
             os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
 
+            bak_files = []
+            temp_temp_dir = self.uc.cur_dir + '/temp_bak_files/'
+            if self.remove_backups:
+                if not os.path.isdir(temp_temp_dir):
+                    os.mkdir(temp_temp_dir)
+                directories = list_all_sub_directories(self.uc.temp_dir)
+                for directory in directories:
+                    files = os.listdir(directory)
+                    for file in files:
+                        if '.bak' in file:
+                            bak_files.append([directory, file, str(random.randint(1111111111, 9999999999)) + '.bak'])
+                for file_list in bak_files:
+                    shutil.copy(file_list[0] + '/' + file_list[1], temp_temp_dir + '/' + file_list[2])
+                    os.remove(file_list[0] + '/' + file_list[1])
+
             def confirm_write(ran_name=False):
                 if ran_name:
                     ran_file_name = 'IcnSwp_'
@@ -1103,6 +1118,10 @@ class C4IconSwapper:
                     base = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
                     os.rename(self.uc.cur_dir + driver_name + '.zip', base + '.c4z')
 
+            if len(bak_files) != 0 and os.path.isdir(temp_temp_dir):
+                for file_list in bak_files:
+                    shutil.copy(temp_temp_dir + '/' + file_list[2], file_list[0] + '/' + file_list[1])
+                shutil.rmtree(temp_temp_dir)
             os.remove(self.uc.temp_dir + '/driver/driver.xml')
             os.rename(self.uc.temp_dir + '/driver/driver.xml.bak', self.uc.temp_dir + '/driver/driver.xml')
 
