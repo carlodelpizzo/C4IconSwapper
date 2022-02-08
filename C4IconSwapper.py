@@ -78,7 +78,7 @@ class C4IconSwapper:
             self.next_icon_button['state'] = DISABLED
 
             self.gen_driver_button = tk.Button(self.uc.root, text='Load Generic Driver', command=self.load_gen_driver)
-            self.gen_driver_button.place(x=228 + self.x, y=189 + self.y, anchor='n')
+            self.gen_driver_button.place(x=228 + self.x, y=219 + self.y, anchor='n')
 
             # Entry
             self.file_entry_field = tk.Entry(self.uc.root, width=25)
@@ -150,7 +150,11 @@ class C4IconSwapper:
 
             if os.path.isdir(self.uc.device_icon_dir):
                 icon_list = os.listdir(self.uc.device_icon_dir)
+                sub_list = []
                 for i in range(len(icon_list)):
+                    if '.' not in icon_list[i]:
+                        sub_list.append(icon_list[i])
+                        continue
                     temp_name = ''
                     temp_size = ''
                     get_size = False
@@ -166,6 +170,26 @@ class C4IconSwapper:
                                 temp_name += letter
                     icon_objects.append(self.Icon(self.uc.device_icon_dir + str(icon_list[i]),
                                                   temp_name, int(temp_size)))
+
+                if len(sub_list) > 0:
+                    for sub_dir in sub_list:
+                        icon_list = os.listdir(self.uc.device_icon_dir + '/' + sub_dir)
+                        for i in range(len(icon_list)):
+                            if '.' not in icon_list[i]:
+                                continue
+                            temp_size = ''
+                            get_size = False
+                            for letter in icon_list[i]:
+                                if letter == '.':
+                                    break
+                                else:
+                                    if get_size:
+                                        temp_size += letter
+                                    if letter == '_':
+                                        get_size = True
+                            icon_objects.append(self.Icon(self.uc.device_icon_dir + '/' + sub_dir + '/' +
+                                                          str(icon_list[i]), sub_dir, int(temp_size)))
+
             if os.path.isdir(self.uc.icon_dir):
                 icon_list = os.listdir(self.uc.icon_dir)
                 for i in range(len(icon_list)):
