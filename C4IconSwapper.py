@@ -1018,7 +1018,7 @@ class C4IconSwapper:
 
             bak_files = []
             temp_temp_dir = self.uc.cur_dir + '/temp_bak_files/'
-            if self.remove_backups:
+            if self.remove_backups.get() == 1:
                 if not os.path.isdir(temp_temp_dir):
                     os.mkdir(temp_temp_dir)
                 directories = list_all_sub_directories(self.uc.temp_dir)
@@ -1054,7 +1054,7 @@ class C4IconSwapper:
 
                 pop.destroy()
 
-            if self.over_orig:
+            if self.over_orig.get() == 1:
                 temp_name = 'IcnSwp'
                 for _ in range(0, 6):
                     temp_name += str(random.randint(0, 9))
