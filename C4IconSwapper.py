@@ -97,6 +97,7 @@ class C4IconSwapper:
             gen_driver.close()
             self.upload_c4z(temp_gen_driver)
             self.gen_driver_button['state'] = DISABLED
+            self.uc.export_panel.over_orig_check['state'] = DISABLED
 
         def update_icon(self):
             if len(self.icon_groups) == 0:
@@ -278,6 +279,7 @@ class C4IconSwapper:
             if not self.file_entry_field.get().endswith('generic.c4z') and not\
                     self.file_entry_field.get() == 'Invalid driver selected...':
                 self.gen_driver_button['state'] = NORMAL
+                self.uc.export_panel.over_orig_check['state'] = NORMAL
 
             if not preserve_prev_next:
                 if len(self.icon_groups) <= 1:
@@ -790,8 +792,13 @@ class C4IconSwapper:
             self.inc_driver_check.place(x=63 + self.x, y=135 + self.y, anchor='w')
 
             self.over_orig = IntVar()
-            self.over_orig_check = Checkbutton(self.uc.root, text="overwrite original file", variable=self.over_orig)
-            self.over_orig_check.place(x=63 + self.x, y=105 + self.y, anchor='w')
+            self.over_orig_check = Checkbutton(self.uc.root, text='overwrite original file', variable=self.over_orig)
+            self.over_orig_check.place(x=63 + self.x, y=115 + self.y, anchor='w')
+
+            self.remove_backups = IntVar()
+            self.remove_backups_check = Checkbutton(self.uc.root, text='remove backup files',
+                                                    variable=self.remove_backups)
+            self.remove_backups_check.place(x=63 + self.x, y=95 + self.y, anchor='w')
 
         def export_c4z(self):
             def append_line(array: list, string: str):
@@ -1032,7 +1039,7 @@ class C4IconSwapper:
 
                 pop.destroy()
 
-            if self.over_orig.get() == 1:
+            if self.over_orig:
                 temp_name = 'IcnSwp'
                 for _ in range(0, 6):
                     temp_name += str(random.randint(0, 9))
