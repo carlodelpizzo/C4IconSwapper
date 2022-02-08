@@ -14,7 +14,7 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 
-version = '4.5a'
+version = '4.4a'
 
 
 class C4IconSwapper:
