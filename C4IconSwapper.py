@@ -126,6 +126,17 @@ class C4IconSwapper:
             self.uc.replacement_panel.next_icon_button['state'] = DISABLED
 
         def upload_c4z(self, given_path=''):
+            if self.file_entry_field.get() == 'Invalid driver selected...':
+                self.uc.c4z_panel.file_entry_field['state'] = NORMAL
+                self.uc.c4z_panel.file_entry_field.delete(0, 'end')
+                if self.uc.restore_entry_string != '':
+                    self.uc.c4z_panel.file_entry_field.insert(0, self.uc.restore_entry_string)
+                else:
+                    self.uc.c4z_panel.file_entry_field.insert(0, 'Select .c4z file...')
+                self.uc.c4z_panel.file_entry_field['state'] = 'readonly'
+                self.uc.restore_entry_string = ''
+                self.uc.time_var = 0
+                self.uc.schedule_entry_restore = False
             temp_bak = '/bak' + str(random.randint(11111111, 99999999)) + '/'
             if len(self.icon_groups) != 0:
                 icons_groups_bak = self.icon_groups
@@ -139,21 +150,20 @@ class C4IconSwapper:
             else:
                 filename = given_path
 
-            if os.path.isdir(self.uc.temp_dir + '/driver/'):
-                shutil.rmtree(self.uc.temp_dir + '/driver/')
-
             if not filename:
                 if os.path.isdir(self.uc.temp_dir + temp_bak):
-                    shutil.copytree(self.uc.temp_dir + temp_bak, self.uc.temp_dir + '/driver/')
                     shutil.rmtree(self.uc.temp_dir + temp_bak)
                 return
+
+            if os.path.isdir(self.uc.temp_dir + '/driver/'):
+                shutil.rmtree(self.uc.temp_dir + '/driver/')
 
             shutil.unpack_archive(filename, self.uc.temp_dir + 'driver', 'zip')
 
             def get_icons(directory):
                 icons_out = []
                 if not os.path.isdir(directory):
-                    return None
+                    return
                 icon_list0 = os.listdir(directory)
                 sub_list = []
                 for ii in range(len(icon_list0)):
@@ -204,8 +214,11 @@ class C4IconSwapper:
                 return icons_out
 
             icon_objects = []
-            for icon in get_icons(self.uc.icon_dir):
-                icon_objects.append(icon)
+            try:
+                for icon in get_icons(self.uc.icon_dir):
+                    icon_objects.append(icon)
+            except TypeError:
+                pass
 
             # Form icon groups
             self.icon_groups = []
@@ -223,7 +236,6 @@ class C4IconSwapper:
                 temp_list = None
 
             # Update entry fields
-            preserve_prev_next = False
             self.uc.schedule_entry_restore = False
             self.uc.restore_entry_string = filename
             if len(self.icon_groups) > 0:
@@ -255,27 +267,28 @@ class C4IconSwapper:
                     self.icon_groups = icons_groups_bak
                     self.uc.schedule_entry_restore = True
                     self.uc.restore_entry_string = self.file_entry_field.get()
-                    preserve_prev_next = True
                     if os.path.isdir(self.uc.temp_dir + '/driver/'):
                         shutil.rmtree(self.uc.temp_dir + '/driver/')
                     shutil.copytree(self.uc.temp_dir + temp_bak, self.uc.temp_dir + '/driver/')
+                    if os.path.isdir(self.uc.temp_dir + temp_bak):
+                        shutil.rmtree(self.uc.temp_dir + temp_bak)
                 self.file_entry_field.delete(0, 'end')
                 self.file_entry_field.insert(0, 'Invalid driver selected...')
                 self.file_entry_field['state'] = DISABLED
+                return
 
             # Update button statuses
             if not self.file_entry_field.get().endswith('generic.c4z') and not\
                     self.file_entry_field.get() == 'Invalid driver selected...':
-                self.gen_driver_button['state'] = NORMAL
+                self.gen_driver_button['state'] = ACTIVE
                 self.uc.export_panel.over_orig_check['state'] = NORMAL
 
-            if not preserve_prev_next:
-                if len(self.icon_groups) <= 1:
-                    self.prev_icon_button['state'] = DISABLED
-                    self.next_icon_button['state'] = DISABLED
-                else:
-                    self.prev_icon_button['state'] = ACTIVE
-                    self.next_icon_button['state'] = ACTIVE
+            if len(self.icon_groups) <= 1:
+                self.prev_icon_button['state'] = DISABLED
+                self.next_icon_button['state'] = DISABLED
+            else:
+                self.prev_icon_button['state'] = ACTIVE
+                self.next_icon_button['state'] = ACTIVE
 
             if self.uc.replacement_selected and self.uc.driver_selected:
                 self.uc.replacement_panel.replace_button['state'] = ACTIVE
@@ -291,16 +304,20 @@ class C4IconSwapper:
             for path in list_all_sub_directories(self.uc.temp_dir):
                 files = os.listdir(path)
                 for file in files:
-                    if '.bak' in file:
+                    if '.bak' in file and '.xml' not in file:
                         if not one:
-                            self.restore_button['state'] = NORMAL
                             one = True
                         else:
-                            self.restore_all_button['state'] = NORMAL
+                            self.restore_all_button['state'] = ACTIVE
                             done = True
                             break
                 if done:
                     break
+
+            if len(self.icon_groups) != 0 and os.path.isfile(self.icon_groups[self.current_icon].path + '.bak'):
+                self.restore_button['state'] = ACTIVE
+            else:
+                self.restore_button['state'] = DISABLED
 
             # Remove temp backup directory
             if os.path.isdir(self.uc.temp_dir + temp_bak):
