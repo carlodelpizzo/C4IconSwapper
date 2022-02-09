@@ -127,13 +127,13 @@ class C4IconSwapper:
 
         def upload_c4z(self, given_path=''):
             if self.file_entry_field.get() == 'Invalid driver selected...':
-                self.uc.c4z_panel.file_entry_field['state'] = NORMAL
-                self.uc.c4z_panel.file_entry_field.delete(0, 'end')
+                self.file_entry_field['state'] = NORMAL
+                self.file_entry_field.delete(0, 'end')
                 if self.uc.restore_entry_string != '':
-                    self.uc.c4z_panel.file_entry_field.insert(0, self.uc.restore_entry_string)
+                    self.file_entry_field.insert(0, self.uc.restore_entry_string)
                 else:
-                    self.uc.c4z_panel.file_entry_field.insert(0, 'Select .c4z file...')
-                self.uc.c4z_panel.file_entry_field['state'] = 'readonly'
+                    self.file_entry_field.insert(0, 'Select .c4z file...')
+                self.file_entry_field['state'] = 'readonly'
                 self.uc.restore_entry_string = ''
                 self.uc.time_var = 0
                 self.uc.schedule_entry_restore = False
