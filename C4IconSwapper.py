@@ -9,6 +9,8 @@ import tkinter as tk
 from tkinter import *
 from tkinter import ttk
 from tkinter import filedialog
+
+import PIL.Image
 from tkinterdnd2 import DND_FILES, TkinterDnD
 from PIL import ImageTk, Image
 from datetime import datetime
@@ -20,7 +22,8 @@ version = '4.5a'
 class C4IconSwapper:
     class C4zPanel:
         class Icon:
-            def __init__(self, path: str, name: str, size: int):
+            def __init__(self, root_path: str, path: str, name: str, size: int):
+                self.root = root_path
                 self.path = path
                 self.name = name
                 self.size = size
@@ -132,7 +135,6 @@ class C4IconSwapper:
             else:
                 icons_groups_bak = None
 
-            icon_objects = []
             if given_path == '':
                 filename = filedialog.askopenfilename(filetypes=[("Control4 Drivers", "*.c4z")])
             else:
@@ -149,90 +151,79 @@ class C4IconSwapper:
 
             shutil.unpack_archive(filename, self.uc.temp_dir + 'driver', 'zip')
 
-            if os.path.isdir(self.uc.device_icon_dir):
-                icon_list = os.listdir(self.uc.device_icon_dir)
+            def get_icons(directory, provided_name=''):
+                icons_out = []
+                if not os.path.isdir(directory):
+                    return None
+                icon_list0 = os.listdir(directory)
                 sub_list = []
-                for i in range(len(icon_list)):
-                    if '.' not in icon_list[i]:
-                        sub_list.append(icon_list[i])
+                for ii in range(len(icon_list0)):
+                    if '.' not in icon_list0[ii]:
+                        if icon_list0[ii] == 'original_icons':
+                            continue
+                        sub_list.append(icon_list0[ii])
+                        continue
+                    if 'device_lg' in icon_list0[ii]:
+                        icon_objects.append(self.Icon(directory, directory + '/' + str(icon_list0[ii]), 'device', 32))
+                        continue
+                    elif 'device_sm' in icon_list0[ii]:
+                        icon_objects.append(self.Icon(directory, directory + '/' + str(icon_list0[ii]), 'device', 16))
                         continue
                     temp_name = ''
                     temp_size = ''
-                    get_size = False
-                    for letter in icon_list[i]:
-                        if letter == '.':
-                            break
-                        if get_size:
-                            temp_size += letter
-                        if letter == '_':
-                            get_size = True
-                        elif not get_size:
-                            temp_name += letter
-                    icon_objects.append(self.Icon(self.uc.device_icon_dir + str(icon_list[i]),
-                                                  temp_name, int(temp_size)))
+                    read_size = False
+                    read_name = False
+                    for character in reversed(icon_list0[ii]):
+                        if character == '.':
+                            read_size = True
+                            continue
+                        if read_size:
+                            try:
+                                int(character)
+                                temp_size = character + temp_size
+                            except ValueError:
+                                if temp_size == '' and character != '_':
+                                    temp_name = character + temp_name
+                                read_size = False
+                                read_name = True
+                            continue
+                        if read_name:
+                            temp_name = character + temp_name
+                    if temp_size == '':
+                        temp_img = PIL.Image.open(directory + '/' + str(icon_list0[ii]))
+                        temp_size = str(temp_img.size[0])
+                    if provided_name == '':
+                        icons_out.append(self.Icon(directory, directory + '/' + str(icon_list0[ii]),
+                                                   temp_name, int(temp_size)))
+                    else:
+                        icons_out.append(self.Icon(directory, directory + '/' + str(icon_list0[ii]),
+                                                   provided_name, int(temp_size)))
 
-                if len(sub_list) > 0:
+                if len(sub_list) != 0:
                     for sub_dir in sub_list:
-                        icon_list = os.listdir(self.uc.device_icon_dir + '/' + sub_dir)
-                        for i in range(len(icon_list)):
-                            if '.' not in icon_list[i]:
-                                continue
-                            temp_size = ''
-                            get_size = False
-                            for letter in icon_list[i]:
-                                if letter == '.':
-                                    break
-                                if get_size:
-                                    temp_size += letter
-                                if letter == '_':
-                                    get_size = True
-                            icon_objects.append(self.Icon(self.uc.device_icon_dir + '/' + sub_dir + '/' +
-                                                          str(icon_list[i]), sub_dir, int(temp_size)))
+                        to_add = get_icons(directory + '/' + sub_dir)
+                        for icon0 in to_add:
+                            icons_out.append(icon0)
+                return icons_out
 
-            if os.path.isdir(self.uc.icon_dir):
-                icon_list = os.listdir(self.uc.icon_dir)
-                for i in range(len(icon_list)):
-                    if icon_list[i][len(icon_list[i]) - 4] != '.':
-                        continue
-                    if 'device_lg' in icon_list[i] or 'device_sm' in icon_list[i]:
-                        continue
-                    temp_name = ''
-                    temp_size = ''
-                    get_size = False
-                    for letter in icon_list[i]:
-                        if letter == '.':
-                            break
-                        if get_size:
-                            temp_size += letter
-                        if letter == '_':
-                            get_size = True
-                        elif not get_size:
-                            temp_name += letter
-                    icon_objects.append(self.Icon(self.uc.icon_dir + str(icon_list[i]),
-                                                  temp_name, int(temp_size)))
-                for i in range(len(icon_list)):
-                    if icon_list[i][len(icon_list[i]) - 4] != '.':
-                        continue
-                    if 'device_lg' in icon_list[i]:
-                        icon_objects.append(self.Icon(self.uc.icon_dir + str(icon_list[i]), 'device', 32))
-                    elif 'device_sm' in icon_list[i]:
-                        icon_objects.append(self.Icon(self.uc.icon_dir + str(icon_list[i]), 'device', 16))
+            icon_objects = []
+            for icon in get_icons(self.uc.icon_dir):
+                icon_objects.append(icon)
 
-            # Update icon groups
+            # Form icon groups
             self.icon_groups = []
             temp_list = []
             for i in range(len(icon_objects)):
-                if not temp_list or icon_objects[i].name == temp_list[0].name:
+                if not temp_list or (icon_objects[i].name == temp_list[0].name and
+                                     icon_objects[i].root == temp_list[0].root):
                     temp_list.append(icon_objects[i])
                 else:
-                    new_icon_group = self.IconGroup(temp_list)
-                    self.icon_groups.append(new_icon_group)
+                    self.icon_groups.append(self.IconGroup(temp_list))
                     temp_list = [icon_objects[i]]
                 if i != len(icon_objects) - 1:
                     continue
-                new_icon_group = self.IconGroup(temp_list)
-                self.icon_groups.append(new_icon_group)
-                temp_list = ''
+                self.icon_groups.append(self.IconGroup(temp_list))
+                temp_list = None
 
             # Update entry fields
             preserve_prev_next = False
