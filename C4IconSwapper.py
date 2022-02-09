@@ -301,7 +301,7 @@ class C4IconSwapper:
 
             one = False
             done = False
-            for path in list_all_sub_directories(self.uc.temp_dir):
+            for path in list_all_sub_directories(self.uc.temp_dir + '/driver/'):
                 files = os.listdir(path)
                 for file in files:
                     if '.bak' in file and '.xml' not in file:
@@ -313,6 +313,8 @@ class C4IconSwapper:
                             break
                 if done:
                     break
+            if not done:
+                self.restore_all_button['state'] = DISABLED
 
             if len(self.icon_groups) != 0 and os.path.isfile(self.icon_groups[self.current_icon].path + '.bak'):
                 self.restore_button['state'] = ACTIVE
