@@ -155,6 +155,7 @@ class C4IconSwapper:
                     shutil.rmtree(self.uc.temp_dir + temp_bak)
                 return
 
+            self.uc.driver_selected = False
             if os.path.isdir(self.uc.temp_dir + '/driver/'):
                 shutil.rmtree(self.uc.temp_dir + '/driver/')
 
@@ -272,6 +273,7 @@ class C4IconSwapper:
                     shutil.copytree(self.uc.temp_dir + temp_bak, self.uc.temp_dir + '/driver/')
                     if os.path.isdir(self.uc.temp_dir + temp_bak):
                         shutil.rmtree(self.uc.temp_dir + temp_bak)
+                    self.uc.driver_selected = True
                 self.file_entry_field.delete(0, 'end')
                 self.file_entry_field.insert(0, 'Invalid driver selected...')
                 self.file_entry_field['state'] = DISABLED
@@ -299,22 +301,17 @@ class C4IconSwapper:
             if self.uc.driver_selected:
                 self.uc.export_panel.export_button['state'] = ACTIVE
 
-            one = False
             done = False
+            self.restore_all_button['state'] = DISABLED
             for path in list_all_sub_directories(self.uc.temp_dir + '/driver/'):
                 files = os.listdir(path)
                 for file in files:
                     if '.bak' in file and '.xml' not in file:
-                        if not one:
-                            one = True
-                        else:
-                            self.restore_all_button['state'] = ACTIVE
-                            done = True
-                            break
+                        self.restore_all_button['state'] = ACTIVE
+                        done = True
+                        break
                 if done:
                     break
-            if not done:
-                self.restore_all_button['state'] = DISABLED
 
             if len(self.icon_groups) != 0 and os.path.isfile(self.icon_groups[self.current_icon].path + '.bak'):
                 self.restore_button['state'] = ACTIVE
