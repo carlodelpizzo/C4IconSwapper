@@ -448,22 +448,6 @@ class C4IconSwapper:
                     dropped_path.endswith('.gif') or dropped_path.endswith('.jpeg'):
                 self.uc.replacement_panel.replace_icon(given_path=dropped_path)
 
-        def get_version_number(self):
-            if not os.path.isdir(self.uc.temp_dir + '/driver/driver.xml'):
-                return
-            os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.txt')
-            driver_xml_file = open(self.uc.temp_dir + '/driver/driver.txt', errors='ignore')
-            driver_xml_lines = driver_xml_file.readlines()
-            driver_xml_file.close()
-
-            for line in driver_xml_lines:
-                if '<version>' in line:
-                    result = re.search('<version>(.*)</version>', line)
-                    os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
-                    return result.group(1)
-
-            os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
-
     class ReplacementPanel:
         def __init__(self, upper_class):
             self.x = 303
@@ -1343,7 +1327,6 @@ class C4IconSwapper:
 
         # Main Loop
         self.root.after(0, self.restore_entry_text)
-        self.root.after(100, self.supervisor)
         self.root.mainloop()
         shutil.rmtree(self.temp_dir)
 
@@ -1369,9 +1352,6 @@ class C4IconSwapper:
                 self.time_var = 0
 
         self.root.after(2000, self.restore_entry_text)
-
-    def supervisor(self):
-        self.root.after(100, self.supervisor)
 
     def key_release(self, event):
         if event.keysym == 'Right':
