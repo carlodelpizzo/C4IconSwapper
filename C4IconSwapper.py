@@ -6,11 +6,10 @@ import time
 import random
 import re
 import tkinter as tk
+import PIL.Image
 from tkinter import *
 from tkinter import ttk
 from tkinter import filedialog
-
-import PIL.Image
 from tkinterdnd2 import DND_FILES, TkinterDnD
 from PIL import ImageTk, Image
 from datetime import datetime
@@ -151,15 +150,17 @@ class C4IconSwapper:
 
             shutil.unpack_archive(filename, self.uc.temp_dir + 'driver', 'zip')
 
-            def get_icons(directory, provided_name=''):
+            def get_icons(directory):
                 icons_out = []
                 if not os.path.isdir(directory):
                     return None
                 icon_list0 = os.listdir(directory)
                 sub_list = []
                 for ii in range(len(icon_list0)):
+                    if '.bak' in icon_list0[ii]:
+                        continue
                     if '.' not in icon_list0[ii]:
-                        if icon_list0[ii] == 'original_icons':
+                        if icon_list0[ii] == 'original_icons' or 'old' in icon_list0[ii]:
                             continue
                         sub_list.append(icon_list0[ii])
                         continue
@@ -192,12 +193,8 @@ class C4IconSwapper:
                     if temp_size == '':
                         temp_img = PIL.Image.open(directory + '/' + str(icon_list0[ii]))
                         temp_size = str(temp_img.size[0])
-                    if provided_name == '':
-                        icons_out.append(self.Icon(directory, directory + '/' + str(icon_list0[ii]),
-                                                   temp_name, int(temp_size)))
-                    else:
-                        icons_out.append(self.Icon(directory, directory + '/' + str(icon_list0[ii]),
-                                                   provided_name, int(temp_size)))
+                    icons_out.append(self.Icon(directory, directory + '/' + str(icon_list0[ii]),
+                                               temp_name, int(temp_size)))
 
                 if len(sub_list) != 0:
                     for sub_dir in sub_list:
@@ -288,6 +285,22 @@ class C4IconSwapper:
                 self.uc.replacement_panel.replace_all_button['state'] = DISABLED
             if self.uc.driver_selected:
                 self.uc.export_panel.export_button['state'] = ACTIVE
+
+            one = False
+            done = False
+            for path in list_all_sub_directories(self.uc.temp_dir):
+                files = os.listdir(path)
+                for file in files:
+                    if '.bak' in file:
+                        if not one:
+                            self.restore_button['state'] = NORMAL
+                            one = True
+                        else:
+                            self.restore_all_button['state'] = NORMAL
+                            done = True
+                            break
+                if done:
+                    break
 
             # Remove temp backup directory
             if os.path.isdir(self.uc.temp_dir + temp_bak):
@@ -818,23 +831,23 @@ class C4IconSwapper:
             self.driver_name_entry.delete(0, 'end')
             self.driver_name_entry.insert(0, driver_name)
 
-            dir_list = os.listdir(self.uc.icon_dir)
-            for i in range(len(dir_list)):
-                if '.bak' in dir_list[i]:
-                    if not os.path.isdir(self.uc.icon_dir + '/original_icons'):
-                        os.mkdir(self.uc.icon_dir + '/original_icons')
-                    shutil.copy(self.uc.icon_dir + dir_list[i],
-                                self.uc.icon_dir + '/original_icons/' + dir_list[i].replace('.bak', ''))
-                    os.remove(self.uc.icon_dir + dir_list[i])
-            dir_list = os.listdir(self.uc.device_icon_dir)
-            for i in range(len(dir_list)):
-                if '.bak' in dir_list[i]:
-                    if not os.path.isdir(self.uc.device_icon_dir + '/original_icons'):
-                        os.mkdir(self.uc.device_icon_dir + '/original_icons')
-                    shutil.copy(self.uc.device_icon_dir + dir_list[i],
-                                self.uc.device_icon_dir + '/original_icons/' +
-                                dir_list[i].replace('.bak', ''))
-                    os.remove(self.uc.device_icon_dir + dir_list[i])
+            # dir_list = os.listdir(self.uc.icon_dir)
+            # for i in range(len(dir_list)):
+            #     if '.bak' in dir_list[i]:
+            #         if not os.path.isdir(self.uc.icon_dir + '/original_icons'):
+            #             os.mkdir(self.uc.icon_dir + '/original_icons')
+            #         shutil.copy(self.uc.icon_dir + dir_list[i],
+            #                     self.uc.icon_dir + '/original_icons/' + dir_list[i].replace('.bak', ''))
+            #         os.remove(self.uc.icon_dir + dir_list[i])
+            # dir_list = os.listdir(self.uc.device_icon_dir)
+            # for i in range(len(dir_list)):
+            #     if '.bak' in dir_list[i]:
+            #         if not os.path.isdir(self.uc.device_icon_dir + '/original_icons'):
+            #             os.mkdir(self.uc.device_icon_dir + '/original_icons')
+            #         shutil.copy(self.uc.device_icon_dir + dir_list[i],
+            #                     self.uc.device_icon_dir + '/original_icons/' +
+            #                     dir_list[i].replace('.bak', ''))
+            #         os.remove(self.uc.device_icon_dir + dir_list[i])
 
             os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.txt')
             driver_xml_file = open(self.uc.temp_dir + '/driver/driver.txt', errors='ignore')
