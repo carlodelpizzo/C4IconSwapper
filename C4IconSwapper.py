@@ -15,7 +15,7 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 
-version = '4.5a'
+version = '4.6a'
 
 
 class C4IconSwapper:
@@ -161,6 +161,17 @@ class C4IconSwapper:
 
             shutil.unpack_archive(filename, self.uc.temp_dir + 'driver', 'zip')
 
+            os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.txt')
+            driver_xml_file = open(self.uc.temp_dir + '/driver/driver.txt', errors='ignore')
+            driver_xml_lines = driver_xml_file.readlines()
+            driver_xml_file.close()
+            for line in driver_xml_lines:
+                if '<id>' in line:
+                    result = re.search('<id>(.*)</id>', line)
+                    if int(result.group(1)) not in self.uc.connections_panel.ids:
+                        self.uc.connections_panel.ids.append(int(result.group(1)))
+            os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
+
             def get_icons(directory):
                 icons_out = []
                 if not os.path.isdir(directory):
@@ -168,7 +179,7 @@ class C4IconSwapper:
                 icon_list0 = os.listdir(directory)
                 sub_list = []
                 for ii in range(len(icon_list0)):
-                    if '.bak' in icon_list0[ii]:
+                    if '.bak' in icon_list0[ii] or '.orig' in icon_list0[ii]:
                         continue
                     if '.' not in icon_list0[ii]:
                         if icon_list0[ii] == 'original_icons' or 'old' in icon_list0[ii]:
@@ -307,14 +318,15 @@ class C4IconSwapper:
             for path in list_all_sub_directories(self.uc.temp_dir + '/driver/'):
                 files = os.listdir(path)
                 for file in files:
-                    if '.bak' in file and '.xml' not in file:
+                    if ('.bak' in file or '.orig' in file) and '.xml' not in file:
                         self.restore_all_button['state'] = ACTIVE
                         done = True
                         break
                 if done:
                     break
 
-            if len(self.icon_groups) != 0 and os.path.isfile(self.icon_groups[self.current_icon].path + '.bak'):
+            if len(self.icon_groups) != 0 and (os.path.isfile(self.icon_groups[self.current_icon].path + '.bak') or
+                                               os.path.isfile(self.icon_groups[self.current_icon].path + '.orig')):
                 self.restore_button['state'] = ACTIVE
             else:
                 self.restore_button['state'] = DISABLED
@@ -336,10 +348,13 @@ class C4IconSwapper:
                 if os.path.isfile(icon.path + '.bak'):
                     shutil.copy(icon.path + '.bak', icon.path)
                     os.remove(icon.path + '.bak')
+                elif os.path.isfile(icon.path + '.orig'):
+                    shutil.copy(icon.path + '.orig', icon.path)
+                    os.remove(icon.path + '.orig')
             self.restore_button['state'] = DISABLED
             disable_all_button = True
             for group in self.icon_groups:
-                if os.path.isfile(group.icons[0].path + '.bak'):
+                if os.path.isfile(group.icons[0].path + '.bak') or os.path.isfile(group.icons[0].path + '.orig'):
                     disable_all_button = False
             if disable_all_button:
                 self.restore_all_button['state'] = DISABLED
@@ -360,7 +375,8 @@ class C4IconSwapper:
             else:
                 self.current_icon -= 1
 
-            if os.path.isfile(self.icon_groups[self.current_icon].path + '.bak'):
+            if os.path.isfile(self.icon_groups[self.current_icon].path + '.bak') or \
+                    os.path.isfile(self.icon_groups[self.current_icon].path + '.orig'):
                 self.restore_button['state'] = ACTIVE
             else:
                 self.restore_button['state'] = DISABLED
@@ -375,7 +391,8 @@ class C4IconSwapper:
             else:
                 self.current_icon += 1
 
-            if os.path.isfile(self.icon_groups[self.current_icon].path + '.bak'):
+            if os.path.isfile(self.icon_groups[self.current_icon].path + '.bak') or \
+                    os.path.isfile(self.icon_groups[self.current_icon].path + '.orig'):
                 self.restore_button['state'] = ACTIVE
             else:
                 self.restore_button['state'] = DISABLED
@@ -396,6 +413,7 @@ class C4IconSwapper:
             name_found = False
             connections = []
             conn_name = ''
+            conn_id = 0
             for line in driver_xml_lines:
                 if '<connection>' in line:
                     in_connection = True
@@ -406,11 +424,13 @@ class C4IconSwapper:
                     in_connection = False
                     name_found = False
                     continue
+                if '<id>' in line:
+                    conn_id = re.search('<id>(.*)</id>', line).group(1)
                 if not name_found and '<connectionname>' in line:
                     conn_name = re.search('<connectionname>(.*)</connectionname>', line).group(1)
                     name_found = True
                 elif name_found and '<classname>' in line:
-                    connections.append([conn_name, re.search('<classname>(.*)</classname>', line).group(1)])
+                    connections.append([conn_name, re.search('<classname>(.*)</classname>', line).group(1), conn_id])
 
             os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
 
@@ -421,22 +441,26 @@ class C4IconSwapper:
             for index in pop_list:
                 connections.pop(index)
 
-            if len(connections) > len(self.uc.connections_panel.connection_types):
-                conn_range = len(self.uc.connections_panel.connection_types)
+            if len(connections) > len(self.uc.connections_panel.connections):
+                conn_range = len(self.uc.connections_panel.connections) - 1
+            elif len(connections) != 0:
+                conn_range = len(connections) - 1
             else:
-                conn_range = len(connections)
+                conn_range = 0
 
-            self.uc.connections_panel.buttons[conn_range]['state'] = NORMAL
+            self.uc.connections_panel.connections[conn_range].add_button['state'] = NORMAL
             if conn_range == 0:
                 return
             for i in range(0, conn_range):
-                self.uc.connections_panel.buttons[i].place(x=-420, y=-420)
-                self.uc.connections_panel.connection_entries[i]['state'] = NORMAL
-                self.uc.connections_panel.connection_entries[i].delete(0, END)
-                self.uc.connections_panel.connection_entries[i].insert(0, connections[i][0])
-                self.uc.connections_panel.connection_entries[i]['state'] = DISABLED
-                self.uc.connections_panel.connection_menus[i]['state'] = DISABLED
-                self.uc.connections_panel.connection_types[i].set(connections[i][1])
+                self.uc.connections_panel.connections[i].add_button.place(x=-420, y=-420)
+                self.uc.connections_panel.connections[i].name_entry['state'] = NORMAL
+                self.uc.connections_panel.connections[i].name_entry.delete(0, END)
+                self.uc.connections_panel.connections[i].name_entry.insert(0, connections[i][0])
+                self.uc.connections_panel.connections[i].name_entry['state'] = DISABLED
+                self.uc.connections_panel.connections[i].type_menu['state'] = DISABLED
+                self.uc.connections_panel.connections[i].type.set(connections[i][1])
+                self.uc.connections_panel.connections[i].id = connections[i][2]
+                self.uc.connections_panel.connections[i].original = True
 
         def drop_in_c4z(self, event):
             dropped_path = event.data.replace('{', '').replace('}', '')
@@ -811,18 +835,6 @@ class C4IconSwapper:
                 decoded_str = encoded_str.decode()
                 array.append(decoded_str)
 
-            def find_valid_id(id_seed: int, list_of_ids: list, inc_up=True, inc_count=0):
-                if id_seed not in list_of_ids:
-                    return [id_seed, inc_count]
-                if inc_up:
-                    id_seed += 1
-                    inc_count += 1
-                    return find_valid_id(id_seed, list_of_ids, inc_count=inc_count)
-                else:
-                    id_seed -= 1
-                    inc_count += 1
-                    return find_valid_id(id_seed, list_of_ids, inc_count=inc_count)
-
             driver_name = self.driver_name_entry.get()
             temp = ''
             for letter in driver_name:
@@ -832,35 +844,12 @@ class C4IconSwapper:
             self.driver_name_entry.delete(0, 'end')
             self.driver_name_entry.insert(0, driver_name)
 
-            # dir_list = os.listdir(self.uc.icon_dir)
-            # for i in range(len(dir_list)):
-            #     if '.bak' in dir_list[i]:
-            #         if not os.path.isdir(self.uc.icon_dir + '/original_icons'):
-            #             os.mkdir(self.uc.icon_dir + '/original_icons')
-            #         shutil.copy(self.uc.icon_dir + dir_list[i],
-            #                     self.uc.icon_dir + '/original_icons/' + dir_list[i].replace('.bak', ''))
-            #         os.remove(self.uc.icon_dir + dir_list[i])
-            # dir_list = os.listdir(self.uc.device_icon_dir)
-            # for i in range(len(dir_list)):
-            #     if '.bak' in dir_list[i]:
-            #         if not os.path.isdir(self.uc.device_icon_dir + '/original_icons'):
-            #             os.mkdir(self.uc.device_icon_dir + '/original_icons')
-            #         shutil.copy(self.uc.device_icon_dir + dir_list[i],
-            #                     self.uc.device_icon_dir + '/original_icons/' +
-            #                     dir_list[i].replace('.bak', ''))
-            #         os.remove(self.uc.device_icon_dir + dir_list[i])
-
             os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.txt')
             driver_xml_file = open(self.uc.temp_dir + '/driver/driver.txt', errors='ignore')
             driver_xml_lines = driver_xml_file.readlines()
             driver_xml_file.close()
             modified_xml_lines = []
-            id_list = []
             for line in driver_xml_lines:
-                if '<id>' in line:
-                    result = re.search('<id>(.*)</id>', line)
-                    if int(result.group(1)) not in id_list:
-                        id_list.append(int(result.group(1)))
                 if '<version>' in line and self.inc_driver_version.get():
                     result = re.search('<version>(.*)</version>', line)
                     result_int = int(result.group(1))
@@ -955,56 +944,56 @@ class C4IconSwapper:
                         printed_line = True
                 if insertion and '</connections>' in line:
                     insertion = False
-                    for i in reversed(range(len(self.uc.connections_panel.buttons))):
-                        if self.uc.connections_panel.connection_entries[i]['state'] == NORMAL:
+                    for conn in reversed(self.uc.connections_panel.connections):
+                        if conn.name_entry['state'] == NORMAL:
                             modified_xml_lines.append('\t\t<connection>\n')
-                            conn_type = self.uc.connections_panel.connection_types[i].get()
+                            conn_type = conn.type.get()
                             value = self.uc.conn_dict[conn_type]
                             if ' IN' in conn_type:
                                 conn_type = conn_type.replace(' IN', '')
                                 if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
-                                    id_temp = 2000 - self.video_in_count
-                                    valid_id = find_valid_id(id_temp, id_list)
+                                    id_temp = conn.id
+                                    valid_id = find_valid_id(id_temp, self.uc.connections_panel.ids)
                                     self.video_in_count += valid_id[1]
                                     id_temp = valid_id[0]
-                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>')
-                                    id_list.append(id_temp)
+                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>\n')
+                                    self.uc.connections_panel.ids.append(id_temp)
                                     self.video_in_count += 1
                                 elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
-                                    id_temp = 4000 - self.audio_in_count
-                                    valid_id = find_valid_id(id_temp, id_list)
+                                    id_temp = conn.id
+                                    valid_id = find_valid_id(id_temp, self.uc.connections_panel.ids)
                                     self.audio_in_count += valid_id[1]
                                     id_temp = valid_id[0]
-                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>')
-                                    id_list.append(id_temp)
+                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>\n')
+                                    self.uc.connections_panel.ids.append(id_temp)
                                     self.audio_in_count += 1
                             elif ' OUT' in conn_type:
                                 conn_type = conn_type.replace(' OUT', '')
                                 if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
-                                    id_temp = 1900 - self.video_out_count
-                                    valid_id = find_valid_id(id_temp, id_list)
+                                    id_temp = conn.id
+                                    valid_id = find_valid_id(id_temp, self.uc.connections_panel.ids)
                                     self.video_out_count += valid_id[1]
                                     id_temp = valid_id[0]
-                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>')
-                                    id_list.append(id_temp)
+                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>\n')
+                                    self.uc.connections_panel.ids.append(id_temp)
                                     self.video_out_count += 1
                                 elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
-                                    id_temp = 3900 - self.audio_out_count
-                                    valid_id = find_valid_id(id_temp, id_list)
+                                    id_temp = conn.id
+                                    valid_id = find_valid_id(id_temp, self.uc.connections_panel.ids)
                                     self.audio_out_count += valid_id[1]
                                     id_temp = valid_id[0]
-                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>')
-                                    id_list.append(id_temp)
+                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>\n')
+                                    self.uc.connections_panel.ids.append(id_temp)
                                     self.audio_out_count += 1
                             if conn_type == 'IR_OUT':
-                                id_temp = 1 + self.ir_count
-                                valid_id = find_valid_id(id_temp, id_list)
+                                id_temp = conn.id
+                                valid_id = find_valid_id(id_temp, self.uc.connections_panel.ids)
                                 self.ir_count += valid_id[1]
                                 id_temp = valid_id[0]
-                                modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>')
-                                id_list.append(id_temp)
+                                modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>\n')
+                                self.uc.connections_panel.ids.append(id_temp)
                                 self.ir_count += 1
-                            value = value.replace('REPLACE', self.uc.connections_panel.connection_entries[i].get())
+                            value = value.replace('REPLACE', conn.name_entry.get())
                             modified_xml_lines.append(value + '\n')
                             modified_xml_lines.append('\t\t\t<classes>\n')
                             modified_xml_lines.append('\t\t\t\t<class>\n')
@@ -1131,106 +1120,127 @@ class C4IconSwapper:
             os.rename(self.uc.temp_dir + '/driver/driver.xml.bak', self.uc.temp_dir + '/driver/driver.xml')
 
     class ConnectionsPanel:
-        def __init__(self, upper_class):
-            self.x = 30
-            self.y = 257
-            self.uc = upper_class
-            self.connection_entries = []
-            self.connection_menus = []
-            self.connection_types = []
-            self.buttons = []
-            self.x_buttons = []
+        class Connection:
+            def __init__(self, upper_class, x_pos: int, y_pos: int, conn_id=0):
+                self.uc = upper_class
+                self.x = x_pos
+                self.y = y_pos
+                self.id = conn_id
+                self.original = False
+                self.export = ''
 
-            x_spacing = 300
+                # Entry
+                self.name_entry = tk.Entry(self.uc.root, width=20)
+                self.name_entry.insert(0, 'Connection Name...')
+                self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+                self.name_entry['state'] = DISABLED
+
+                # Dropdown
+                self.type = StringVar(self.uc.root)
+                self.type.set('HDMI IN')
+                self.type_menu = OptionMenu(self.uc.root, self.type, 'HDMI IN', 'HDMI OUT', 'COMPOSITE IN',
+                                            'COMPOSITE OUT', 'VGA IN', 'VGA OUT', 'COMPONENT IN', 'COMPONENT OUT',
+                                            'DVI IN', 'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
+                                            'DIGITAL_OPTICAL OUT', 'IR_OUT')
+                self.type_menu.place(x=self.x + 160, y=self.y, anchor='w')
+                self.type.trace('w', self.update_id)
+                self.type_menu['state'] = DISABLED
+
+                # Buttons
+                self.add_button = tk.Button(self.uc.root, text='Add', width=3, command=self.enable)
+                self.add_button.place(x=self.x, y=self.y, anchor='w')
+                self.add_button['state'] = DISABLED
+
+                self.x_button = tk.Button(self.uc.root, text='x', width=1, command=self.disable)
+                self.x_button.place(x=-420, y=-420, anchor='w')
+                self.x_button['state'] = DISABLED
+
+            def enable(self):
+                self.name_entry['state'] = NORMAL
+                self.type_menu['state'] = NORMAL
+                self.add_button.place(x=-420, y=-420, anchor='w')
+                self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
+                self.x_button['state'] = NORMAL
+                self.export = 'add'
+
+                self_index = self.uc.connections_panel.connections.index(self)
+                if 0 <= self_index < len(self.uc.connections_panel.connections) - 1:
+                    self.uc.connections_panel.connections[self_index + 1].add_button['state'] = NORMAL
+
+            def disable(self):
+                self.name_entry['state'] = DISABLED
+                self.type_menu['state'] = DISABLED
+                self.add_button.place(x=self.x, y=self.y, anchor='w')
+                self.x_button.place(x=-420, y=-420, anchor='w')
+                self.x_button['state'] = NORMAL
+                self.export = ''
+
+            def reinit(self):
+                self.original = False
+                self.export = ''
+                self.id = 0
+
+                # Entry
+                self.name_entry['state'] = NORMAL
+                self.name_entry.delete(0, END)
+                self.name_entry.insert(0, 'Connection Name...')
+                self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+                self.name_entry['state'] = DISABLED
+
+                # Dropdown
+                self.type.set('HDMI IN')
+                self.type_menu.place(x=self.x + 160, y=self.y, anchor='w')
+                self.type_menu['state'] = DISABLED
+
+                # Buttons
+                self.add_button.place(x=self.x, y=self.y, anchor='w')
+                self.add_button['state'] = DISABLED
+
+                self.x_button.place(x=-420, y=-420, anchor='w')
+                self.x_button['state'] = DISABLED
+
+            def update_id(self, *args):
+                if args[0] != str(self.type) or self.type_menu['state'] == DISABLED:
+                    return
+                conn_type = self.type.get()
+                valid_id = []
+                if ' IN' in conn_type:
+                    conn_type = conn_type.replace(' IN', '')
+                    if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
+                        valid_id = find_valid_id(2000, self.uc.connections_panel.ids)
+                    elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
+                        valid_id = find_valid_id(4000, self.uc.connections_panel.ids)
+                elif ' OUT' in conn_type:
+                    conn_type = conn_type.replace(' OUT', '')
+                    if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
+                        valid_id = find_valid_id(1900, self.uc.connections_panel.ids)
+                    elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
+                        valid_id = find_valid_id(3900, self.uc.connections_panel.ids)
+                if conn_type == 'IR_OUT':
+                    valid_id = find_valid_id(1, self.uc.connections_panel.ids)
+
+                if self.id in self.uc.connections_panel.ids:
+                    self.uc.connections_panel.ids.pop(self.uc.connections_panel.ids.index(self.id))
+                self.id = valid_id[0]
+                self.uc.connections_panel.ids.append(self.id)
+
+        def __init__(self, upper_class):
+            self.x = 14
+            self.y = 260
+            self.uc = upper_class
+            self.connections = []
+            self.ids = []
+
+            x_spacing = 318
             y_spacing = 40
             for x in range(0, 3):
                 for i in range(0, 6):
-                    # Entries
-                    self.connection_entries.append(tk.Entry(self.uc.root, width=20))
-                    self.connection_entries[-1].insert(0, 'Connection Name...')
-                    self.connection_entries[-1].place(x=(x * x_spacing) + self.x, y=(i * y_spacing) + 20 + self.y,
-                                                      anchor='w')
-                    self.connection_entries[-1]['state'] = DISABLED
-
-                    # Dropdowns
-                    self.connection_types.append(StringVar(self.uc.root))
-                    self.connection_types[-1].set('HDMI IN')
-                    self.connection_menus.append(OptionMenu(self.uc.root, self.connection_types[-1], 'HDMI IN',
-                                                            'HDMI OUT', 'COMPOSITE IN', 'COMPOSITE OUT', 'VGA IN',
-                                                            'VGA OUT', 'COMPONENT IN', 'COMPONENT OUT', 'DVI IN',
-                                                            'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
-                                                            'DIGITAL_OPTICAL OUT', 'IR_OUT'))
-                    self.connection_menus[-1].place(x=(x * x_spacing) + 126 + self.x, y=(i * y_spacing) + 20 + self.y,
-                                                    anchor='w')
-                    self.connection_menus[-1]['state'] = DISABLED
-
-                    # Buttons
-                    self.buttons.append(tk.Button(self.uc.root, text='Add', width=4, command=self.enable_conn))
-                    self.buttons[-1].place(x=(x * x_spacing) + 220 + self.x, y=(i * y_spacing) + 20 + self.y,
-                                           anchor='w')
-                    self.buttons[-1]['state'] = DISABLED
-
-                    self.x_buttons.append(tk.Button(self.uc.root, text='x', width=1, command=self.disable_conn))
-                    self.x_buttons[-1].place(x=-420, y=-420)
-                    self.x_buttons[-1]['state'] = DISABLED
-
-        def enable_conn(self):
-            for i in range(len(self.buttons)):
-                if self.buttons[i]['state'] == NORMAL and self.connection_entries[i]['state'] == DISABLED:
-                    self.connection_entries[i]['state'] = NORMAL
-                    self.connection_entries[i].delete(0, END)
-                    self.connection_entries[i].insert(0, 'Connection ' + str(i + 1))
-                    self.connection_menus[i]['state'] = NORMAL
-                    self.buttons[i].place(x=-420, y=-420)
-                    self.x_buttons[i].place(x=(int(i / 6) * 300) - 20 + self.x, y=((i % 6) * 40) + 20 + self.y,
-                                            anchor='w')
-                    self.x_buttons[i]['state'] = NORMAL
-                    if i != len(self.connection_entries) - 1:
-                        self.buttons[i + 1]['state'] = NORMAL
-                    break
-
-        def disable_conn(self):
-            last_case = True
-            for i in range(len(self.connection_entries)):
-                if self.connection_entries[i]['state'] == DISABLED and self.buttons[i]['state'] == NORMAL:
-                    self.connection_entries[i - 1]['state'] = DISABLED
-                    self.connection_menus[i - 1]['state'] = DISABLED
-                    self.x_buttons[i - 1].place(x=-420, y=-420)
-                    self.buttons[i - 1].place(x=(int((i - 1) / 6) * 300) + 220 + self.x,
-                                              y=(((i - 1) % 6) * 40) + 20 + self.y, anchor='w')
-                    self.buttons[i]['state'] = DISABLED
-                    last_case = False
-                    break
-            if last_case:
-                self.connection_entries[-1]['state'] = DISABLED
-                self.connection_menus[-1]['state'] = DISABLED
-                self.x_buttons[-1].place(x=-420, y=-420)
-                self.buttons[-1].place(x=(int(17 / 6) * 300) + 220 + self.x,
-                                       y=((17 % 6) * 40) + 20 + self.y, anchor='w')
-                self.buttons[-1]['state'] = NORMAL
+                    self.connections.append(self.Connection(self.uc, (x * x_spacing) + self.x,
+                                                            (i * y_spacing) + 20 + self.y))
 
         def reinit(self):
-            x_spacing = 300
-            y_spacing = 40
-            for x in range(0, 3):
-                for i in range(0, 6):
-                    # Entries
-                    self.connection_entries[6 * x + i]['state'] = NORMAL
-                    self.connection_entries[6 * x + i].delete(0, END)
-                    self.connection_entries[6 * x + i].insert(0, 'Connection Name...')
-                    self.connection_entries[6 * x + i]['state'] = DISABLED
-
-                    # Dropdowns
-                    self.connection_menus[6 * x + i]['state'] = NORMAL
-                    self.connection_types[6 * x + i].set('HDMI IN')
-                    self.connection_menus[6 * x + i]['state'] = DISABLED
-
-                    # Buttons
-                    self.buttons[6 * x + i].place(x=(x * x_spacing) + 220 + self.x, y=(i * y_spacing) + 20 + self.y,
-                                                  anchor='w')
-                    self.buttons[6 * x + i]['state'] = DISABLED
-
-                    self.x_buttons[6 * x + i].place(x=-420, y=-420)
+            for conn in self.connections:
+                conn.reinit()
 
     def __init__(self):
         # Create root window
@@ -1244,7 +1254,7 @@ class C4IconSwapper:
 
         # Creating temporary directory
         self.cur_dir = os.getcwd() + '/'
-        self.temp_dir = self.cur_dir + 'temp' + str(random.randint(111, 999)) + '/'
+        self.temp_dir = self.cur_dir + 'C4IconSwapperTemp' + str(random.randint(111, 999)) + '/'
         if not os.path.isdir(self.temp_dir):
             os.mkdir(self.temp_dir)
 
@@ -1380,3 +1390,16 @@ def list_all_sub_directories(directory):
             subs.append(new_sub)
         return subs
     return subs
+
+
+def find_valid_id(id_seed: int, list_of_ids: list, inc_up=True, inc_count=0):
+    if id_seed not in list_of_ids:
+        return [id_seed, inc_count]
+    if inc_up:
+        id_seed += 1
+        inc_count += 1
+        return find_valid_id(id_seed, list_of_ids, inc_count=inc_count)
+    else:
+        id_seed -= 1
+        inc_count += 1
+        return find_valid_id(id_seed, list_of_ids, inc_count=inc_count)
