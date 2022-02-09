@@ -257,8 +257,9 @@ class C4IconSwapper:
                             orig_driver_name = orig_file_path[i]
                         else:
                             orig_driver_name = orig_file_path[i] + orig_driver_name
-                self.uc.export_panel.driver_name_entry.delete(0, 'end')
-                self.uc.export_panel.driver_name_entry.insert(0, orig_driver_name)
+                if orig_driver_name != 'generic':
+                    self.uc.export_panel.driver_name_entry.delete(0, 'end')
+                    self.uc.export_panel.driver_name_entry.insert(0, orig_driver_name)
                 self.uc.driver_selected = True
                 self.update_icon()
             else:
