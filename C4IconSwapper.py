@@ -63,7 +63,7 @@ class C4IconSwapper:
             self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_c4z)
             self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
 
-            self.restore_button = tk.Button(self.uc.root, text='Restore \n Original Icon', command=self.restore_icon)
+            self.restore_button = tk.Button(self.uc.root, text='Restore\nOriginal Icon', command=self.restore_icon)
             self.restore_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
             self.restore_button['state'] = DISABLED
 
@@ -500,7 +500,7 @@ class C4IconSwapper:
             self.replace_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
             self.replace_all_button['state'] = DISABLED
 
-            self.replace_button = tk.Button(self.uc.root, text='Replace \n Current Icon', command=self.replace_icon)
+            self.replace_button = tk.Button(self.uc.root, text='Replace\nCurrent Icon', command=self.replace_icon)
             self.replace_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
             self.replace_button['state'] = DISABLED
 
@@ -1160,7 +1160,7 @@ class C4IconSwapper:
                                                             'VGA OUT', 'COMPONENT IN', 'COMPONENT OUT', 'DVI IN',
                                                             'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
                                                             'DIGITAL_OPTICAL OUT', 'IR_OUT'))
-                    self.connection_menus[-1].place(x=(x * x_spacing) + 120 + self.x, y=(i * y_spacing) + 20 + self.y,
+                    self.connection_menus[-1].place(x=(x * x_spacing) + 126 + self.x, y=(i * y_spacing) + 20 + self.y,
                                                     anchor='w')
                     self.connection_menus[-1]['state'] = DISABLED
 
@@ -1284,7 +1284,7 @@ class C4IconSwapper:
                                    '\t\t\t<videosource>False</videosource>\n\t\t\t<linelevel>False</linelevel>'
 
         # Panels; Creating blank image for panels
-        temp_image_file = self.temp_dir + 'blank_img.gif'
+        temp_image_file = self.temp_dir + 'blank.gif'
         blank_img_file = open(temp_image_file, 'wb')
         blank_img_file.write(base64.b64decode(blank_img_b64))
         blank_img_file.close()
@@ -1310,7 +1310,7 @@ class C4IconSwapper:
         self.separator2.place(x=0, y=250, relwidth=1)
 
         # Buttons
-        self.open_conn_button = tk.Button(self.root, text='Open Connections', width=15,
+        self.open_conn_button = tk.Button(self.root, text='Show Connections', width=15,
                                           command=self.open_connections)
         self.open_conn_button.place(x=760, y=220, anchor='n')
 
@@ -1332,11 +1332,11 @@ class C4IconSwapper:
         shutil.rmtree(self.temp_dir)
 
     def open_connections(self):
-        if self.open_conn_button['text'] == 'Open Connections':
-            self.open_conn_button['text'] = 'Close Connections'
+        if self.open_conn_button['text'] == 'Show Connections':
+            self.open_conn_button['text'] = 'Hide Connections'
             self.root.geometry('915x510')
         else:
-            self.open_conn_button['text'] = 'Open Connections'
+            self.open_conn_button['text'] = 'Show Connections'
             self.root.geometry('915x250')
 
     def restore_entry_text(self):
