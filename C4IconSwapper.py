@@ -30,6 +30,7 @@ class C4IconSwapper:
                 for i in reversed(range(len(path))):
                     if path[i] == '.':
                         self.type = path[i: len(path)]
+                        break
 
         class IconGroup:
             def __init__(self, icons: list):
@@ -176,27 +177,27 @@ class C4IconSwapper:
                 icons_out = []
                 if not os.path.isdir(directory):
                     return
-                icon_list0 = os.listdir(directory)
+                path_list = os.listdir(directory)
                 sub_list = []
-                for ii in range(len(icon_list0)):
-                    if '.bak' in icon_list0[ii] or '.orig' in icon_list0[ii]:
+                for string in path_list:
+                    if '.bak' in string or '.orig' in string:
                         continue
-                    if '.' not in icon_list0[ii]:
-                        if icon_list0[ii] == 'original_icons' or 'old' in icon_list0[ii]:
+                    if '.' not in string:
+                        if 'original_icons' in string or 'old' in string:
                             continue
-                        sub_list.append(icon_list0[ii])
+                        sub_list.append(string)
                         continue
-                    if 'device_lg' in icon_list0[ii]:
-                        icon_objects.append(self.Icon(directory, directory + '/' + str(icon_list0[ii]), 'device', 32))
+                    if 'device_lg' in string:
+                        icon_objects.append(self.Icon(directory, directory + '/' + string, 'device', 32))
                         continue
-                    elif 'device_sm' in icon_list0[ii]:
-                        icon_objects.append(self.Icon(directory, directory + '/' + str(icon_list0[ii]), 'device', 16))
+                    elif 'device_sm' in string:
+                        icon_objects.append(self.Icon(directory, directory + '/' + string, 'device', 16))
                         continue
                     temp_name = ''
                     temp_size = ''
                     read_size = False
                     read_name = False
-                    for character in reversed(icon_list0[ii]):
+                    for character in reversed(string):
                         if character == '.':
                             read_size = True
                             continue
@@ -213,16 +214,16 @@ class C4IconSwapper:
                         if read_name:
                             temp_name = character + temp_name
                     if temp_size == '':
-                        temp_img = PIL.Image.open(directory + '/' + str(icon_list0[ii]))
+                        temp_img = PIL.Image.open(directory + '/' + string)
                         temp_size = str(temp_img.size[0])
-                    icons_out.append(self.Icon(directory, directory + '/' + str(icon_list0[ii]),
-                                               temp_name, int(temp_size)))
+                    icons_out.append(self.Icon(directory, directory + '/' + string, temp_name, int(temp_size)))
 
-                if len(sub_list) != 0:
-                    for sub_dir in sub_list:
-                        to_add = get_icons(directory + '/' + sub_dir)
-                        for icon0 in to_add:
-                            icons_out.append(icon0)
+                if len(sub_list) == 0:
+                    return icons_out
+                for sub_dir in sub_list:
+                    to_add = get_icons(directory + '/' + sub_dir)
+                    for icon_path in to_add:
+                        icons_out.append(icon_path)
                 return icons_out
 
             icon_objects = []
@@ -235,45 +236,20 @@ class C4IconSwapper:
             # Form icon groups
             self.icon_groups = []
             temp_list = []
-            for i in range(len(icon_objects)):
-                if not temp_list or (icon_objects[i].name == temp_list[0].name and
-                                     icon_objects[i].root == temp_list[0].root):
-                    temp_list.append(icon_objects[i])
+            for icon in icon_objects:
+                if not temp_list or (icon.name == temp_list[0].name and icon.root == temp_list[0].root):
+                    temp_list.append(icon)
+                    continue
                 else:
                     self.icon_groups.append(self.IconGroup(temp_list))
-                    temp_list = [icon_objects[i]]
-                if i != len(icon_objects) - 1:
+                    temp_list = [icon]
                     continue
+
+            if len(temp_list) != 0:
                 self.icon_groups.append(self.IconGroup(temp_list))
-                temp_list = None
 
             # Update entry fields
-            self.uc.schedule_entry_restore = False
-            self.uc.restore_entry_string = filename
-            if len(self.icon_groups) > 0:
-                self.file_entry_field['state'] = NORMAL
-                self.file_entry_field.delete(0, 'end')
-                self.file_entry_field.insert(0, filename)
-                self.file_entry_field['state'] = 'readonly'
-                orig_file_path = filename
-                orig_driver_name = ''
-                for i in reversed(range(len(orig_file_path))):
-                    if orig_file_path[i] == '/':
-                        self.uc.orig_file_dir = orig_file_path[0:i + 1]
-                        break
-                    if orig_file_path[i] == '.':
-                        orig_driver_name = '.'
-                    if orig_driver_name != '':
-                        if orig_driver_name == '.':
-                            orig_driver_name = orig_file_path[i]
-                        else:
-                            orig_driver_name = orig_file_path[i] + orig_driver_name
-                if orig_driver_name != 'generic':
-                    self.uc.export_panel.driver_name_entry.delete(0, 'end')
-                    self.uc.export_panel.driver_name_entry.insert(0, orig_driver_name)
-                self.uc.driver_selected = True
-                self.update_icon()
-            else:
+            if len(self.icon_groups) == 0:
                 self.file_entry_field['state'] = NORMAL
                 if self.file_entry_field.get() != 'Select .c4z file...' and \
                         self.file_entry_field.get() != 'Invalid driver selected...':
@@ -290,6 +266,27 @@ class C4IconSwapper:
                 self.file_entry_field.insert(0, 'Invalid driver selected...')
                 self.file_entry_field['state'] = DISABLED
                 return
+
+            self.file_entry_field['state'] = NORMAL
+            self.file_entry_field.delete(0, 'end')
+            self.file_entry_field.insert(0, filename)
+            self.file_entry_field['state'] = 'readonly'
+            orig_file_path = filename
+            orig_driver_name = ''
+            for i in reversed(range(len(orig_file_path) - 1)):
+                if orig_file_path[i] == '/':
+                    self.uc.orig_file_dir = orig_file_path[0:i + 1]
+                    break
+                if orig_driver_name != '':
+                    orig_driver_name = orig_file_path[i] + orig_driver_name
+                    continue
+                if orig_file_path[i + 1] == '.':
+                    orig_driver_name = orig_file_path[i]
+            if orig_driver_name != 'generic':
+                self.uc.export_panel.driver_name_entry.delete(0, 'end')
+                self.uc.export_panel.driver_name_entry.insert(0, orig_driver_name)
+            self.uc.driver_selected = True
+            self.update_icon()
 
             # Update button statuses
             if not self.file_entry_field.get().endswith('generic.c4z') and not\
@@ -325,8 +322,8 @@ class C4IconSwapper:
                 if done:
                     break
 
-            if len(self.icon_groups) != 0 and (os.path.isfile(self.icon_groups[self.current_icon].path + '.bak') or
-                                               os.path.isfile(self.icon_groups[self.current_icon].path + '.orig')):
+            if os.path.isfile(self.icon_groups[self.current_icon].path + '.bak') or \
+                    os.path.isfile(self.icon_groups[self.current_icon].path + '.orig'):
                 self.restore_button['state'] = ACTIVE
             else:
                 self.restore_button['state'] = DISABLED
@@ -356,6 +353,7 @@ class C4IconSwapper:
             for group in self.icon_groups:
                 if os.path.isfile(group.icons[0].path + '.bak') or os.path.isfile(group.icons[0].path + '.orig'):
                     disable_all_button = False
+                    break
             if disable_all_button:
                 self.restore_all_button['state'] = DISABLED
             self.update_icon()
@@ -414,6 +412,7 @@ class C4IconSwapper:
             connections = []
             conn_name = ''
             conn_id = 0
+            # Get connections from xml
             for line in driver_xml_lines:
                 if '<connection>' in line:
                     in_connection = True
@@ -435,23 +434,24 @@ class C4IconSwapper:
             os.rename(self.uc.temp_dir + '/driver/driver.txt', self.uc.temp_dir + '/driver/driver.xml')
 
             pop_list = []
+            # Filter connections through valid connections
             for i in range(len(connections)):
                 if connections[i][1] not in self.valid_connections:
                     pop_list.insert(0, i)
             for index in pop_list:
                 connections.pop(index)
 
+            # Check that number of connections does not exceed maximum
             if len(connections) > len(self.uc.connections_panel.connections):
                 conn_range = len(self.uc.connections_panel.connections) - 1
-            elif len(connections) != 0:
-                conn_range = len(connections) - 1
+            elif len(connections) == 0:
+                self.uc.connections_panel.connections[0].add_button['state'] = NORMAL
+                return
             else:
-                conn_range = 0
+                conn_range = len(connections) - 1
 
             self.uc.connections_panel.connections[conn_range].add_button['state'] = NORMAL
-            if conn_range == 0:
-                return
-            for i in range(0, conn_range):
+            for i in range(conn_range):
                 self.uc.connections_panel.connections[i].add_button.place(x=-420, y=-420)
                 self.uc.connections_panel.connections[i].name_entry['state'] = NORMAL
                 self.uc.connections_panel.connections[i].name_entry.delete(0, END)
@@ -590,12 +590,12 @@ class C4IconSwapper:
             if len(self.img_stack) >= 4:
                 self.prev_icon_button['state'] = NORMAL
                 self.next_icon_button['state'] = NORMAL
+
+            new_img_path = self.uc.temp_dir + 'stack' + str(len(self.img_stack)) + '.png'
             if index is None:
-                new_img_path = self.uc.temp_dir + 'stack' + str(len(self.img_stack)) + '.png'
                 self.img_stack.insert(0, new_img_path)
                 shutil.copy(img_path, new_img_path)
             else:
-                new_img_path = self.uc.temp_dir + 'stack' + str(len(self.img_stack)) + '.png'
                 if not -len(self.img_stack) < index < len(self.img_stack):
                     self.img_stack.append(new_img_path)
                     shutil.copy(img_path, new_img_path)
@@ -612,16 +612,14 @@ class C4IconSwapper:
         def refresh_img_stack(self):
             if len(self.img_stack) == 0:
                 return
-            x = 0
-            for img in self.img_stack:
-                if x == 4:
+            for i in range(len(self.img_stack)):
+                if i == 4:
                     break
-                icon_image = Image.open(img)
+                icon_image = Image.open(self.img_stack[i])
                 icon = icon_image.resize((60, 60), Image.ANTIALIAS)
                 icon = ImageTk.PhotoImage(icon)
-                self.stack_labels[x].configure(image=icon)
-                self.stack_labels[x].image = icon
-                x += 1
+                self.stack_labels[i].configure(image=icon)
+                self.stack_labels[i].image = icon
 
         def dec_img_stack(self):
             if len(self.img_stack) <= 4:
@@ -794,11 +792,6 @@ class C4IconSwapper:
             self.x = 615
             self.y = -25
             self.uc = upper_class
-            self.video_in_count = 0
-            self.video_out_count = 0
-            self.audio_in_count = 0
-            self.audio_out_count = 0
-            self.ir_count = 0
 
             # Labels
             self.driver_name_label = tk.Label(self.uc.root, text='Driver Name:')
@@ -835,6 +828,20 @@ class C4IconSwapper:
                 decoded_str = encoded_str.decode()
                 array.append(decoded_str)
 
+            def confirm_overwrite():
+                if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z'):
+                    os.remove(self.uc.cur_dir + driver_name + '.c4z')
+                if os.path.isfile(self.uc.cur_dir + driver_name + '.zip'):
+                    os.remove(self.uc.cur_dir + driver_name + '.zip')
+                shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + '/driver')
+                base_path = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
+                os.rename(self.uc.cur_dir + driver_name + '.zip', base_path + '.c4z')
+
+                pop_up.destroy()
+
+            for conn in self.uc.connections_panel.connections:
+                conn.update_id(refresh=True)
+
             driver_name = self.driver_name_entry.get()
             temp = ''
             for letter in driver_name:
@@ -869,6 +876,10 @@ class C4IconSwapper:
 
             do_name_swap = True
             update_modified_date = True
+            replace_creator = True
+            replace_manufacturer = True
+            creator = 'C4IconSwapper'
+            manufacturer = 'C4IconSwapper'
             proxy_step2 = False
             icon_step2 = False
             old_driver_name = ''
@@ -894,16 +905,16 @@ class C4IconSwapper:
                     if not proxy_step2:
                         temp_str = ''
                         temp_step2 = False
-                        for l in line:
+                        for character in line:
                             if not temp_step2:
                                 if len(temp_str) < 6:
-                                    temp_str += l
+                                    temp_str += character
                                 else:
                                     temp_str = temp_str[1:len(temp_str)]
-                                    temp_str += l
+                                    temp_str += character
                             else:
-                                if l != '"':
-                                    old_driver_name += l
+                                if character != '"':
+                                    old_driver_name += character
                                 else:
                                     break
                             if temp_str == 'name="':
@@ -930,16 +941,16 @@ class C4IconSwapper:
                             line = line.replace(old_icon_path, driver_name)
                             append_line(modified_xml_lines, line)
                             printed_line = True
-                elif '<creator>' in line:
+                elif '<creator>' in line and replace_creator:
                     result = re.search('<creator>(.*)</creator>', line)
                     if result:
-                        line = line.replace(result.group(1), 'C4IconSwapper')
+                        line = line.replace(result.group(1), creator)
                         append_line(modified_xml_lines, line)
                         printed_line = True
-                elif '<manufacturer>' in line:
+                elif '<manufacturer>' in line and replace_manufacturer:
                     result = re.search('<manufacturer>(.*)</manufacturer>', line)
                     if result:
-                        line = line.replace(result.group(1), 'C4IconSwapper')
+                        line = line.replace(result.group(1), manufacturer)
                         append_line(modified_xml_lines, line)
                         printed_line = True
                 if insertion and '</connections>' in line:
@@ -949,50 +960,7 @@ class C4IconSwapper:
                             modified_xml_lines.append('\t\t<connection>\n')
                             conn_type = conn.type.get()
                             value = self.uc.conn_dict[conn_type]
-                            if ' IN' in conn_type:
-                                conn_type = conn_type.replace(' IN', '')
-                                if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
-                                    id_temp = conn.id
-                                    valid_id = find_valid_id(id_temp, self.uc.connections_panel.ids)
-                                    self.video_in_count += valid_id[1]
-                                    id_temp = valid_id[0]
-                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>\n')
-                                    self.uc.connections_panel.ids.append(id_temp)
-                                    self.video_in_count += 1
-                                elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
-                                    id_temp = conn.id
-                                    valid_id = find_valid_id(id_temp, self.uc.connections_panel.ids)
-                                    self.audio_in_count += valid_id[1]
-                                    id_temp = valid_id[0]
-                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>\n')
-                                    self.uc.connections_panel.ids.append(id_temp)
-                                    self.audio_in_count += 1
-                            elif ' OUT' in conn_type:
-                                conn_type = conn_type.replace(' OUT', '')
-                                if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
-                                    id_temp = conn.id
-                                    valid_id = find_valid_id(id_temp, self.uc.connections_panel.ids)
-                                    self.video_out_count += valid_id[1]
-                                    id_temp = valid_id[0]
-                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>\n')
-                                    self.uc.connections_panel.ids.append(id_temp)
-                                    self.video_out_count += 1
-                                elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
-                                    id_temp = conn.id
-                                    valid_id = find_valid_id(id_temp, self.uc.connections_panel.ids)
-                                    self.audio_out_count += valid_id[1]
-                                    id_temp = valid_id[0]
-                                    modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>\n')
-                                    self.uc.connections_panel.ids.append(id_temp)
-                                    self.audio_out_count += 1
-                            if conn_type == 'IR_OUT':
-                                id_temp = conn.id
-                                valid_id = find_valid_id(id_temp, self.uc.connections_panel.ids)
-                                self.ir_count += valid_id[1]
-                                id_temp = valid_id[0]
-                                modified_xml_lines.append('\t\t\t<id>' + str(id_temp) + '</id>\n')
-                                self.uc.connections_panel.ids.append(id_temp)
-                                self.ir_count += 1
+                            modified_xml_lines.append('\t\t\t<id>' + str(conn.id) + '</id>\n')
                             value = value.replace('REPLACE', conn.name_entry.get())
                             modified_xml_lines.append(value + '\n')
                             modified_xml_lines.append('\t\t\t<classes>\n')
@@ -1019,34 +987,11 @@ class C4IconSwapper:
                 for directory in directories:
                     files = os.listdir(directory)
                     for file in files:
-                        if '.bak' in file:
+                        if '.bak' in file or '.orig' in file:
                             bak_files.append([directory, file, str(random.randint(1111111111, 9999999999)) + '.bak'])
                 for file_list in bak_files:
                     shutil.copy(file_list[0] + '/' + file_list[1], temp_temp_dir + '/' + file_list[2])
                     os.remove(file_list[0] + '/' + file_list[1])
-
-            def confirm_write(ran_name=False):
-                if ran_name:
-                    ran_file_name = 'IcnSwp_'
-                    for _ in range(0, 6):
-                        ran_file_name += str(random.randint(0, 9))
-                    if os.path.isfile(self.uc.cur_dir + ran_file_name + '.c4z'):
-                        os.remove(self.uc.cur_dir + ran_file_name + '.c4z')
-                    if os.path.isfile(self.uc.cur_dir + ran_file_name + '.zip'):
-                        os.remove(self.uc.cur_dir + ran_file_name + '.zip')
-                    shutil.make_archive(ran_file_name, 'zip', self.uc.temp_dir + '/driver')
-                    base_path = os.path.splitext(self.uc.cur_dir + ran_file_name + '.zip')[0]
-                    os.rename(self.uc.cur_dir + ran_file_name + '.zip', base_path + '.c4z')
-                else:
-                    if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z'):
-                        os.remove(self.uc.cur_dir + driver_name + '.c4z')
-                    if os.path.isfile(self.uc.cur_dir + driver_name + '.zip'):
-                        os.remove(self.uc.cur_dir + driver_name + '.zip')
-                    shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + '/driver')
-                    base_path = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
-                    os.rename(self.uc.cur_dir + driver_name + '.zip', base_path + '.c4z')
-
-                pop.destroy()
 
             if self.over_orig.get() == 1:
                 temp_name = 'IcnSwp'
@@ -1065,47 +1010,47 @@ class C4IconSwapper:
                     shutil.copy(base + '.c4z', self.uc.orig_file_path)
                     os.remove(base + '.c4z')
                 except IOError as _:
-                    pop = Toplevel(self.uc.root)
-                    pop.title('Cannot Overwrite Original File')
-                    pop.geometry('239x95')
-                    pop.grab_set()
-                    pop.transient(self.uc.root)
-                    pop.resizable(False, False)
+                    pop_up = Toplevel(self.uc.root)
+                    pop_up.title('Cannot Overwrite Original File')
+                    pop_up.geometry('239x95')
+                    pop_up.grab_set()
+                    pop_up.transient(self.uc.root)
+                    pop_up.resizable(False, False)
 
                     label_text = 'Access Denied to: ' + self.uc.orig_file_dir
-                    access_label = Label(pop, text=label_text)
+                    access_label = Label(pop_up, text=label_text)
                     access_label.grid(row=0, column=0, columnspan=2, sticky='w')
-                    pop.update()
+                    pop_up.update()
                     if 240 <= access_label.winfo_width():
                         new_size = str(access_label.winfo_width()) + 'x95'
-                        pop.geometry(new_size)
-                        pop.update()
+                        pop_up.geometry(new_size)
+                        pop_up.update()
 
-                    write_label = Label(pop, text='Export to Current Directory Instead?')
+                    write_label = Label(pop_up, text='Export to Current Directory Instead?')
                     write_label.grid(row=1, column=0, columnspan=2, sticky='w', pady=10)
 
-                    no_button = tk.Button(pop, text='No', width='10', command=pop.destroy)
+                    no_button = tk.Button(pop_up, text='No', width='10', command=pop_up.destroy)
                     no_button.grid(row=2, column=0, sticky='w', padx=5)
 
-                    yes_button = tk.Button(pop, text='Yes', width='10', command=confirm_write)
+                    yes_button = tk.Button(pop_up, text='Yes', width='10', command=confirm_overwrite)
                     yes_button.grid(row=2, column=0, sticky='w', padx=90)
             else:
-                if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z') or os.path.isfile(
-                        self.uc.cur_dir + driver_name + '.zip'):
-                    pop = Toplevel(self.uc.root)
-                    pop.title('Overwrite')
-                    pop.geometry('239x70')
-                    pop.grab_set()
-                    pop.transient(self.uc.root)
-                    pop.resizable(False, False)
+                if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z') or \
+                        os.path.isfile(self.uc.cur_dir + driver_name + '.zip'):
+                    pop_up = Toplevel(self.uc.root)
+                    pop_up.title('Overwrite')
+                    pop_up.geometry('239x70')
+                    pop_up.grab_set()
+                    pop_up.transient(self.uc.root)
+                    pop_up.resizable(False, False)
 
-                    confirm_label = Label(pop, text='Would you like to overwrite the existing file?')
+                    confirm_label = Label(pop_up, text='Would you like to overwrite the existing file?')
                     confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
 
-                    no_button = tk.Button(pop, text='No', width='10', command=pop.destroy)
+                    no_button = tk.Button(pop_up, text='No', width='10', command=pop_up.destroy)
                     no_button.grid(row=2, column=0, sticky='e', padx=5)
 
-                    yes_button = tk.Button(pop, text='Yes', width='10', command=confirm_write)
+                    yes_button = tk.Button(pop_up, text='Yes', width='10', command=confirm_overwrite)
                     yes_button.grid(row=2, column=1, sticky='w', padx=5)
                 else:
                     shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + '/driver')
@@ -1199,8 +1144,8 @@ class C4IconSwapper:
                 self.x_button.place(x=-420, y=-420, anchor='w')
                 self.x_button['state'] = DISABLED
 
-            def update_id(self, *args):
-                if args[0] != str(self.type) or self.type_menu['state'] == DISABLED:
+            def update_id(self, *args, refresh=False):
+                if not refresh and (args[0] != str(self.type) or self.type_menu['state'] == DISABLED):
                     return
                 conn_type = self.type.get()
                 valid_id = []
@@ -1345,9 +1290,9 @@ class C4IconSwapper:
         if self.open_conn_button['text'] == 'Show Connections':
             self.open_conn_button['text'] = 'Hide Connections'
             self.root.geometry('915x510')
-        else:
-            self.open_conn_button['text'] = 'Show Connections'
-            self.root.geometry('915x250')
+            return
+        self.open_conn_button['text'] = 'Show Connections'
+        self.root.geometry('915x250')
 
     def restore_entry_text(self):
         if self.schedule_entry_restore:
@@ -1383,8 +1328,8 @@ def list_all_sub_directories(directory):
     if len(subs) != 0:
         new_subs = []
         for sub_dir in subs:
-            temp0 = list_all_sub_directories(sub_dir)
-            for new_sub in temp0:
+            next_subs = list_all_sub_directories(sub_dir)
+            for new_sub in next_subs:
                 new_subs.append(new_sub)
         for new_sub in new_subs:
             subs.append(new_sub)
