@@ -601,7 +601,7 @@ class C4IconSwapper:
                 self.img_stack.insert(0, new_img_path)
                 self.refresh_img_stack()
                 return
-            if not -len(self.img_stack) + 1 < index < len(self.img_stack) - 1:
+            if not -len(self.img_stack) < index < len(self.img_stack):
                 self.img_stack.append(new_img_path)
                 self.refresh_img_stack()
                 return
@@ -682,7 +682,7 @@ class C4IconSwapper:
             if not replacement_in_stack:
                 self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=0)
                 self.upload_replacement(give_path=self.img_stack[-1])
-                return self.refresh_img_stack()
+                return
             if len(self.img_stack) > 4 and replacement_index > 3:
                 self.upload_replacement(give_path=self.img_stack[0])
                 temp = self.img_stack[0]
@@ -691,9 +691,9 @@ class C4IconSwapper:
                 self.img_stack.pop(0)
                 self.img_stack.insert(0, temp_r)
                 self.img_stack.insert(replacement_index, temp)
-                return self.refresh_img_stack()
+                self.refresh_img_stack()
+                return
             self.upload_replacement(give_path=self.img_stack[0])
-            self.refresh_img_stack()
 
         def select_stack1(self, event):
             if len(self.img_stack) <= 1:
@@ -708,7 +708,7 @@ class C4IconSwapper:
             if not replacement_in_stack:
                 self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=1)
                 self.upload_replacement(give_path=self.img_stack[-1])
-                return self.refresh_img_stack()
+                return
             if len(self.img_stack) > 4 and replacement_index > 3:
                 self.upload_replacement(give_path=self.img_stack[1])
                 temp = self.img_stack[1]
@@ -717,9 +717,9 @@ class C4IconSwapper:
                 self.img_stack.pop(1)
                 self.img_stack.insert(1, temp_r)
                 self.img_stack.insert(replacement_index, temp)
-                return self.refresh_img_stack()
+                self.refresh_img_stack()
+                return
             self.upload_replacement(give_path=self.img_stack[1])
-            self.refresh_img_stack()
 
         def select_stack2(self, event):
             if len(self.img_stack) <= 2:
@@ -734,7 +734,7 @@ class C4IconSwapper:
             if not replacement_in_stack:
                 self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=2)
                 self.upload_replacement(give_path=self.img_stack[-1])
-                return self.refresh_img_stack()
+                return
             if len(self.img_stack) > 4 and replacement_index > 3:
                 self.upload_replacement(give_path=self.img_stack[2])
                 temp = self.img_stack[2]
@@ -743,9 +743,9 @@ class C4IconSwapper:
                 self.img_stack.pop(2)
                 self.img_stack.insert(2, temp_r)
                 self.img_stack.insert(replacement_index, temp)
-                return self.refresh_img_stack()
+                self.refresh_img_stack()
+                return
             self.upload_replacement(give_path=self.img_stack[2])
-            self.refresh_img_stack()
 
         def select_stack3(self, event):
             if len(self.img_stack) <= 3:
@@ -760,7 +760,7 @@ class C4IconSwapper:
             if not replacement_in_stack:
                 self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=3)
                 self.upload_replacement(give_path=self.img_stack[-1])
-                return self.refresh_img_stack()
+                return
             if len(self.img_stack) > 4 and replacement_index > 3:
                 self.upload_replacement(give_path=self.img_stack[3])
                 temp = self.img_stack[3]
@@ -769,9 +769,9 @@ class C4IconSwapper:
                 self.img_stack.pop(3)
                 self.img_stack.insert(3, temp_r)
                 self.img_stack.insert(replacement_index, temp)
-                return self.refresh_img_stack()
+                self.refresh_img_stack()
+                return
             self.upload_replacement(give_path=self.img_stack[3])
-            self.refresh_img_stack()
 
         def drop_stack0(self, event):
             dropped_path = event.data.replace('{', '').replace('}', '')
