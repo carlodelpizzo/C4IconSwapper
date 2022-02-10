@@ -587,26 +587,28 @@ class C4IconSwapper:
             for img in self.img_stack:
                 if filecmp.cmp(img, img_path):
                     return
+
             if len(self.img_stack) >= 4:
                 self.prev_icon_button['state'] = NORMAL
                 self.next_icon_button['state'] = NORMAL
 
             new_img_path = self.uc.temp_dir + 'stack' + str(len(self.img_stack)) + '.png'
+            if 'replacement_icon.png' in img_path:
+                os.rename(img_path, new_img_path)
+            else:
+                shutil.copy(img_path, new_img_path)
             if index is None:
                 self.img_stack.insert(0, new_img_path)
-                shutil.copy(img_path, new_img_path)
-            else:
-                if not -len(self.img_stack) < index < len(self.img_stack):
-                    self.img_stack.append(new_img_path)
-                    shutil.copy(img_path, new_img_path)
-                    self.refresh_img_stack()
-                    return
-                temp = self.img_stack[index]
-                self.img_stack.pop(index)
-                self.img_stack.insert(index, new_img_path)
-                self.img_stack.append(temp)
-                shutil.copy(img_path, new_img_path)
-
+                self.refresh_img_stack()
+                return
+            if not -len(self.img_stack) + 1 < index < len(self.img_stack) - 1:
+                self.img_stack.append(new_img_path)
+                self.refresh_img_stack()
+                return
+            temp = self.img_stack[index]
+            self.img_stack.pop(index)
+            self.img_stack.insert(index, new_img_path)
+            self.img_stack.append(temp)
             self.refresh_img_stack()
 
         def refresh_img_stack(self):
