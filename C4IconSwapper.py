@@ -457,7 +457,7 @@ class C4IconSwapper:
                 self.uc.connections_panel.connections[i].type.set(connections[i][1])
                 self.uc.connections_panel.connections[i].id = connections[i][2]
                 self.uc.connections_panel.connections[i].original = True
-            for conn in self.uc.connections_panel:
+            for conn in self.uc.connections_panel.connections:
                 conn.update_id()
 
         def drop_in_c4z(self, event):
