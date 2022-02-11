@@ -1091,7 +1091,6 @@ class C4IconSwapper:
                 # Buttons
                 self.add_button = tk.Button(self.uc.root, text='Add', width=3, command=self.enable)
                 self.add_button.place(x=self.x, y=self.y, anchor='w')
-                self.add_button['state'] = DISABLED
 
                 self.x_button = tk.Button(self.uc.root, text='x', width=1, command=self.disable)
                 self.x_button.place(x=-420, y=-420, anchor='w')
@@ -1135,7 +1134,6 @@ class C4IconSwapper:
 
                 # Buttons
                 self.add_button.place(x=self.x, y=self.y, anchor='w')
-                self.add_button['state'] = DISABLED
 
                 self.x_button.place(x=-420, y=-420, anchor='w')
                 self.x_button['state'] = DISABLED
