@@ -441,14 +441,15 @@ class C4IconSwapper:
             if len(connections) > len(self.uc.connections_panel.connections):
                 conn_range = len(self.uc.connections_panel.connections) - 1
             elif len(connections) == 0:
-                self.uc.connections_panel.connections[0].add_button['state'] = NORMAL
                 return
             else:
                 conn_range = len(connections) - 1
 
-            self.uc.connections_panel.connections[conn_range].add_button['state'] = NORMAL
             for i in range(conn_range):
+                x = self.uc.connections_panel.connections[i].x
+                y = self.uc.connections_panel.connections[i].y
                 self.uc.connections_panel.connections[i].add_button.place(x=-420, y=-420)
+                self.uc.connections_panel.connections[i].del_button.place(x=x, y=y)
                 self.uc.connections_panel.connections[i].name_entry['state'] = NORMAL
                 self.uc.connections_panel.connections[i].name_entry.delete(0, END)
                 self.uc.connections_panel.connections[i].name_entry.insert(0, connections[i][0])
@@ -1069,6 +1070,9 @@ class C4IconSwapper:
                 self.id = conn_id
                 self.original = False
                 self.in_id_group = False
+                self.delete = False
+                self.prior_txt = ''
+                self.prior_type = ''
                 self.export = ''
 
                 # Entry
@@ -1094,14 +1098,15 @@ class C4IconSwapper:
 
                 self.x_button = tk.Button(self.uc.root, text='x', width=1, command=self.disable)
                 self.x_button.place(x=-420, y=-420, anchor='w')
-                self.x_button['state'] = DISABLED
+
+                self.del_button = tk.Button(self.uc.root, text='Del', width=3, command=self.flag_delete)
+                self.del_button.place(x=-420, y=-420, anchor='w')
 
             def enable(self):
                 self.name_entry['state'] = NORMAL
                 self.type_menu['state'] = NORMAL
                 self.add_button.place(x=-420, y=-420, anchor='w')
                 self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
-                self.x_button['state'] = NORMAL
                 self.export = 'add'
 
             def disable(self):
@@ -1109,8 +1114,29 @@ class C4IconSwapper:
                 self.type_menu['state'] = DISABLED
                 self.add_button.place(x=self.x, y=self.y, anchor='w')
                 self.x_button.place(x=-420, y=-420, anchor='w')
-                self.x_button['state'] = NORMAL
                 self.export = ''
+
+            def flag_delete(self):
+                if not self.original:
+                    return
+                if not self.delete:
+                    self.delete = True
+                    self.prior_txt = self.name_entry.get()
+                    self.prior_type = self.type.get()
+                    self.type.set('RIP')
+                    self.name_entry['state'] = NORMAL
+                    self.name_entry.delete(0, END)
+                    self.name_entry.insert(0, 'TO BE DELETED')
+                    self.name_entry['state'] = DISABLED
+                    return
+                self.delete = False
+                self.name_entry['state'] = NORMAL
+                self.name_entry.delete(0, END)
+                self.name_entry.insert(0, self.prior_txt)
+                self.prior_txt = ''
+                self.name_entry['state'] = DISABLED
+                self.type.set(self.prior_type)
+                self.prior_type = ''
 
             def reinit(self):
                 self.export = ''
@@ -1132,7 +1158,6 @@ class C4IconSwapper:
                 self.add_button.place(x=self.x, y=self.y, anchor='w')
 
                 self.x_button.place(x=-420, y=-420, anchor='w')
-                self.x_button['state'] = DISABLED
 
             def update_id(self, *args, refresh=False):
                 if not args:
@@ -1262,9 +1287,9 @@ class C4IconSwapper:
         self.separator2.place(x=0, y=250, relwidth=1)
 
         # Buttons
-        self.open_conn_button = tk.Button(self.root, text='Show Connections', width=15,
-                                          command=self.open_connections)
-        self.open_conn_button.place(x=760, y=220, anchor='n')
+        self.toggle_conn_button = tk.Button(self.root, text='Show Connections', width=15,
+                                            command=self.toggle_connections_panel)
+        self.toggle_conn_button.place(x=760, y=220, anchor='n')
 
         # Version Label
         self.version_label = Label(self.root, text=version)
@@ -1282,12 +1307,12 @@ class C4IconSwapper:
         self.root.mainloop()
         shutil.rmtree(self.temp_dir)
 
-    def open_connections(self):
-        if self.open_conn_button['text'] == 'Show Connections':
-            self.open_conn_button['text'] = 'Hide Connections'
+    def toggle_connections_panel(self):
+        if self.toggle_conn_button['text'] == 'Show Connections':
+            self.toggle_conn_button['text'] = 'Hide Connections'
             self.root.geometry('915x510')
             return
-        self.open_conn_button['text'] = 'Show Connections'
+        self.toggle_conn_button['text'] = 'Show Connections'
         self.root.geometry('915x250')
 
     def restore_entry_text(self):
