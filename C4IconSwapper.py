@@ -45,7 +45,9 @@ class C4IconSwapper:
             self.current_icon = 0
             self.icon_groups = []
             self.valid_connections = ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI', 'STEREO', 'DIGITAL_OPTICAL',
-                                      'IR_OUT']
+                                      'IR_OUT', 'HDMI IN', 'COMPOSITE IN', 'VGA IN', 'COMPONENT IN', 'DVI IN',
+                                      'STEREO IN', 'DIGITAL_OPTICAL IN', 'HDMI OUT', 'COMPOSITE OUT', 'VGA OUT',
+                                      'COMPONENT OUT', 'DVI OUT', 'STEREO OUT', 'DIGITAL_OPTICAL OUT']
 
             # Labels
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
@@ -443,7 +445,7 @@ class C4IconSwapper:
             elif len(connections) == 0:
                 return
             else:
-                conn_range = len(connections) - 1
+                conn_range = len(connections)
 
             for i in range(conn_range):
                 x = self.uc.connections_panel.connections[i].x
@@ -869,12 +871,37 @@ class C4IconSwapper:
                     driver_xml_file.writelines(modified_xml_lines)
                 shutil.copy(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.xml.bak')
 
+            delete_list = []
+            for conn in self.uc.connections_panel.connections:
+                if conn.original and conn.delete:
+                    delete_list.append(conn)
+
             if modified_xml_lines:
                 driver_xml_lines = modified_xml_lines
                 modified_xml_lines = []
             else:
                 with open(self.uc.temp_dir + '/driver/driver.xml', errors='ignore') as driver_xml_file:
                     driver_xml_lines = driver_xml_file.readlines()
+
+            if delete_list:
+                id_groups = []
+                solo_conns = []
+                for conn in delete_list:
+                    if conn.in_id_group:
+                        in_id_groups = False
+                        for id_group in id_groups:
+                            if id_group[0] == str(conn.id):
+                                in_id_groups = True
+                                id_group.append(conn.prior_type)
+                                break
+                        if not in_id_groups:
+                            id_groups.append([str(conn.id), conn.prior_type])
+                            continue
+                    else:
+                        solo_conns.append(str(conn.id))
+                print(id_groups)
+                print(solo_conns)
+
             do_name_swap = True
             update_modified_date = True
             replace_creator = True
@@ -887,21 +914,21 @@ class C4IconSwapper:
             old_icon_path = ''
             insert_connections = True
             for line in driver_xml_lines:
-                printed_line = False
+                added_line = False
                 if '<name>' in line and do_name_swap:
                     result = re.search('<name>(.*)</name>', line)
                     if result:
                         line = line.replace(result.group(1), driver_name)
                     do_name_swap = False
                     append_line(modified_xml_lines, line)
-                    printed_line = True
+                    added_line = True
                 elif '<modified>' in line and update_modified_date:
                     result = re.search('<modified>(.*)</modified>', line)
                     if result:
                         modified_datestamp = str(datetime.now().strftime("%m/%d/%Y %H:%M"))
                         line = line.replace(result.group(1), modified_datestamp)
                         append_line(modified_xml_lines, line)
-                        printed_line = True
+                        added_line = True
                 elif '<proxy' in line:
                     if not proxy_step2:
                         temp_str = ''
@@ -922,35 +949,35 @@ class C4IconSwapper:
                                 temp_step2 = True
                         line = line.replace(old_driver_name, driver_name)
                         append_line(modified_xml_lines, line)
-                        printed_line = True
+                        added_line = True
                         proxy_step2 = True
                     elif 'name="' + old_driver_name + '"' in line:
                         line = line.replace('name="' + old_driver_name + '"', 'name="' + driver_name + '"')
                         append_line(modified_xml_lines, line)
-                        printed_line = True
+                        added_line = True
                 elif '<Icon' in line:
                     result = re.search('driver/(.*)/icons', line)
                     if not icon_step2 and result:
                         old_icon_path = result.group(1)
                         line = line.replace(old_icon_path, driver_name)
                         append_line(modified_xml_lines, line)
-                        printed_line = True
+                        added_line = True
                     elif old_icon_path in line:
                         line = line.replace(old_icon_path, driver_name)
                         append_line(modified_xml_lines, line)
-                        printed_line = True
+                        added_line = True
                 elif '<creator>' in line and replace_creator:
                     result = re.search('<creator>(.*)</creator>', line)
                     if result:
                         line = line.replace(result.group(1), creator)
                         append_line(modified_xml_lines, line)
-                        printed_line = True
+                        added_line = True
                 elif '<manufacturer>' in line and replace_manufacturer:
                     result = re.search('<manufacturer>(.*)</manufacturer>', line)
                     if result:
                         line = line.replace(result.group(1), manufacturer)
                         append_line(modified_xml_lines, line)
-                        printed_line = True
+                        added_line = True
                 elif '</connections>' in line and insert_connections:
                     insert_connections = False
                     for conn in reversed(self.uc.connections_panel.connections):
@@ -969,7 +996,7 @@ class C4IconSwapper:
                         modified_xml_lines.append('\t\t\t\t</class>\n')
                         modified_xml_lines.append('\t\t\t</classes>\n')
                         modified_xml_lines.append('\t\t</connection>\n')
-                if not printed_line:
+                if not added_line:
                     append_line(modified_xml_lines, line)
 
             with open(self.uc.temp_dir + '/driver/driver.xml', 'w', errors='ignore') as driver_xml_file:
@@ -1141,6 +1168,11 @@ class C4IconSwapper:
             def reinit(self):
                 self.export = ''
                 self.id = 0
+                self.original = False
+                self.in_id_group = False
+                self.delete = False
+                self.prior_txt = ''
+                self.prior_type = ''
 
                 # Entry
                 self.name_entry['state'] = NORMAL
@@ -1156,8 +1188,8 @@ class C4IconSwapper:
 
                 # Buttons
                 self.add_button.place(x=self.x, y=self.y, anchor='w')
-
                 self.x_button.place(x=-420, y=-420, anchor='w')
+                self.del_button.place(x=-420, y=-420, anchor='w')
 
             def update_id(self, *args, refresh=False):
                 if not args:
