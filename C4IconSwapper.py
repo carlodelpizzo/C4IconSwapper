@@ -1104,10 +1104,6 @@ class C4IconSwapper:
                 self.x_button['state'] = NORMAL
                 self.export = 'add'
 
-                self_index = self.uc.connections_panel.connections.index(self)
-                if 0 <= self_index < len(self.uc.connections_panel.connections) - 1:
-                    self.uc.connections_panel.connections[self_index + 1].add_button['state'] = NORMAL
-
             def disable(self):
                 self.name_entry['state'] = DISABLED
                 self.type_menu['state'] = DISABLED
