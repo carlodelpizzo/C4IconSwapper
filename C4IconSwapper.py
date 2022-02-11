@@ -458,7 +458,7 @@ class C4IconSwapper:
                 self.uc.connections_panel.connections[i].id = connections[i][2]
                 self.uc.connections_panel.connections[i].original = True
             for conn in self.uc.connections_panel.connections:
-                conn.update_id()
+                conn.update_id(no_args=True)
 
         def drop_in_c4z(self, event):
             dropped_path = event.data.replace('{', '').replace('}', '')
@@ -1140,7 +1140,9 @@ class C4IconSwapper:
                 self.x_button.place(x=-420, y=-420, anchor='w')
                 self.x_button['state'] = DISABLED
 
-            def update_id(self, *args, refresh=False):
+            def update_id(self, *args, refresh=False, no_args=False):
+                if no_args:
+                    args = [self.type]
                 if self.original:
                     for conn in self.uc.connections_panel.connections:
                         if conn.original and conn.id == self.id:
