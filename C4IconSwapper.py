@@ -1161,20 +1161,20 @@ class C4IconSwapper:
                         added_line = True
                 elif '<Icon' in line:
                     new_line = line
-                    if state_name_changes:
-                        for name_change in state_name_changes:
-                            if name_change[0] + ' ' in line or name_change[2] + ' ' in line:
-                                new_line = new_line.replace(name_change[0], name_change[1])
-                                new_line = new_line.replace(name_change[2], name_change[3])
-                            elif name_change[0] + '<' in line or name_change[2] + '<' in line:
-                                new_line = new_line.replace(name_change[0], name_change[1])
-                                new_line = new_line.replace(name_change[2], name_change[3])
-                            elif name_change[0] + '"' in line or name_change[2] + '"' in line:
-                                new_line = new_line.replace(name_change[0], name_change[1])
-                                new_line = new_line.replace(name_change[2], name_change[3])
-                            elif name_change[0] + '_' in line or name_change[2] + '_' in line:
-                                new_line = new_line.replace(name_change[0], name_change[1])
-                                new_line = new_line.replace(name_change[2], name_change[3])
+                    # if state_name_changes:
+                    #     for name_change in state_name_changes:
+                    #         if name_change[0] + ' ' in line or name_change[2] + ' ' in line:
+                    #             new_line = new_line.replace(name_change[0], name_change[1])
+                    #             new_line = new_line.replace(name_change[2], name_change[3])
+                    #         elif name_change[0] + '<' in line or name_change[2] + '<' in line:
+                    #             new_line = new_line.replace(name_change[0], name_change[1])
+                    #             new_line = new_line.replace(name_change[2], name_change[3])
+                    #         elif name_change[0] + '"' in line or name_change[2] + '"' in line:
+                    #             new_line = new_line.replace(name_change[0], name_change[1])
+                    #             new_line = new_line.replace(name_change[2], name_change[3])
+                    #         elif name_change[0] + '_' in line or name_change[2] + '_' in line:
+                    #             new_line = new_line.replace(name_change[0], name_change[1])
+                    #             new_line = new_line.replace(name_change[2], name_change[3])
                     result = re.search('driver/(.*)/icons', new_line)
                     if not icon_step2 and result:
                         old_icon_path = result.group(1)
