@@ -15,7 +15,7 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 
-version = '4.7a'
+version = '5.0a'
 
 
 class C4IconSwapper:
@@ -1303,7 +1303,7 @@ class C4IconSwapper:
 
             x_spacing = 318
             y_spacing = 40
-            for x in range(0, 3):
+            for x in range(0, 4):
                 for i in range(0, 6):
                     self.connections.append(self.Connection(self.uc, (x * x_spacing) + self.x,
                                                             (i * y_spacing) + 20 + self.y))
@@ -1311,6 +1311,53 @@ class C4IconSwapper:
         def reinit(self):
             for conn in self.connections:
                 conn.reinit()
+
+    class StatePanel:
+        class DriverState:
+            def __init__(self, upper_class, name: str, x_pos: int, y_pos: int):
+                self.uc = upper_class
+                self.name = name
+                self.x = x_pos
+                self.y = y_pos
+                self.delete = False
+                self.add = False
+
+                # Entry
+                self.name_entry = tk.Entry(self.uc.root, width=20)
+                self.name_entry.insert(0, self.name)
+                self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+                self.name_entry['state'] = DISABLED
+
+                # Buttons
+                self.add_button = tk.Button(self.uc.root, text='Add', width=3, command=self.flag_add)
+                self.add_button.place(x=-420, y=-420, anchor='w')
+                self.add_button['state'] = DISABLED
+
+                self.del_button = tk.Button(self.uc.root, text='Del', width=3, command=self.flag_delete)
+                self.del_button.place(x=self.x, y=self.y, anchor='w')
+                self.del_button['state'] = DISABLED
+
+            def flag_add(self):
+                self.add_button.place(x=-420, y=-420, anchor='w')
+                self.del_button.place(x=self.x, y=self.y, anchor='w')
+                self.name_entry['state'] = NORMAL
+
+            def flag_delete(self):
+                self.add_button.place(x=self.x, y=self.y, anchor='w')
+                self.del_button.place(x=-420, y=-420, anchor='w')
+                self.name_entry['state'] = DISABLED
+
+        def __init__(self, upper_class):
+            self.x = 930
+            self.y = 0
+            self.uc = upper_class
+            self.states = []
+            x_spacing = 200
+            y_spacing = 34
+            for i in range(13):
+                self.states.append(self.DriverState(self.uc, 'state' + str(i + 1),
+                                                    (int(i / 7) * x_spacing) + self.x,
+                                                    ((i % 7) * y_spacing) + 20 + self.y))
 
     def __init__(self):
         # Create root window
@@ -1329,6 +1376,7 @@ class C4IconSwapper:
             os.mkdir(self.temp_dir)
 
         # Class variables
+        self.states_shown = False
         self.device_icon_dir = self.temp_dir + 'driver/www/icons/device/'
         self.icon_dir = self.temp_dir + 'driver/www/icons/'
         self.replacement_image_path = self.temp_dir + 'replacement_icon.png'
@@ -1375,10 +1423,12 @@ class C4IconSwapper:
         blank_image.close()
         os.remove(temp_image_file)
 
+        # Initialize Panels
         self.c4z_panel = self.C4zPanel(self)
         self.replacement_panel = self.ReplacementPanel(self)
         self.export_panel = self.ExportPanel(self)
         self.connections_panel = self.ConnectionsPanel(self)
+        self.state_panel = self.StatePanel(self)
 
         # Separators
         self.separator0 = ttk.Separator(self.root, orient='vertical')
@@ -1387,11 +1437,17 @@ class C4IconSwapper:
         self.separator1.place(x=610, y=0, height=250)
         self.separator2 = ttk.Separator(self.root, orient='horizontal')
         self.separator2.place(x=0, y=250, relwidth=1)
+        self.separator1 = ttk.Separator(self.root, orient='vertical')
+        self.separator1.place(x=915, y=0, height=250)
 
         # Buttons
         self.toggle_conn_button = tk.Button(self.root, text='Show Connections', width=15,
                                             command=self.toggle_connections_panel)
-        self.toggle_conn_button.place(x=760, y=220, anchor='n')
+        self.toggle_conn_button.place(x=700, y=220, anchor='n')
+
+        self.exp_button = tk.Button(self.root, text='Show States', width=15, command=self.exp_panel)
+        self.exp_button.place(x=820, y=220, anchor='n')
+        self.state_editor = None
 
         # Version Label
         self.version_label = Label(self.root, text=version)
@@ -1410,12 +1466,21 @@ class C4IconSwapper:
         shutil.rmtree(self.temp_dir)
 
     def toggle_connections_panel(self):
+        if not self.states_shown:
+            if self.toggle_conn_button['text'] == 'Show Connections':
+                self.toggle_conn_button['text'] = 'Hide Connections'
+                self.root.geometry('915x510')
+                return
+            self.toggle_conn_button['text'] = 'Show Connections'
+            self.root.geometry('915x250')
+            return
         if self.toggle_conn_button['text'] == 'Show Connections':
             self.toggle_conn_button['text'] = 'Hide Connections'
-            self.root.geometry('915x510')
+            self.root.geometry('1300x510')
             return
         self.toggle_conn_button['text'] = 'Show Connections'
-        self.root.geometry('915x250')
+        self.root.geometry('1300x250')
+        return
 
     def restore_entry_text(self):
         if self.schedule_entry_restore:
@@ -1441,6 +1506,24 @@ class C4IconSwapper:
             self.replacement_panel.inc_img_stack()
         elif event.keysym == 'Down':
             self.replacement_panel.dec_img_stack()
+
+    def exp_panel(self):
+        if not self.states_shown:
+            if self.toggle_conn_button['text'] == 'Show Connections':
+                self.root.geometry('1300x250')
+                self.states_shown = True
+            else:
+                self.root.geometry('1300x510')
+                self.states_shown = True
+            self.exp_button['text'] = 'Hide States'
+            return
+        if self.toggle_conn_button['text'] == 'Show Connections':
+            self.root.geometry('915x250')
+            self.states_shown = False
+        else:
+            self.root.geometry('915x510')
+            self.states_shown = False
+        self.exp_button['text'] = 'Show States'
 
 
 def list_all_sub_directories(directory):

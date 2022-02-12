@@ -1,4 +1,5 @@
-blank_img_b64 = """R0lGODlhAQABAJEAAAAAAP///5iYmAAAACwAAAAAAQABAAACAlQBADs=
+blank_img_b64 = """
+R0lGODlhAQABAJEAAAAAAP///5iYmAAAACwAAAAAAQABAAACAlQBADs=
 """
 
 win_icon = """
