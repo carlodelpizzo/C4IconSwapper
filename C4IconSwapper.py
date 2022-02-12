@@ -882,7 +882,9 @@ class C4IconSwapper:
             else:
                 with open(self.uc.temp_dir + '/driver/driver.xml', errors='ignore') as driver_xml_file:
                     driver_xml_lines = driver_xml_file.readlines()
+                shutil.copy(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.xml.bak')
 
+            # Remove connections flagged for delete
             if delete_list:
                 id_groups = []
                 solo_conns = []
@@ -899,8 +901,74 @@ class C4IconSwapper:
                             continue
                     else:
                         solo_conns.append(str(conn.id))
-                print(id_groups)
-                print(solo_conns)
+
+                held_lines = []
+                hold_lines = False
+                # Remove connections in id groups
+                for line in driver_xml_lines:
+                    if hold_lines:
+                        held_lines.append(line)
+                        if len(id_groups[0]) == 1:
+                            id_groups.pop(0)
+                            hold_lines = False
+                            continue
+                        if '</class>' in held_lines[-1] and '<classname>' in held_lines[-2]:
+                            result = re.search('<classname>(.*)</classname>', held_lines[-2])
+                            if result.group(1) == id_groups[0][1]:
+                                held_lines.pop(-1)
+                                held_lines.pop(-1)
+                                held_lines.pop(-1)
+                                id_groups[0].pop(1)
+                                if len(id_groups) == 0:
+                                    hold_lines = False
+                        continue
+                    elif held_lines:
+                        for held_line in held_lines:
+                            append_line(modified_xml_lines, held_line)
+                        held_lines = []
+                    if '<id>' in line and len(id_groups) != 0:
+                        result = re.search('<id>(.*)</id>', line)
+                        if result.group(1) == id_groups[0][0]:
+                            hold_lines = True
+                    append_line(modified_xml_lines, line)
+
+                driver_xml_lines = modified_xml_lines
+                modified_xml_lines = []
+
+                held_lines = []
+                hold_lines = False
+                do_delete = False
+                # Remove solo connections
+                for line in driver_xml_lines:
+                    if len(solo_conns) == 0:
+                        append_line(modified_xml_lines, line)
+                        continue
+                    if do_delete:
+                        if '</connection>' in line:
+                            do_delete = False
+                            solo_conns.pop(0)
+                        continue
+                    if hold_lines:
+                        held_lines.append(line)
+                        if '<id>' in line:
+                            result = re.search('<id>(.*)</id>', line)
+                            if result.group(1) == solo_conns[0]:
+                                do_delete = True
+                                held_lines = []
+                            hold_lines = False
+                        continue
+                    elif held_lines:
+                        for held_line in held_lines:
+                            append_line(modified_xml_lines, held_line)
+                        held_lines = []
+                    if '<connection>' in line:
+                        held_lines.append(line)
+                        hold_lines = True
+                        continue
+                    append_line(modified_xml_lines, line)
+
+                driver_xml_lines = modified_xml_lines
+                modified_xml_lines = []
 
             do_name_swap = True
             update_modified_date = True
@@ -1017,6 +1085,7 @@ class C4IconSwapper:
                     shutil.copy(file_list[0] + '/' + file_list[1], temp_temp_dir + '/' + file_list[2])
                     os.remove(file_list[0] + '/' + file_list[1])
 
+            # Pretty sure this is broken; will fix eventually
             if self.over_orig.get() == 1:
                 temp_name = 'IcnSwp'
                 for _ in range(0, 6):
@@ -1078,8 +1147,8 @@ class C4IconSwapper:
                     yes_button.grid(row=2, column=1, sticky='w', padx=5)
                 else:
                     shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + '/driver')
-                    base = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
-                    os.rename(self.uc.cur_dir + driver_name + '.zip', base + '.c4z')
+                    base_name = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
+                    os.rename(self.uc.cur_dir + driver_name + '.zip', base_name + '.c4z')
 
             if len(bak_files) != 0 and os.path.isdir(temp_temp_dir):
                 for file_list in bak_files:
@@ -1196,9 +1265,10 @@ class C4IconSwapper:
                     args = [self.type]
                 if self.original:
                     for conn in self.uc.connections_panel.connections:
-                        if conn.original and conn.id == self.id:
+                        if conn is not self and conn.original and conn.id == self.id:
                             self.in_id_group = True
-                            break
+                            return
+                    self.in_id_group = False
                     return
                 if not refresh and (args[0] != str(self.type) or self.type_menu['state'] == DISABLED):
                     return
