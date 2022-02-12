@@ -1238,7 +1238,7 @@ class C4IconSwapper:
 
             # Remove .bak files
             bak_files = []
-            temp_temp_dir = self.uc.cur_dir + 'temp_bak_files/'
+            temp_temp_dir = self.uc.temp_dir + 'temp_bak_files/'
             if self.remove_backups.get() == 1:
                 if not os.path.isdir(temp_temp_dir):
                     os.mkdir(temp_temp_dir)
@@ -1255,7 +1255,7 @@ class C4IconSwapper:
             # Confirm overwrite original file; Pretty sure this is broken; will fix eventually
             if self.over_orig.get() == 1:
                 temp_name = 'IcnSwp'
-                for _ in range(0, 6):
+                for _ in range(9):
                     temp_name += str(random.randint(0, 9))
 
                 try:
