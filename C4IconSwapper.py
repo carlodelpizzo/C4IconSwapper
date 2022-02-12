@@ -85,6 +85,9 @@ class C4IconSwapper:
             self.gen_driver_button = tk.Button(self.uc.root, text='Load Generic Driver', command=self.load_gen_driver)
             self.gen_driver_button.place(x=228 + self.x, y=219 + self.y, anchor='n')
 
+            self.multi_driver_button = tk.Button(self.uc.root, text='Load Multi Driver', command=self.load_gen_multi)
+            self.multi_driver_button.place(x=5 + self.x, y=219 + self.y, anchor='nw')
+
             # Entry
             self.file_entry_field = tk.Entry(self.uc.root, width=25)
             self.file_entry_field.insert(0, 'Select .c4z file...')
@@ -94,6 +97,7 @@ class C4IconSwapper:
             self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
         def load_gen_driver(self):
+            self.multi_driver_button['state'] = NORMAL
             temp_gen_driver = self.uc.temp_dir + 'generic.c4z'
             if self.file_entry_field.get() == temp_gen_driver:
                 return
@@ -105,6 +109,7 @@ class C4IconSwapper:
             self.uc.export_panel.over_orig_check['state'] = DISABLED
 
         def load_gen_multi(self):
+            self.gen_driver_button['state'] = NORMAL
             temp_gen_driver = self.uc.temp_dir + 'generic multi.c4z'
             with open(temp_gen_driver, 'wb') as gen_driver:
                 gen_driver.write(base64.b64decode(generic_multi))
@@ -117,7 +122,7 @@ class C4IconSwapper:
                 for size in sizes:
                     new_icon = resized_icon.resize(size)
                     new_icon.save(self.uc.device_icon_dir + picture.replace(str(70), str(size[0])))
-
+            self.multi_driver_button['state'] = DISABLED
             self.uc.export_panel.over_orig_check['state'] = DISABLED
 
         def update_icon(self):
@@ -310,7 +315,8 @@ class C4IconSwapper:
             # Update button statuses
             if not self.file_entry_field.get().endswith('generic.c4z') and not\
                     self.file_entry_field.get() == 'Invalid driver selected...':
-                self.gen_driver_button['state'] = ACTIVE
+                self.gen_driver_button['state'] = NORMAL
+                self.multi_driver_button['state'] = NORMAL
                 self.uc.export_panel.over_orig_check['state'] = NORMAL
 
             if len(self.icon_groups) <= 1:
