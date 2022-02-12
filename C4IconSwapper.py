@@ -17,6 +17,12 @@ from Base64Assets import *
 
 version = '5.0a'
 
+letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+           'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
+capital_letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+                   'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+
 
 class C4IconSwapper:
     class C4zPanel:
@@ -159,53 +165,6 @@ class C4IconSwapper:
             self.uc.replacement_panel.next_icon_button['state'] = DISABLED
 
         def upload_c4z(self, given_path=''):
-            if self.file_entry_field.get() == 'Invalid driver selected...':
-                self.file_entry_field['state'] = NORMAL
-                self.file_entry_field.delete(0, 'end')
-                if self.uc.restore_entry_string != '':
-                    self.file_entry_field.insert(0, self.uc.restore_entry_string)
-                else:
-                    self.file_entry_field.insert(0, 'Select .c4z file...')
-                self.file_entry_field['state'] = 'readonly'
-                self.uc.restore_entry_string = ''
-                self.uc.time_var = 0
-                self.uc.schedule_entry_restore = False
-            temp_bak = '/bak' + str(random.randint(11111111, 99999999)) + '/'
-            if len(self.icon_groups) != 0:
-                icons_groups_bak = self.icon_groups
-                if os.path.isdir(self.uc.temp_dir + 'driver'):
-                    shutil.copytree(self.uc.temp_dir + 'driver', self.uc.temp_dir + temp_bak)
-            else:
-                icons_groups_bak = None
-
-            if given_path == '':
-                filename = filedialog.askopenfilename(filetypes=[("Control4 Drivers", "*.c4z")])
-            else:
-                filename = given_path
-
-            if not filename:
-                if os.path.isdir(self.uc.temp_dir + temp_bak):
-                    shutil.rmtree(self.uc.temp_dir + temp_bak)
-                return
-
-            self.uc.driver_selected = False
-            if os.path.isdir(self.uc.temp_dir + '/driver/'):
-                shutil.rmtree(self.uc.temp_dir + '/driver/')
-
-            shutil.unpack_archive(filename, self.uc.temp_dir + 'driver', 'zip')
-
-            with open(self.uc.temp_dir + '/driver/driver.xml', errors='ignore') as driver_xml_file:
-                driver_xml_lines = driver_xml_file.readlines()
-            for line in driver_xml_lines:
-                if '<id>' not in line:
-                    continue
-                result = re.search('<id>(.*)</id>', line)
-                try:
-                    if int(result.group(1)) not in self.uc.connections_panel.ids:
-                        self.uc.connections_panel.ids.append(int(result.group(1)))
-                except ValueError:
-                    pass
-
             def get_icons(directory):
                 icons_out = []
                 if not os.path.isdir(directory):
@@ -259,6 +218,69 @@ class C4IconSwapper:
                         icons_out.append(icon_path)
                 return icons_out
 
+            if self.file_entry_field.get() == 'Invalid driver selected...':
+                self.file_entry_field['state'] = NORMAL
+                self.file_entry_field.delete(0, 'end')
+                if self.uc.restore_entry_string != '':
+                    self.file_entry_field.insert(0, self.uc.restore_entry_string)
+                else:
+                    self.file_entry_field.insert(0, 'Select .c4z file...')
+                self.file_entry_field['state'] = 'readonly'
+                self.uc.restore_entry_string = ''
+                self.uc.time_var = 0
+                self.uc.schedule_entry_restore = False
+            temp_bak = '/bak' + str(random.randint(11111111, 99999999)) + '/'
+            if len(self.icon_groups) != 0:
+                icons_groups_bak = self.icon_groups
+                if os.path.isdir(self.uc.temp_dir + 'driver'):
+                    shutil.copytree(self.uc.temp_dir + 'driver', self.uc.temp_dir + temp_bak)
+            else:
+                icons_groups_bak = None
+
+            if given_path == '':
+                filename = filedialog.askopenfilename(filetypes=[("Control4 Drivers", "*.c4z")])
+            else:
+                filename = given_path
+
+            if not filename:
+                if os.path.isdir(self.uc.temp_dir + temp_bak):
+                    shutil.rmtree(self.uc.temp_dir + temp_bak)
+                return
+
+            self.uc.driver_selected = False
+            if os.path.isdir(self.uc.temp_dir + 'driver/'):
+                shutil.rmtree(self.uc.temp_dir + 'driver/')
+
+            shutil.unpack_archive(filename, self.uc.temp_dir + 'driver', 'zip')
+
+            # Check xml file for all connection ids
+            with open(self.uc.temp_dir + 'driver/driver.xml', errors='ignore') as driver_xml_file:
+                driver_xml_lines = driver_xml_file.readlines()
+            for line in driver_xml_lines:
+                if '<id>' not in line:
+                    continue
+                result = re.search('<id>(.*)</id>', line)
+                try:
+                    if int(result.group(1)) not in self.uc.connections_panel.ids:
+                        self.uc.connections_panel.ids.append(int(result.group(1)))
+                except ValueError:
+                    pass
+
+            # Check lua file for multi-state
+            multi_state = False
+            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
+                with open(self.uc.temp_dir + 'driver/driver.lua', errors='ignore') as driver_lua_file:
+                    driver_lua_lines = driver_lua_file.readlines()
+
+                for line in driver_lua_lines:
+                    if '_OPTIONS = { {' in line:
+                        self.uc.enable_states(driver_lua_lines)
+                        multi_state = True
+                        break
+
+            if not multi_state:
+                self.uc.disable_states()
+
             icon_objects = []
             try:
                 for icon in get_icons(self.uc.icon_dir):
@@ -289,9 +311,9 @@ class C4IconSwapper:
                     self.icon_groups = icons_groups_bak
                     self.uc.schedule_entry_restore = True
                     self.uc.restore_entry_string = self.file_entry_field.get()
-                    if os.path.isdir(self.uc.temp_dir + '/driver/'):
-                        shutil.rmtree(self.uc.temp_dir + '/driver/')
-                    shutil.copytree(self.uc.temp_dir + temp_bak, self.uc.temp_dir + '/driver/')
+                    if os.path.isdir(self.uc.temp_dir + 'driver/'):
+                        shutil.rmtree(self.uc.temp_dir + 'driver/')
+                    shutil.copytree(self.uc.temp_dir + temp_bak, self.uc.temp_dir + 'driver/')
                     if os.path.isdir(self.uc.temp_dir + temp_bak):
                         shutil.rmtree(self.uc.temp_dir + temp_bak)
                     self.uc.driver_selected = True
@@ -315,7 +337,7 @@ class C4IconSwapper:
                     continue
                 if orig_file_path[i + 1] == '.':
                     orig_driver_name = orig_file_path[i]
-            if orig_driver_name != 'generic':
+            if orig_driver_name != 'generic' and orig_driver_name != 'generic multi':
                 self.uc.export_panel.driver_name_entry.delete(0, 'end')
                 self.uc.export_panel.driver_name_entry.insert(0, orig_driver_name)
             self.uc.driver_selected = True
@@ -346,7 +368,7 @@ class C4IconSwapper:
 
             done = False
             self.restore_all_button['state'] = DISABLED
-            for path in list_all_sub_directories(self.uc.temp_dir + '/driver/'):
+            for path in list_all_sub_directories(self.uc.temp_dir + 'driver/'):
                 files = os.listdir(path)
                 for file in files:
                     if ('.bak' in file or '.orig' in file) and '.xml' not in file:
@@ -432,11 +454,11 @@ class C4IconSwapper:
             self.update_icon()
 
         def get_connections(self):
-            if not os.path.isfile(self.uc.temp_dir + '/driver/driver.xml') or not self.uc.driver_selected:
+            if not os.path.isfile(self.uc.temp_dir + 'driver/driver.xml') or not self.uc.driver_selected:
                 return
             self.uc.connections_panel.reinit()
 
-            with open(self.uc.temp_dir + '/driver/driver.xml', errors='ignore') as driver_xml_file:
+            with open(self.uc.temp_dir + 'driver/driver.xml', errors='ignore') as driver_xml_file:
                 driver_xml_lines = driver_xml_file.readlines()
 
             in_connection = False
@@ -868,15 +890,81 @@ class C4IconSwapper:
                     os.remove(self.uc.cur_dir + driver_name + '.c4z')
                 if os.path.isfile(self.uc.cur_dir + driver_name + '.zip'):
                     os.remove(self.uc.cur_dir + driver_name + '.zip')
-                shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + '/driver')
+                shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + 'driver')
                 base_path = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
                 os.rename(self.uc.cur_dir + driver_name + '.zip', base_path + '.c4z')
 
                 pop_up.destroy()
 
+            # Modify lua file
+            state_name_changes = []
+            if self.uc.states_enabled and os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
+                for state in self.uc.state_panel.states:
+                    if state.name_entry['state'] == NORMAL:
+                        state_name_changes.append([state.original_name, state.name_entry.get()])
+                for name_change in state_name_changes:
+                    formatted_name = ''
+                    for character in name_change[1]:
+                        if character == ' ' or (character not in letters and character not in capital_letters and
+                                                character not in numbers):
+                            continue
+                        if formatted_name == '' and character in letters:
+                            formatted_name += capital_letters[letters.index(character)]
+                            continue
+                        if character in capital_letters and formatted_name != '':
+                            formatted_name += letters[capital_letters.index(character)]
+                            continue
+                        formatted_name += character
+                    if formatted_name == '':
+                        formatted_name = name_change[0]
+                    name_change[1] = formatted_name
+                for name_change in state_name_changes:
+                    for name_compare in state_name_changes:
+                        if state_name_changes.index(name_change) == state_name_changes.index(name_compare):
+                            continue
+                        if name_change[1] == name_compare[1]:
+                            name_change[1] += 'A' + str(random.randint(1111, 9999))
+                            break
+                pop_list = []
+                for name_change in state_name_changes:
+                    if name_change[0] == name_change[1]:
+                        pop_list.append(state_name_changes.index(name_change))
+                pop_list.sort(reverse=True)
+                for index in pop_list:
+                    state_name_changes.pop(index)
+
+                for name_change in state_name_changes:
+                    name_change.append(name_change[0].replace(name_change[0][0],
+                                                              letters[capital_letters.index(name_change[0][0])]))
+                    name_change.append(name_change[1].replace(name_change[1][0],
+                                                              letters[capital_letters.index(name_change[1][0])]))
+
+                modified_lua_lines = []
+                with open(self.uc.temp_dir + 'driver/driver.lua', errors='ignore') as driver_lua_file:
+                    driver_lua_lines = driver_lua_file.readlines()
+                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
+                for line in driver_lua_lines:
+                    new_line = line
+                    for name_change in state_name_changes:
+                        if name_change[0] + ' ' in line or name_change[2] + ' ' in line:
+                            new_line = new_line.replace(name_change[0], name_change[1])
+                            new_line = new_line.replace(name_change[2], name_change[3])
+                        elif name_change[0] + "'" in line or name_change[2] + "'" in line:
+                            new_line = new_line.replace(name_change[0], name_change[1])
+                            new_line = new_line.replace(name_change[2], name_change[3])
+                        elif name_change[0] + '"' in line or name_change[2] + '"' in line:
+                            new_line = new_line.replace(name_change[0], name_change[1])
+                            new_line = new_line.replace(name_change[2], name_change[3])
+
+                    modified_lua_lines.append(new_line)
+                with open(self.uc.temp_dir + 'driver/driver.lua', 'w', errors='ignore') as driver_lua_file:
+                    driver_lua_file.writelines(modified_lua_lines)
+
+            # Confirm all connections have non-conflicting ids
             for conn in self.uc.connections_panel.connections:
                 conn.update_id(refresh=True)
 
+            # Format driver name
             driver_name = self.driver_name_entry.get()
             temp = ''
             for letter in driver_name:
@@ -885,10 +973,10 @@ class C4IconSwapper:
             driver_name = temp
             self.driver_name_entry.delete(0, 'end')
             self.driver_name_entry.insert(0, driver_name)
-
-            with open(self.uc.temp_dir + '/driver/driver.xml', errors='ignore') as driver_xml_file:
+            with open(self.uc.temp_dir + 'driver/driver.xml', errors='ignore') as driver_xml_file:
                 driver_xml_lines = driver_xml_file.readlines()
 
+            # Increment driver version
             modified_xml_lines = []
             if self.inc_driver_version.get():
                 for line in driver_xml_lines:
@@ -899,22 +987,22 @@ class C4IconSwapper:
                         line = line.replace(result.group(1), str(result_int))
                     append_line(modified_xml_lines, line)
 
-                with open(self.uc.temp_dir + '/driver/driver.xml', 'w', errors='ignore') as driver_xml_file:
+                with open(self.uc.temp_dir + 'driver/driver.xml', 'w', errors='ignore') as driver_xml_file:
                     driver_xml_file.writelines(modified_xml_lines)
-                shutil.copy(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.xml.bak')
+                shutil.copy(self.uc.temp_dir + 'driver/driver.xml', self.uc.temp_dir + 'driver/driver.xml.bak')
 
+            # Get connections to be deleted
             delete_list = []
             for conn in self.uc.connections_panel.connections:
                 if conn.original and conn.delete:
                     delete_list.append(conn)
-
             if modified_xml_lines:
                 driver_xml_lines = modified_xml_lines
                 modified_xml_lines = []
             else:
-                with open(self.uc.temp_dir + '/driver/driver.xml', errors='ignore') as driver_xml_file:
+                with open(self.uc.temp_dir + 'driver/driver.xml', errors='ignore') as driver_xml_file:
                     driver_xml_lines = driver_xml_file.readlines()
-                shutil.copy(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.xml.bak')
+                shutil.copy(self.uc.temp_dir + 'driver/driver.xml', self.uc.temp_dir + 'driver/driver.xml.bak')
 
             # Remove connections flagged for delete
             if delete_list:
@@ -1002,6 +1090,7 @@ class C4IconSwapper:
                 driver_xml_lines = modified_xml_lines
                 modified_xml_lines = []
 
+            # Modify driver xml
             do_name_swap = True
             update_modified_date = True
             replace_creator = True
@@ -1015,20 +1104,35 @@ class C4IconSwapper:
             insert_connections = True
             for line in driver_xml_lines:
                 added_line = False
-                if '<name>' in line and do_name_swap:
-                    result = re.search('<name>(.*)</name>', line)
-                    if result:
-                        line = line.replace(result.group(1), driver_name)
-                    do_name_swap = False
-                    append_line(modified_xml_lines, line)
+                if '<name>' in line:
+                    new_line = line
+                    if do_name_swap:
+                        result = re.search('<name>(.*)</name>', line)
+                        new_line = line.replace(result.group(1), driver_name)
+                        do_name_swap = False
+                    if state_name_changes:
+                        for name_change in state_name_changes:
+                            if name_change[0] + ' ' in line or name_change[2] + ' ' in line:
+                                new_line = new_line.replace(name_change[0], name_change[1])
+                                new_line = new_line.replace(name_change[2], name_change[3])
+                            elif name_change[0] + '<' in line or name_change[2] + '<' in line:
+                                new_line = new_line.replace(name_change[0], name_change[1])
+                                new_line = new_line.replace(name_change[2], name_change[3])
+                            elif name_change[0] + '"' in line or name_change[2] + '"' in line:
+                                new_line = new_line.replace(name_change[0], name_change[1])
+                                new_line = new_line.replace(name_change[2], name_change[3])
+                            elif name_change[0] + '_' in line or name_change[2] + '_' in line:
+                                new_line = new_line.replace(name_change[0], name_change[1])
+                                new_line = new_line.replace(name_change[2], name_change[3])
+
+                    append_line(modified_xml_lines, new_line)
                     added_line = True
                 elif '<modified>' in line and update_modified_date:
                     result = re.search('<modified>(.*)</modified>', line)
-                    if result:
-                        modified_datestamp = str(datetime.now().strftime("%m/%d/%Y %H:%M"))
-                        line = line.replace(result.group(1), modified_datestamp)
-                        append_line(modified_xml_lines, line)
-                        added_line = True
+                    modified_datestamp = str(datetime.now().strftime("%m/%d/%Y %H:%M"))
+                    line = line.replace(result.group(1), modified_datestamp)
+                    append_line(modified_xml_lines, line)
+                    added_line = True
                 elif '<proxy' in line:
                     if not proxy_step2:
                         temp_str = ''
@@ -1056,28 +1160,41 @@ class C4IconSwapper:
                         append_line(modified_xml_lines, line)
                         added_line = True
                 elif '<Icon' in line:
-                    result = re.search('driver/(.*)/icons', line)
+                    new_line = line
+                    if state_name_changes:
+                        for name_change in state_name_changes:
+                            if name_change[0] + ' ' in line or name_change[2] + ' ' in line:
+                                new_line = new_line.replace(name_change[0], name_change[1])
+                                new_line = new_line.replace(name_change[2], name_change[3])
+                            elif name_change[0] + '<' in line or name_change[2] + '<' in line:
+                                new_line = new_line.replace(name_change[0], name_change[1])
+                                new_line = new_line.replace(name_change[2], name_change[3])
+                            elif name_change[0] + '"' in line or name_change[2] + '"' in line:
+                                new_line = new_line.replace(name_change[0], name_change[1])
+                                new_line = new_line.replace(name_change[2], name_change[3])
+                            elif name_change[0] + '_' in line or name_change[2] + '_' in line:
+                                new_line = new_line.replace(name_change[0], name_change[1])
+                                new_line = new_line.replace(name_change[2], name_change[3])
+                    result = re.search('driver/(.*)/icons', new_line)
                     if not icon_step2 and result:
                         old_icon_path = result.group(1)
-                        line = line.replace(old_icon_path, driver_name)
-                        append_line(modified_xml_lines, line)
+                        new_line = new_line.replace(old_icon_path, driver_name)
+                        append_line(modified_xml_lines, new_line)
                         added_line = True
                     elif old_icon_path in line:
-                        line = line.replace(old_icon_path, driver_name)
-                        append_line(modified_xml_lines, line)
+                        new_line = new_line.replace(old_icon_path, driver_name)
+                        append_line(modified_xml_lines, new_line)
                         added_line = True
                 elif '<creator>' in line and replace_creator:
                     result = re.search('<creator>(.*)</creator>', line)
-                    if result:
-                        line = line.replace(result.group(1), creator)
-                        append_line(modified_xml_lines, line)
-                        added_line = True
+                    line = line.replace(result.group(1), creator)
+                    append_line(modified_xml_lines, line)
+                    added_line = True
                 elif '<manufacturer>' in line and replace_manufacturer:
                     result = re.search('<manufacturer>(.*)</manufacturer>', line)
-                    if result:
-                        line = line.replace(result.group(1), manufacturer)
-                        append_line(modified_xml_lines, line)
-                        added_line = True
+                    line = line.replace(result.group(1), manufacturer)
+                    append_line(modified_xml_lines, line)
+                    added_line = True
                 elif '</connections>' in line and insert_connections:
                     insert_connections = False
                     for conn in reversed(self.uc.connections_panel.connections):
@@ -1096,14 +1213,32 @@ class C4IconSwapper:
                         modified_xml_lines.append('\t\t\t\t</class>\n')
                         modified_xml_lines.append('\t\t\t</classes>\n')
                         modified_xml_lines.append('\t\t</connection>\n')
+                elif state_name_changes and ('<item>' in line or '<state' in line or '<description>' in line):
+                    new_line = line
+                    for name_change in state_name_changes:
+                        if name_change[0] + ' ' in line or name_change[2] + ' ' in line:
+                            new_line = new_line.replace(name_change[0], name_change[1])
+                            new_line = new_line.replace(name_change[2], name_change[3])
+                        elif name_change[0] + '<' in line or name_change[2] + '<' in line:
+                            new_line = new_line.replace(name_change[0], name_change[1])
+                            new_line = new_line.replace(name_change[2], name_change[3])
+                        elif name_change[0] + '"' in line or name_change[2] + '"' in line:
+                            new_line = new_line.replace(name_change[0], name_change[1])
+                            new_line = new_line.replace(name_change[2], name_change[3])
+                        elif name_change[0] + '_' in line or name_change[2] + '_' in line:
+                            new_line = new_line.replace(name_change[0], name_change[1])
+                            new_line = new_line.replace(name_change[2], name_change[3])
+
+                    append_line(modified_xml_lines, new_line)
+                    added_line = True
                 if not added_line:
                     append_line(modified_xml_lines, line)
-
-            with open(self.uc.temp_dir + '/driver/driver.xml', 'w', errors='ignore') as driver_xml_file:
+            with open(self.uc.temp_dir + 'driver/driver.xml', 'w', errors='ignore') as driver_xml_file:
                 driver_xml_file.writelines(modified_xml_lines)
 
+            # Remove .bak files
             bak_files = []
-            temp_temp_dir = self.uc.cur_dir + '/temp_bak_files/'
+            temp_temp_dir = self.uc.cur_dir + 'temp_bak_files/'
             if self.remove_backups.get() == 1:
                 if not os.path.isdir(temp_temp_dir):
                     os.mkdir(temp_temp_dir)
@@ -1114,21 +1249,22 @@ class C4IconSwapper:
                         if '.bak' in file or '.orig' in file:
                             bak_files.append([directory, file, str(random.randint(1111111111, 9999999999)) + '.bak'])
                 for file_list in bak_files:
-                    shutil.copy(file_list[0] + '/' + file_list[1], temp_temp_dir + '/' + file_list[2])
+                    shutil.copy(file_list[0] + '/' + file_list[1], temp_temp_dir + file_list[2])
                     os.remove(file_list[0] + '/' + file_list[1])
 
-            # Pretty sure this is broken; will fix eventually
+            # Confirm overwrite original file; Pretty sure this is broken; will fix eventually
             if self.over_orig.get() == 1:
                 temp_name = 'IcnSwp'
                 for _ in range(0, 6):
                     temp_name += str(random.randint(0, 9))
+
                 try:
                     if not os.path.isfile(self.uc.orig_file_path + '.bak'):
                         shutil.copy(self.uc.orig_file_path, self.uc.orig_file_path + '.bak')
                     else:
                         shutil.copy(self.uc.orig_file_path, self.uc.orig_file_path + '.' + temp_name)
                         os.remove(self.uc.orig_file_path + '.' + temp_name)
-                    shutil.make_archive(temp_name, 'zip', self.uc.temp_dir + '/driver')
+                    shutil.make_archive(temp_name, 'zip', self.uc.temp_dir + 'driver')
                     base = os.path.splitext(self.uc.cur_dir + temp_name + '.zip')[0]
                     os.rename(self.uc.cur_dir + temp_name + '.zip', base + '.c4z')
                     os.remove(self.uc.orig_file_path)
@@ -1182,12 +1318,13 @@ class C4IconSwapper:
                     base_name = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
                     os.rename(self.uc.cur_dir + driver_name + '.zip', base_name + '.c4z')
 
+            # Cleanup temp files and restore original xml with incremented version number
             if len(bak_files) != 0 and os.path.isdir(temp_temp_dir):
                 for file_list in bak_files:
                     shutil.copy(temp_temp_dir + '/' + file_list[2], file_list[0] + '/' + file_list[1])
                 shutil.rmtree(temp_temp_dir)
-            os.remove(self.uc.temp_dir + '/driver/driver.xml')
-            os.rename(self.uc.temp_dir + '/driver/driver.xml.bak', self.uc.temp_dir + '/driver/driver.xml')
+            os.remove(self.uc.temp_dir + 'driver/driver.xml')
+            os.rename(self.uc.temp_dir + 'driver/driver.xml.bak', self.uc.temp_dir + 'driver/driver.xml')
 
     class ConnectionsPanel:
         class Connection:
@@ -1348,7 +1485,7 @@ class C4IconSwapper:
         class DriverState:
             def __init__(self, upper_class, name: str, x_pos: int, y_pos: int):
                 self.uc = upper_class
-                self.name = name
+                self.original_name = name
                 self.x = x_pos
                 self.y = y_pos
                 self.delete = False
@@ -1356,7 +1493,7 @@ class C4IconSwapper:
 
                 # Entry
                 self.name_entry = tk.Entry(self.uc.root, width=20)
-                self.name_entry.insert(0, self.name)
+                self.name_entry.insert(0, name)
                 self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
                 self.name_entry['state'] = DISABLED
 
@@ -1403,12 +1540,15 @@ class C4IconSwapper:
 
         # Creating temporary directory
         self.cur_dir = os.getcwd() + '/'
-        self.temp_dir = self.cur_dir + 'C4IconSwapperTemp' + str(random.randint(111, 999)) + '/'
+        self.temp_dir = self.cur_dir + 'C4IconSwapperTemp/'
         if not os.path.isdir(self.temp_dir):
+            os.mkdir(self.temp_dir)
+        else:
+            shutil.rmtree(self.temp_dir)
             os.mkdir(self.temp_dir)
 
         # Class variables
-        self.states_shown = False
+        self.states_enabled = False
         self.device_icon_dir = self.temp_dir + 'driver/www/icons/device/'
         self.icon_dir = self.temp_dir + 'driver/www/icons/'
         self.replacement_image_path = self.temp_dir + 'replacement_icon.png'
@@ -1477,9 +1617,8 @@ class C4IconSwapper:
                                             command=self.toggle_connections_panel)
         self.toggle_conn_button.place(x=700, y=220, anchor='n')
 
-        self.exp_button = tk.Button(self.root, text='Show States', width=15, command=self.exp_panel)
-        self.exp_button.place(x=820, y=220, anchor='n')
-        self.state_editor = None
+        self.show_states_button = tk.Button(self.root, text='Show States', width=15, command=self.show_states_panel)
+        self.show_states_button.place(x=820, y=220, anchor='n')
 
         # Version Label
         self.version_label = Label(self.root, text=version)
@@ -1498,7 +1637,7 @@ class C4IconSwapper:
         shutil.rmtree(self.temp_dir)
 
     def toggle_connections_panel(self):
-        if not self.states_shown:
+        if not self.states_enabled:
             if self.toggle_conn_button['text'] == 'Show Connections':
                 self.toggle_conn_button['text'] = 'Hide Connections'
                 self.root.geometry('915x510')
@@ -1539,23 +1678,69 @@ class C4IconSwapper:
         elif event.keysym == 'Down':
             self.replacement_panel.dec_img_stack()
 
-    def exp_panel(self):
-        if not self.states_shown:
+    def show_states_panel(self):
+        if not self.states_enabled:
             if self.toggle_conn_button['text'] == 'Show Connections':
                 self.root.geometry('1300x250')
-                self.states_shown = True
+                self.states_enabled = True
             else:
                 self.root.geometry('1300x510')
-                self.states_shown = True
-            self.exp_button['text'] = 'Hide States'
+                self.states_enabled = True
+            self.show_states_button['text'] = 'Hide States'
             return
         if self.toggle_conn_button['text'] == 'Show Connections':
             self.root.geometry('915x250')
-            self.states_shown = False
+            self.states_enabled = False
         else:
             self.root.geometry('915x510')
-            self.states_shown = False
-        self.exp_button['text'] = 'Show States'
+            self.states_enabled = False
+        self.show_states_button['text'] = 'Show States'
+
+    def enable_states(self, lua_file):
+        for state in self.state_panel.states:
+            state.add_button['state'] = NORMAL
+            state.del_button['state'] = NORMAL
+        state_names = []
+        find_names = False
+        for line in lua_file:
+            if '_OPTIONS = { {' in line or find_names:
+                find_names = True
+                build_name = False
+                working_name = ''
+                for character in line:
+                    if build_name:
+                        if character == '{':
+                            build_name = False
+                            continue
+                        if character == '=':
+                            working_name = working_name[0:-1]
+                            state_names.append(working_name)
+                            working_name = ''
+                            build_name = False
+                            continue
+                        working_name += character
+                        continue
+                    working_name += character
+                    if len(working_name) > 2:
+                        working_name = working_name[1:len(working_name)]
+                    if working_name == '{ ':
+                        build_name = True
+                        working_name = ''
+            if 'States, LED = {},' in line:
+                break
+
+        for state_name in state_names:
+            self.state_panel.states[state_names.index(state_name)].name_entry['state'] = NORMAL
+            self.state_panel.states[state_names.index(state_name)].name_entry.delete(0, END)
+            self.state_panel.states[state_names.index(state_name)].name_entry.insert(0, state_name)
+            self.state_panel.states[state_names.index(state_name)].original_name = state_name
+
+    def disable_states(self):
+        for state in self.state_panel.states:
+            state.add_button['state'] = DISABLED
+            state.name_entry['state'] = DISABLED
+            state.del_button['state'] = DISABLED
+            state.original_name = ''
 
 
 def list_all_sub_directories(directory):
