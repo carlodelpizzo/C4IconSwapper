@@ -113,8 +113,10 @@ class C4IconSwapper:
             temp_gen_driver = self.uc.temp_dir + 'generic multi.c4z'
             with open(temp_gen_driver, 'wb') as gen_driver:
                 gen_driver.write(base64.b64decode(generic_multi))
-            self.upload_c4z(temp_gen_driver)
+
+            shutil.unpack_archive(temp_gen_driver, self.uc.temp_dir + 'driver', 'zip')
             os.remove(temp_gen_driver)
+
             sizes = [(90, 90), (300, 300), (512, 512), (1024, 1024)]
             pictures = os.listdir(self.uc.device_icon_dir)
             for picture in pictures:
@@ -122,6 +124,13 @@ class C4IconSwapper:
                 for size in sizes:
                     new_icon = resized_icon.resize(size)
                     new_icon.save(self.uc.device_icon_dir + picture.replace(str(70), str(size[0])))
+
+            shutil.make_archive(temp_gen_driver.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
+            os.rename(temp_gen_driver.replace('.c4z', '.zip'), temp_gen_driver)
+
+            self.upload_c4z(temp_gen_driver)
+            os.remove(temp_gen_driver)
+
             self.multi_driver_button['state'] = DISABLED
             self.uc.export_panel.over_orig_check['state'] = DISABLED
 
