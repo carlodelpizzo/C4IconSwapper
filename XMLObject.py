@@ -113,16 +113,23 @@ def get_xml_data(xml_path=None, xml_string=None):
 
 # xml_data = [name, value, parameters, children]; Initialize with xml_path
 class XMLObject:
-    def __init__(self, xml_path=None, xml_data=None, parent=None):
+    def __init__(self, xml_path=None, xml_data=None, parents=None):
         if xml_path:
             xml_data = get_xml_data(xml_path)
 
-        self.parent = parent
+        self.parents = []
+        new_parents = []
+        if parents:
+            self.parents = parents
+            for parent in parents:
+                new_parents.append(parent)
+        new_parents.append(self)
+        self.children = []
         self.name = xml_data[0]
         self.value = xml_data[1]
         self.parameters = []
-        self.children = []
         self.self_closed = False
+        self.delete = False
         if '/' in self.name:
             self.name = self.name[:-1]
             self.self_closed = True
@@ -161,9 +168,11 @@ class XMLObject:
 
         # Make children
         for child in xml_data[3]:
-            self.children.append(XMLObject(xml_data=child, parent=self))
+            self.children.append(XMLObject(xml_data=child, parents=new_parents))
 
     def get_lines(self, layer=0):
+        if self.delete:
+            return []
         lines = []
         line = ''
         tabs = ''
@@ -206,6 +215,12 @@ class XMLObject:
         for child in self.children:
             if tag_name in child.name:
                 matching_tags.append(child)
+        for child in self.children:
+            child_tags = child.get_tag(tag_name)
+            if child_tags is None:
+                continue
+            for child_tag in child_tags:
+                matching_tags.append(child_tag)
         if not matching_tags:
-            matching_tags.append(None)
+            return None
         return matching_tags

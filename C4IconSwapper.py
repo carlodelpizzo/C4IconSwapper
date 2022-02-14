@@ -254,18 +254,30 @@ class C4IconSwapper:
 
             shutil.unpack_archive(filename, self.uc.temp_dir + 'driver', 'zip')
 
-            # Check xml file for all connection ids
-            with open(self.uc.temp_dir + 'driver/driver.xml', errors='ignore') as driver_xml_file:
-                driver_xml_lines = driver_xml_file.readlines()
-            for line in driver_xml_lines:
-                if '<id>' not in line:
-                    continue
-                result = re.search('<id>(.*)</id>', line)
-                try:
-                    if int(result.group(1)) not in self.uc.connections_panel.ids:
-                        self.uc.connections_panel.ids.append(int(result.group(1)))
-                except ValueError:
-                    pass
+            # BEGIN NEW CODE
+            self.uc.driver_xml = XMLObject(self.uc.temp_dir + 'driver/driver.xml')
+            id_tags = self.uc.driver_xml.get_tag('id')
+            if id_tags is not None:
+                for id_tag in id_tags:
+                    try:
+                        if int(id_tag.value) not in self.uc.connections_panel.ids:
+                            self.uc.connections_panel.ids.append(int(id_tag.value))
+                    except ValueError:
+                        pass
+            # END NEW CODE
+
+            # # Check xml file for all connection ids
+            # with open(self.uc.temp_dir + 'driver/driver.xml', errors='ignore') as driver_xml_file:
+            #     driver_xml_lines = driver_xml_file.readlines()
+            # for line in driver_xml_lines:
+            #     if '<id>' not in line:
+            #         continue
+            #     result = re.search('<id>(.*)</id>', line)
+            #     try:
+            #         if int(result.group(1)) not in self.uc.connections_panel.ids:
+            #             self.uc.connections_panel.ids.append(int(result.group(1)))
+            #     except ValueError:
+            #         pass
 
             # Check lua file for multi-state
             multi_state = False
@@ -459,40 +471,71 @@ class C4IconSwapper:
                 return
             self.uc.connections_panel.reinit()
 
-            with open(self.uc.temp_dir + 'driver/driver.xml', errors='ignore') as driver_xml_file:
-                driver_xml_lines = driver_xml_file.readlines()
-
-            in_connection = False
-            name_found = False
+            # BEGIN NEW CODE
             connections = []
-            conn_name = ''
-            conn_id = 0
-            # Get connections from xml
-            for line in driver_xml_lines:
-                if '<connection>' in line:
-                    in_connection = True
-                    continue
-                if not in_connection:
-                    continue
-                if '</connection>' in line:
-                    in_connection = False
-                    name_found = False
-                    continue
-                if '<id>' in line:
-                    conn_id = re.search('<id>(.*)</id>', line).group(1)
-                if not name_found and '<connectionname>' in line:
-                    conn_name = re.search('<connectionname>(.*)</connectionname>', line).group(1)
-                    name_found = True
-                elif name_found and '<classname>' in line:
-                    connections.append([conn_name, re.search('<classname>(.*)</classname>', line).group(1), conn_id])
-
+            classname_tags = self.uc.driver_xml.get_tag('classname')
             pop_list = []
-            # Filter connections through valid connections
-            for i in range(len(connections)):
-                if connections[i][1] not in self.valid_connections:
-                    pop_list.insert(0, i)
-            for index in pop_list:
-                connections.pop(index)
+            if classname_tags is not None:
+                for classname_tag in classname_tags:
+                    if classname_tag.value not in self.valid_connections:
+                        pop_list.append(classname_tags.index(classname_tag))
+                pop_list.sort(reverse=True)
+                for index in pop_list:
+                    classname_tags.pop(index)
+                for classname_tag in classname_tags:
+                    conn_id = -1
+                    class_tag = None
+                    connection_tag = None
+                    connectionname_tag = None
+                    for parent in classname_tag.parents:
+                        if parent.name == 'class':
+                            class_tag = parent
+                        if parent.name == 'connection':
+                            connection_tag = parent
+                            for child in parent.children:
+                                if child.name == 'id':
+                                    conn_id = int(child.value)
+                                if child.name == 'connectionname':
+                                    connectionname_tag = child
+                    if conn_id == -1 or connection_tag is None or class_tag is None or connectionname_tag is None:
+                        continue
+                    connections.append([connectionname_tag.value, classname_tag.value, conn_id,
+                                        connection_tag, class_tag, connectionname_tag])
+            # END NEW CODE
+
+            # with open(self.uc.temp_dir + 'driver/driver.xml', errors='ignore') as driver_xml_file:
+            #     driver_xml_lines = driver_xml_file.readlines()
+            #
+            # in_connection = False
+            # name_found = False
+            # conn_name = ''
+            # conn_id = 0
+            # # Get connections from xml
+            # for line in driver_xml_lines:
+            #     if '<connection>' in line:
+            #         in_connection = True
+            #         continue
+            #     if not in_connection:
+            #         continue
+            #     if '</connection>' in line:
+            #         in_connection = False
+            #         name_found = False
+            #         continue
+            #     if '<id>' in line:
+            #         conn_id = re.search('<id>(.*)</id>', line).group(1)
+            #     if not name_found and '<connectionname>' in line:
+            #         conn_name = re.search('<connectionname>(.*)</connectionname>', line).group(1)
+            #         name_found = True
+            #     elif name_found and '<classname>' in line:
+            #         connections.append([conn_name, re.search('<classname>(.*)</classname>', line).group(1), conn_id])
+            #
+            # pop_list = []
+            # # Filter connections through valid connections
+            # for i in range(len(connections)):
+            #     if connections[i][1] not in self.valid_connections:
+            #         pop_list.insert(0, i)
+            # for index in pop_list:
+            #     connections.pop(index)
 
             # Check that number of connections does not exceed maximum
             if len(connections) > len(self.uc.connections_panel.connections):
@@ -502,7 +545,15 @@ class C4IconSwapper:
             else:
                 conn_range = len(connections)
 
+            id_groups = []
             for i in range(conn_range):
+                not_in_group = True
+                for group in id_groups:
+                    if group[0] is connections[i][3]:
+                        group.append(self.uc.connections_panel.connections[i])
+                        not_in_group = False
+                if not_in_group:
+                    id_groups.append([connections[i][3], self.uc.connections_panel.connections[i]])
                 x = self.uc.connections_panel.connections[i].x
                 y = self.uc.connections_panel.connections[i].y
                 self.uc.connections_panel.connections[i].add_button.place(x=-420, y=-420)
@@ -514,7 +565,22 @@ class C4IconSwapper:
                 self.uc.connections_panel.connections[i].type_menu['state'] = DISABLED
                 self.uc.connections_panel.connections[i].type.set(connections[i][1])
                 self.uc.connections_panel.connections[i].id = connections[i][2]
+                self.uc.connections_panel.connections[i].tags = [connections[i][3], connections[i][4],
+                                                                 connections[i][5]]
                 self.uc.connections_panel.connections[i].original = True
+
+            # Form id groups
+            for group in id_groups:
+                first = True
+                for conn in group:
+                    if first:
+                        first = False
+                        continue
+                    new_group = []
+                    for conn0 in group:
+                        if conn0 != conn:
+                            new_group.append(conn0)
+                    conn.id_group = new_group
             for conn in self.uc.connections_panel.connections:
                 conn.update_id()
 
@@ -975,8 +1041,18 @@ class C4IconSwapper:
             self.driver_name_entry.delete(0, 'end')
             self.driver_name_entry.insert(0, driver_name)
 
-            # Rewrite everything below using xml_object
-            xml_object = XMLObject(self.uc.temp_dir + 'driver/driver.xml')
+            # BEGIN NEW CODE
+
+            # Increment driver version
+            version_new = int(self.uc.driver_xml.get_tag('version')[0].value)
+            version_new += 1
+            self.uc.driver_xml.get_tag('version')[0].value = str(version_new)
+
+            # with open('output.xml', 'w', errors='ignore') as out_file:
+            #     out_file.writelines(self.uc.driver_xml.get_lines())
+            #
+            # return
+            # END NEW CODE
 
             with open(self.uc.temp_dir + 'driver/driver.xml', errors='ignore') as driver_xml_file:
                 driver_xml_lines = driver_xml_file.readlines()
@@ -1344,6 +1420,9 @@ class C4IconSwapper:
                 self.prior_txt = ''
                 self.prior_type = ''
                 self.export = ''
+                # tags[0] = connection_tag, tags[1] = class_tag, tags[2] = connectionname_tag
+                self.tags = []
+                self.id_group = []
 
                 # Entry
                 self.name_entry = tk.Entry(self.uc.root, width=20)
@@ -1398,6 +1477,19 @@ class C4IconSwapper:
                     self.name_entry.delete(0, END)
                     self.name_entry.insert(0, 'TO BE DELETED')
                     self.name_entry['state'] = DISABLED
+                    if len(self.id_group) > 1:
+                        first = True
+                        last_alive = True
+                        for groupie in self.id_group:
+                            if first:
+                                first = False
+                                continue
+                            if not groupie.delete:
+                                last_alive = False
+                                break
+                        if last_alive:
+                            self.tags[0].delete = True
+                        self.tags[1].delete = True
                     return
                 self.delete = False
                 self.name_entry['state'] = NORMAL
@@ -1407,6 +1499,8 @@ class C4IconSwapper:
                 self.name_entry['state'] = DISABLED
                 self.type.set(self.prior_type)
                 self.prior_type = ''
+                self.tags[0].delete = False
+                self.tags[1].delete = False
 
             def reinit(self):
                 self.export = ''
@@ -1416,6 +1510,8 @@ class C4IconSwapper:
                 self.delete = False
                 self.prior_txt = ''
                 self.prior_type = ''
+                self.tags = []
+                self.id_group = []
 
                 # Entry
                 self.name_entry['state'] = NORMAL
@@ -1553,6 +1649,7 @@ class C4IconSwapper:
             os.mkdir(self.temp_dir)
 
         # Class variables
+        self.driver_xml = None
         self.states_enabled = False
         self.device_icon_dir = self.temp_dir + 'driver/www/icons/device/'
         self.icon_dir = self.temp_dir + 'driver/www/icons/'
