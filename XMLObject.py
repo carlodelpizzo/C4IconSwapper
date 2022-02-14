@@ -1,13 +1,14 @@
 
 
 def get_xml_data(xml_path=None, xml_string=None):
+    new_line_string = '**NEWLINE**'
     if xml_path:
         with open(xml_path, errors='ignore') as xml_file:
             xml_lines = xml_file.readlines()
 
         xml_string = ''
         for line in xml_lines:
-            new_line = line.replace('\n', '')
+            new_line = line.replace('\n', new_line_string)
             new_line = new_line.replace('\t', '')
             xml_string += new_line
 
@@ -107,6 +108,13 @@ def get_xml_data(xml_path=None, xml_string=None):
         if char == '<':
             write_name = True
             continue
+    name = name.replace(new_line_string, '')
+    parameters = parameters.replace(new_line_string, '')
+    value = value.replace(new_line_string, '\n')
+    if value == '\n':
+        value = ''
+    if value.endswith('\n'):
+        value = value[:-2]
 
     return [name, value, parameters, children]
 
@@ -191,11 +199,14 @@ class XMLObject:
         line += '>' + self.value
 
         if len(self.children) == 0:
-            if self.self_closed:
+            if self.self_closed or '\n' in self.value:
                 line += '\n'
             lines.append(line)
             if not self.self_closed:
-                line = '</' + self.name + '>\n'
+                if '\n' not in self.value:
+                    line = '</' + self.name + '>\n'
+                else:
+                    line = tabs + '</' + self.name + '>\n'
                 lines.append(line)
             return lines
 
