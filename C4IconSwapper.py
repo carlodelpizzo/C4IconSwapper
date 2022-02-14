@@ -14,6 +14,7 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
+from XMLObject import XMLObject
 
 version = '5.0a'
 
@@ -973,6 +974,10 @@ class C4IconSwapper:
             driver_name = temp
             self.driver_name_entry.delete(0, 'end')
             self.driver_name_entry.insert(0, driver_name)
+
+            # Rewrite everything below using xml_object
+            xml_object = XMLObject(self.uc.temp_dir + 'driver/driver.xml')
+
             with open(self.uc.temp_dir + 'driver/driver.xml', errors='ignore') as driver_xml_file:
                 driver_xml_lines = driver_xml_file.readlines()
 
