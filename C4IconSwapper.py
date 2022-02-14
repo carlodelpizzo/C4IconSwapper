@@ -546,7 +546,7 @@ class C4IconSwapper:
                 name_tag.value = 'Connection Name...'
                 new_conn.get_tag('classname')[0].value = 'HDMI IN'
                 new_conn.delete = True
-                self.uc.driver_xml.insert_tag(new_conn, self.uc.driver_xml.get_tag('connections')[0])
+                self.uc.driver_xml.get_tag('connections')[0].children.append(new_conn)
                 conn.tags = [new_conn, class_tag, name_tag, id_tag, type_tag, classname_tag]
 
             # Form id groups
