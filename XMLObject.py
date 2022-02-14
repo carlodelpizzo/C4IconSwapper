@@ -119,7 +119,7 @@ def get_xml_data(xml_path=None, xml_string=None):
     return [name, value, parameters, children]
 
 
-# xml_data = [name, value, parameters, children]; Initialize with xml_path
+# xml_data = ['name', 'value', [parameters], [children]]; Initialize with xml_path
 class XMLObject:
     def __init__(self, xml_path=None, xml_data=None, parents=None):
         if xml_path:
@@ -235,3 +235,40 @@ class XMLObject:
         if not matching_tags:
             return None
         return matching_tags
+
+    def get_tag_by_obj(self, tag_object):
+        if tag_object is self:
+            return self
+        for child in self.children:
+            if tag_object is child:
+                return child
+        for child in self.children:
+            sub_check = child.get_tag_by_obj(tag_object)
+            if sub_check is not None:
+                return sub_check
+        return None
+
+    def get_tag_by_value(self, value: str):
+        matching_tags = []
+        for child in self.children:
+            if value in child.value:
+                matching_tags.append(child)
+        for child in self.children:
+            child_tags = child.get_tag_by_value(value)
+            if child_tags is None:
+                continue
+            for child_tag in child_tags:
+                matching_tags.append(child_tag)
+        if not matching_tags:
+            return None
+        return matching_tags
+
+    def insert_tag(self, tag_object, parent_tag, after_tag=None):
+        if after_tag is not None and parent_tag is not after_tag.parent:
+            print('Failed to insert tag object')
+            return
+        parent = self.get_tag_by_obj(parent_tag)
+        if after_tag is None:
+            parent.children.append(tag_object)
+            return
+        parent.children.insert(parent.children.index(after_tag) + 1, tag_object)
