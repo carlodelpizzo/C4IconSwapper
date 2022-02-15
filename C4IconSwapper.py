@@ -28,7 +28,6 @@ conn_template = ['connection', '', [], [['id', '0', [], []], ['type', '0', [], [
                                         ['connectionname', 'REPLACE', [], []],
                                         ['consumer', 'False', [], []], ['linelevel', 'True', [], []],
                                         ['classes', '', [], [['class', '', [], [['classname', 'REPLACE', [], []]]]]]]]
-# Make sure to check type tag value
 
 
 class C4IconSwapper:
@@ -1406,16 +1405,21 @@ class C4IconSwapper:
                     conn_type = conn_type.replace(' IN', '')
                     if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
                         valid_id = find_valid_id(2000, self.uc.connections_panel.ids)
+                        self.tags[4].value = '5'
                     elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
                         valid_id = find_valid_id(4000, self.uc.connections_panel.ids)
+                        self.tags[4].value = '6'
                 elif ' OUT' in conn_type:
                     conn_type = conn_type.replace(' OUT', '')
                     if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
                         valid_id = find_valid_id(1900, self.uc.connections_panel.ids)
+                        self.tags[4].value = '5'
                     elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
                         valid_id = find_valid_id(3900, self.uc.connections_panel.ids)
+                        self.tags[4].value = '6'
                 if conn_type == 'IR_OUT':
                     valid_id = find_valid_id(1, self.uc.connections_panel.ids)
+                    self.tags[4].value = '6'
 
                 if self.id in self.uc.connections_panel.ids:
                     self.uc.connections_panel.ids.pop(self.uc.connections_panel.ids.index(self.id))
