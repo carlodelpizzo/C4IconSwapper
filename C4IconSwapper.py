@@ -34,6 +34,7 @@ class C4IconSwapper:
     class C4zPanel:
         class Icon:
             def __init__(self, root_path: str, path: str, name: str, size: int):
+                # Initialize Icon
                 self.root = root_path
                 self.path = path
                 self.name = name
@@ -46,11 +47,13 @@ class C4IconSwapper:
 
         class IconGroup:
             def __init__(self, icons: list):
+                # Initialize Icon Group
                 self.name = icons[0].name
                 self.path = icons[0].path
                 self.icons = icons
 
         def __init__(self, upper_class):
+            # Initialize C4z Panel
             self.x = 5
             self.y = 0
             self.uc = upper_class
@@ -109,6 +112,7 @@ class C4IconSwapper:
             self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
         def load_gen_driver(self):
+            # Upload generic two-state driver from Base64Assets
             self.multi_driver_button['state'] = NORMAL
             temp_gen_driver = self.uc.temp_dir + 'generic.c4z'
             if self.file_entry_field.get() == temp_gen_driver:
@@ -121,6 +125,7 @@ class C4IconSwapper:
             self.uc.export_panel.over_orig_check['state'] = DISABLED
 
         def load_gen_multi(self):
+            # Upload generic multi-state driver from Base64Assets
             self.gen_driver_button['state'] = NORMAL
             temp_gen_driver = self.uc.temp_dir + 'generic multi.c4z'
             with open(temp_gen_driver, 'wb') as gen_driver:
@@ -159,16 +164,6 @@ class C4IconSwapper:
 
             self.icon_label.config(text='icon: ' + str(self.current_icon + 1) + ' of ' + str(len(self.icon_groups)))
             self.icon_name_label.config(text='name: ' + self.icon_groups[self.current_icon].name)
-
-        def blank_icon(self):
-            self.blank_image_label.configure(image=self.uc.blank)
-            self.blank_image_label.image = self.uc.blank
-            self.icon_label.config(text='icon: 0 of 0')
-            self.icon_name_label.config(text='name:')
-            self.prev_icon_button['state'] = DISABLED
-            self.next_icon_button['state'] = DISABLED
-            self.uc.replacement_panel.prev_icon_button['state'] = DISABLED
-            self.uc.replacement_panel.next_icon_button['state'] = DISABLED
 
         def upload_c4z(self, given_path=''):
             def get_icons(directory):
@@ -574,6 +569,7 @@ class C4IconSwapper:
 
     class ReplacementPanel:
         def __init__(self, upper_class):
+            # Initialize Replacement Panel
             self.x = 303
             self.y = 0
             self.uc = upper_class
@@ -894,6 +890,7 @@ class C4IconSwapper:
 
     class ExportPanel:
         def __init__(self, upper_class):
+            # Initialize Export Panel
             self.x = 615
             self.y = -25
             self.uc = upper_class
@@ -936,7 +933,6 @@ class C4IconSwapper:
                 shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + 'driver')
                 base_path = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
                 os.rename(self.uc.cur_dir + driver_name + '.zip', base_path + '.c4z')
-
                 pop_up.destroy()
 
             # Modify lua file
@@ -1179,6 +1175,7 @@ class C4IconSwapper:
     class ConnectionsPanel:
         class Connection:
             def __init__(self, upper_class, x_pos: int, y_pos: int, conn_id=0):
+                # Initialize Connection UI Object
                 self.uc = upper_class
                 self.x = x_pos
                 self.y = y_pos
@@ -1340,6 +1337,7 @@ class C4IconSwapper:
                 self.uc.connections_panel.ids.append(self.id)
 
         def __init__(self, upper_class):
+            # Initialize Connection Panel
             self.x = 14
             self.y = 260
             self.uc = upper_class
@@ -1360,6 +1358,7 @@ class C4IconSwapper:
     class StatePanel:
         class DriverState:
             def __init__(self, upper_class, name: str, x_pos: int, y_pos: int):
+                # Initialize Driver State UI Object
                 self.uc = upper_class
                 self.original_name = name
                 self.x = x_pos
@@ -1393,6 +1392,7 @@ class C4IconSwapper:
                 self.name_entry['state'] = DISABLED
 
         def __init__(self, upper_class):
+            # Initialize State Panel
             self.x = 930
             self.y = 0
             self.uc = upper_class
@@ -1405,7 +1405,7 @@ class C4IconSwapper:
                                                     ((i % 7) * y_spacing) + 20 + self.y))
 
     def __init__(self):
-        # Create root window
+        # Initialize main program
         self.root = TkinterDnD.Tk()
         self.root.bind('<KeyRelease>', self.key_release)
 

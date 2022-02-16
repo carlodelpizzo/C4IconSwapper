@@ -119,7 +119,7 @@ def get_xml_data(xml_path=None, xml_string=None):
     return [name, value, parameters, children]
 
 
-# xml_data = ['name', 'value', [parameters], [children]]; Initialize with xml_path
+# xml_data = ['tag_name', 'tag_value', [tag_attributes], [children]]; Initialize with path to xml file
 class XMLObject:
     def __init__(self, xml_path=None, xml_data=None, parents=None):
         if xml_path:
@@ -135,7 +135,7 @@ class XMLObject:
         self.children = []
         self.name = xml_data[0]
         self.value = xml_data[1]
-        self.parameters = []  # [param_name, param_value]
+        self.parameters = []  # [[param_name, param_value], ...]
         self.self_closed = False
         self.delete = False
         if '/' in self.name:
@@ -146,7 +146,7 @@ class XMLObject:
         param_value = ''
         get_name = False
         get_value = False
-        # Parse parameters
+        # Parse parameters (attributes)
         for char in xml_data[2]:
             if char == ' ':
                 continue
