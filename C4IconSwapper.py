@@ -320,6 +320,7 @@ class C4IconSwapper:
                     if os.path.isdir(self.uc.temp_dir + temp_bak):
                         shutil.rmtree(self.uc.temp_dir + temp_bak)
                     self.uc.driver_selected = True
+                    self.uc.driver_version = -1
                 self.file_entry_field.delete(0, 'end')
                 self.file_entry_field.insert(0, 'Invalid driver selected...')
                 self.file_entry_field['state'] = DISABLED
@@ -927,11 +928,6 @@ class C4IconSwapper:
             self.remove_backups_check.place(x=63 + self.x, y=95 + self.y, anchor='w')
 
         def export_c4z(self):
-            def append_line(array: list, string: str):
-                encoded_str = string.encode("ascii", "ignore")
-                decoded_str = encoded_str.decode()
-                array.append(decoded_str)
-
             def confirm_overwrite():
                 if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z'):
                     os.remove(self.uc.cur_dir + driver_name + '.c4z')
@@ -944,6 +940,7 @@ class C4IconSwapper:
                 pop_up.destroy()
 
             # Modify lua file
+            # state_name_changes = [original_name, new_name, original_name_lower, new_name_lower]
             state_name_changes = []
             if self.uc.states_enabled and os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
                 for state in self.uc.state_panel.states:
@@ -1021,160 +1018,75 @@ class C4IconSwapper:
             self.driver_name_entry.delete(0, 'end')
             self.driver_name_entry.insert(0, driver_name)
 
-            # BEGIN NEW CODE
+            # Increment driver version on each export
+            if self.uc.driver_version == -1:
+                self.uc.driver_version = int(self.uc.driver_xml.get_tag('version')[0].value)
+            self.uc.driver_version += 1
+            self.uc.driver_xml.get_tag('version')[0].value = str(self.uc.driver_version)
 
-            # Increment driver version
-            version_new = int(self.uc.driver_xml.get_tag('version')[0].value)
-            version_new += 1
-            self.uc.driver_xml.get_tag('version')[0].value = str(version_new)
-
+            # Update connection names
             for conn in self.uc.connections_panel.connections:
                 conn.tags[2].value = conn.name_entry.get()
                 conn.tags[5].value = conn.type.get()
 
-            # with open('output.xml', 'w', errors='ignore') as out_file:
-            #     out_file.writelines(self.uc.driver_xml.get_lines())
-            #
-            # return
-            # END NEW CODE
-
-            with open(self.uc.temp_dir + 'driver/driver.xml', errors='ignore') as driver_xml_file:
-                driver_xml_lines = driver_xml_file.readlines()
-
-            # Modify driver xml
-            modified_xml_lines = []
-            do_name_swap = True
-            update_modified_date = True
-            replace_creator = True
-            replace_manufacturer = True
-            creator = 'C4IconSwapper'
-            manufacturer = 'C4IconSwapper'
-            proxy_step2 = False
-            icon_step2 = False
-            old_driver_name = ''
-            old_icon_path = ''
-            insert_connections = True
-            for line in driver_xml_lines:
-                added_line = False
-                if '<name>' in line:
-                    new_line = line
-                    if do_name_swap:
-                        result = re.search('<name>(.*)</name>', line)
-                        new_line = line.replace(result.group(1), driver_name)
-                        do_name_swap = False
-                    if state_name_changes:
-                        for name_change in state_name_changes:
-                            if name_change[0] + ' ' in line or name_change[2] + ' ' in line:
-                                new_line = new_line.replace(name_change[0], name_change[1])
-                                new_line = new_line.replace(name_change[2], name_change[3])
-                            elif name_change[0] + '<' in line or name_change[2] + '<' in line:
-                                new_line = new_line.replace(name_change[0], name_change[1])
-                                new_line = new_line.replace(name_change[2], name_change[3])
-                            elif name_change[0] + '"' in line or name_change[2] + '"' in line:
-                                new_line = new_line.replace(name_change[0], name_change[1])
-                                new_line = new_line.replace(name_change[2], name_change[3])
-                            elif name_change[0] + '_' in line or name_change[2] + '_' in line:
-                                new_line = new_line.replace(name_change[0], name_change[1])
-                                new_line = new_line.replace(name_change[2], name_change[3])
-
-                    append_line(modified_xml_lines, new_line)
-                    added_line = True
-                elif '<modified>' in line and update_modified_date:
-                    result = re.search('<modified>(.*)</modified>', line)
-                    modified_datestamp = str(datetime.now().strftime("%m/%d/%Y %H:%M"))
-                    line = line.replace(result.group(1), modified_datestamp)
-                    append_line(modified_xml_lines, line)
-                    added_line = True
-                elif '<proxy' in line:
-                    if not proxy_step2:
-                        temp_str = ''
-                        temp_step2 = False
-                        for character in line:
-                            if not temp_step2:
-                                if len(temp_str) < 6:
-                                    temp_str += character
-                                else:
-                                    temp_str = temp_str[1:len(temp_str)]
-                                    temp_str += character
-                            else:
-                                if character != '"':
-                                    old_driver_name += character
-                                else:
+            # Do multi-state related changes
+            if state_name_changes:
+                for item_tag in self.uc.driver_xml.get_tag('item'):
+                    for state_name_change in state_name_changes:
+                        if state_name_change[0] in item_tag.value:
+                            item_tag.value = item_tag.value.replace(state_name_change[0], state_name_change[1])
+                            break
+                        if state_name_change[2] in item_tag.value:
+                            item_tag.value = item_tag.value.replace(state_name_change[2], state_name_change[3])
+                            break
+                for name_tag in self.uc.driver_xml.get_tag('name'):
+                    for state_name_change in state_name_changes:
+                        if state_name_change[0] in name_tag.value:
+                            name_tag.value = name_tag.value.replace(state_name_change[0], state_name_change[1])
+                            break
+                        if state_name_change[2] in name_tag.value:
+                            name_tag.value = name_tag.value.replace(state_name_change[2], state_name_change[3])
+                            break
+                for description_tag in self.uc.driver_xml.get_tag('description'):
+                    for state_name_change in state_name_changes:
+                        if state_name_change[0] in description_tag.value:
+                            description_tag.value = description_tag.value.replace(state_name_change[0],
+                                                                                  state_name_change[1])
+                            break
+                        if state_name_change[2] in description_tag.value:
+                            description_tag.value = description_tag.value.replace(state_name_change[2],
+                                                                                  state_name_change[3])
+                            break
+                for state_tag in self.uc.driver_xml.get_tag('state'):
+                    for param in state_tag.parameters:
+                        if param[0] == 'id':
+                            for state_name_change in state_name_changes:
+                                if state_name_change[0] in state_tag.value:
+                                    state_tag.value = state_tag.value.replace(state_name_change[0],
+                                                                              state_name_change[1])
                                     break
-                            if temp_str == 'name="':
-                                temp_step2 = True
-                        line = line.replace(old_driver_name, driver_name)
-                        append_line(modified_xml_lines, line)
-                        added_line = True
-                        proxy_step2 = True
-                    elif 'name="' + old_driver_name + '"' in line:
-                        line = line.replace('name="' + old_driver_name + '"', 'name="' + driver_name + '"')
-                        append_line(modified_xml_lines, line)
-                        added_line = True
-                elif '<Icon' in line:
-                    new_line = line
-                    result = re.search('driver/(.*)/icons', new_line)
-                    if not icon_step2 and result:
-                        old_icon_path = result.group(1)
-                        new_line = new_line.replace(old_icon_path, driver_name)
-                        append_line(modified_xml_lines, new_line)
-                        added_line = True
-                    elif old_icon_path in line:
-                        new_line = new_line.replace(old_icon_path, driver_name)
-                        append_line(modified_xml_lines, new_line)
-                        added_line = True
-                elif '<creator>' in line and replace_creator:
-                    result = re.search('<creator>(.*)</creator>', line)
-                    line = line.replace(result.group(1), creator)
-                    append_line(modified_xml_lines, line)
-                    added_line = True
-                elif '<manufacturer>' in line and replace_manufacturer:
-                    result = re.search('<manufacturer>(.*)</manufacturer>', line)
-                    line = line.replace(result.group(1), manufacturer)
-                    append_line(modified_xml_lines, line)
-                    added_line = True
-                elif '</connections>' in line and insert_connections:
-                    insert_connections = False
-                    for conn in reversed(self.uc.connections_panel.connections):
-                        if conn.original or conn.name_entry['state'] == DISABLED:
-                            continue
-                        modified_xml_lines.append('\t\t<connection>\n')
-                        conn_type = conn.type.get()
-                        value = self.uc.conn_dict[conn_type]
-                        modified_xml_lines.append('\t\t\t<id>' + str(conn.id) + '</id>\n')
-                        value = value.replace('REPLACE', conn.name_entry.get())
-                        modified_xml_lines.append(value + '\n')
-                        modified_xml_lines.append('\t\t\t<classes>\n')
-                        modified_xml_lines.append('\t\t\t\t<class>\n')
-                        temp_line = '\t\t\t\t\t<classname>' + conn_type + '</classname>\n'
-                        modified_xml_lines.append(temp_line)
-                        modified_xml_lines.append('\t\t\t\t</class>\n')
-                        modified_xml_lines.append('\t\t\t</classes>\n')
-                        modified_xml_lines.append('\t\t</connection>\n')
-                elif state_name_changes and ('<item>' in line or '<state' in line or '<description>' in line):
-                    new_line = line
-                    for name_change in state_name_changes:
-                        if name_change[0] + ' ' in line or name_change[2] + ' ' in line:
-                            new_line = new_line.replace(name_change[0], name_change[1])
-                            new_line = new_line.replace(name_change[2], name_change[3])
-                        elif name_change[0] + '<' in line or name_change[2] + '<' in line:
-                            new_line = new_line.replace(name_change[0], name_change[1])
-                            new_line = new_line.replace(name_change[2], name_change[3])
-                        elif name_change[0] + '"' in line or name_change[2] + '"' in line:
-                            new_line = new_line.replace(name_change[0], name_change[1])
-                            new_line = new_line.replace(name_change[2], name_change[3])
-                        elif name_change[0] + '_' in line or name_change[2] + '_' in line:
-                            new_line = new_line.replace(name_change[0], name_change[1])
-                            new_line = new_line.replace(name_change[2], name_change[3])
+                                if state_name_change[2] in state_tag.value:
+                                    state_tag.value = state_tag.value.replace(state_name_change[2],
+                                                                              state_name_change[3])
+                                    break
 
-                    append_line(modified_xml_lines, new_line)
-                    added_line = True
-                if not added_line:
-                    append_line(modified_xml_lines, line)
-            with open(self.uc.temp_dir + 'driver/driver.xml', 'w', errors='ignore') as driver_xml_file:
-                driver_xml_file.writelines(modified_xml_lines)
+            # Update xml with new driver name
+            self.uc.driver_xml.get_tag('name')[0].value = driver_name
+            modified_datestamp = str(datetime.now().strftime("%m/%d/%Y %H:%M"))
+            self.uc.driver_xml.get_tag('modified')[0].value = modified_datestamp
+            self.uc.driver_xml.get_tag('creator')[0].value = 'C4IconSwapper'
+            self.uc.driver_xml.get_tag('manufacturer')[0].value = 'C4IconSwapper'
+            for param in self.uc.driver_xml.get_tag('proxy')[0].parameters:
+                if param[0] == 'name':
+                    param[1] = driver_name
+            for icon_tag in self.uc.driver_xml.get_tag('Icon'):
+                result = re.search('driver/(.*)/icons', icon_tag.value).group(1)
+                icon_tag.value = icon_tag.value.replace(result, driver_name)
 
-            # Remove .bak files
+            os.rename(self.uc.temp_dir + 'driver/driver.xml', self.uc.temp_dir + 'driver/driver.xml.bak')
+            with open(self.uc.temp_dir + 'driver/driver.xml', 'w', errors='ignore') as out_file:
+                out_file.writelines(self.uc.driver_xml.get_lines())
+
             bak_files = []
             temp_temp_dir = self.uc.temp_dir + 'temp_bak_files/'
             if self.remove_backups.get() == 1:
@@ -1256,7 +1168,7 @@ class C4IconSwapper:
                     base_name = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
                     os.rename(self.uc.cur_dir + driver_name + '.zip', base_name + '.c4z')
 
-            # Cleanup temp files and restore original xml with incremented version number
+            # Cleanup temp files and restore original xml
             if len(bak_files) != 0 and os.path.isdir(temp_temp_dir):
                 for file_list in bak_files:
                     shutil.copy(temp_temp_dir + '/' + file_list[2], file_list[0] + '/' + file_list[1])
@@ -1524,6 +1436,7 @@ class C4IconSwapper:
         self.schedule_entry_restore = False
         self.restore_entry_string = ''
         self.time_var = 0
+        self.driver_version = -1
         self.conn_dict = {}
         for key in ['HDMI IN', 'COMPOSITE IN', 'VGA IN', 'COMPONENT IN', 'DVI IN']:
             self.conn_dict[key] = '\t\t\t<type>5</type>\n\t\t\t' \

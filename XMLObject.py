@@ -135,7 +135,7 @@ class XMLObject:
         self.children = []
         self.name = xml_data[0]
         self.value = xml_data[1]
-        self.parameters = []
+        self.parameters = []  # [param_name, param_value]
         self.self_closed = False
         self.delete = False
         if '/' in self.name:
