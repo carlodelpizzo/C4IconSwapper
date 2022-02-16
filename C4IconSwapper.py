@@ -16,7 +16,7 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.0a'
+version = '5.1a'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -78,33 +78,36 @@ class C4IconSwapper:
             self.icon_name_label.place(x=108 + self.x, y=193 + self.y, anchor='n')
 
             # Buttons
-            self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_c4z)
+            self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_c4z, takefocus=0)
             self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
 
-            self.restore_button = tk.Button(self.uc.root, text='Restore\nOriginal Icon', command=self.restore_icon)
+            self.restore_button = tk.Button(self.uc.root, text='Restore\nOriginal Icon', command=self.restore_icon,
+                                            takefocus=0)
             self.restore_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
             self.restore_button['state'] = DISABLED
 
-            self.restore_all_button = tk.Button(self.uc.root, text='Restore All', command=self.restore_all)
+            self.restore_all_button = tk.Button(self.uc.root, text='Restore All', command=self.restore_all, takefocus=0)
             self.restore_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
             self.restore_all_button['state'] = DISABLED
 
-            self.prev_icon_button = tk.Button(self.uc.root, text='Prev', command=self.prev_icon, width=5)
+            self.prev_icon_button = tk.Button(self.uc.root, text='Prev', command=self.prev_icon, width=5, takefocus=0)
             self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
             self.prev_icon_button['state'] = DISABLED
 
-            self.next_icon_button = tk.Button(self.uc.root, text='Next', command=self.next_icon, width=5)
+            self.next_icon_button = tk.Button(self.uc.root, text='Next', command=self.next_icon, width=5, takefocus=0)
             self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
             self.next_icon_button['state'] = DISABLED
 
-            self.gen_driver_button = tk.Button(self.uc.root, text='Load Generic Driver', command=self.load_gen_driver)
+            self.gen_driver_button = tk.Button(self.uc.root, text='Load Generic Driver', command=self.load_gen_driver,
+                                               takefocus=0)
             self.gen_driver_button.place(x=228 + self.x, y=219 + self.y, anchor='n')
 
-            self.multi_driver_button = tk.Button(self.uc.root, text='Load Multi Driver', command=self.load_gen_multi)
+            self.multi_driver_button = tk.Button(self.uc.root, text='Load Multi Driver', command=self.load_gen_multi,
+                                                 takefocus=0)
             self.multi_driver_button.place(x=5 + self.x, y=219 + self.y, anchor='nw')
 
             # Entry
-            self.file_entry_field = tk.Entry(self.uc.root, width=25)
+            self.file_entry_field = tk.Entry(self.uc.root, width=25, takefocus=0)
             self.file_entry_field.insert(0, 'Select .c4z file...')
             self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
             self.file_entry_field['state'] = DISABLED
@@ -612,27 +615,31 @@ class C4IconSwapper:
             self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack3)
 
             # Buttons
-            self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_replacement)
+            self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_replacement,
+                                              takefocus=0)
             self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
 
-            self.replace_all_button = tk.Button(self.uc.root, text='Replace All', command=self.replace_all)
+            self.replace_all_button = tk.Button(self.uc.root, text='Replace All', command=self.replace_all, takefocus=0)
             self.replace_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
             self.replace_all_button['state'] = DISABLED
 
-            self.replace_button = tk.Button(self.uc.root, text='Replace\nCurrent Icon', command=self.replace_icon)
+            self.replace_button = tk.Button(self.uc.root, text='Replace\nCurrent Icon', command=self.replace_icon,
+                                            takefocus=0)
             self.replace_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
             self.replace_button['state'] = DISABLED
 
-            self.prev_icon_button = tk.Button(self.uc.root, text='Prev', command=self.dec_img_stack, width=5)
+            self.prev_icon_button = tk.Button(self.uc.root, text='Prev', command=self.dec_img_stack, width=5,
+                                              takefocus=0)
             self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
             self.prev_icon_button['state'] = DISABLED
 
-            self.next_icon_button = tk.Button(self.uc.root, text='Next', command=self.inc_img_stack, width=5)
+            self.next_icon_button = tk.Button(self.uc.root, text='Next', command=self.inc_img_stack, width=5,
+                                              takefocus=0)
             self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
             self.next_icon_button['state'] = DISABLED
 
             # Entry
-            self.file_entry_field = tk.Entry(self.uc.root, width=25)
+            self.file_entry_field = tk.Entry(self.uc.root, width=25, takefocus=0)
             self.file_entry_field.insert(0, 'Select image file...')
             self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
             self.file_entry_field['state'] = DISABLED
@@ -900,7 +907,7 @@ class C4IconSwapper:
             self.driver_name_label.place(x=65 + self.x, y=160 + self.y, anchor='w')
 
             # Buttons
-            self.export_button = tk.Button(self.uc.root, text='Export', width=20, command=self.export_c4z)
+            self.export_button = tk.Button(self.uc.root, text='Export', width=20, command=self.export_c4z, takefocus=0)
             self.export_button.place(x=145 + self.x, y=195 + self.y, anchor='n')
             self.export_button['state'] = DISABLED
 
@@ -912,16 +919,17 @@ class C4IconSwapper:
             # Checkboxes
             self.inc_driver_version = IntVar(value=1)
             self.inc_driver_check = Checkbutton(self.uc.root, text='update driver version',
-                                                variable=self.inc_driver_version)
+                                                variable=self.inc_driver_version, takefocus=0)
             self.inc_driver_check.place(x=63 + self.x, y=135 + self.y, anchor='w')
 
             self.over_orig = IntVar()
-            self.over_orig_check = Checkbutton(self.uc.root, text='overwrite original file', variable=self.over_orig)
+            self.over_orig_check = Checkbutton(self.uc.root, text='overwrite original file', variable=self.over_orig,
+                                               takefocus=0)
             self.over_orig_check.place(x=63 + self.x, y=115 + self.y, anchor='w')
 
             self.remove_backups = IntVar()
             self.remove_backups_check = Checkbutton(self.uc.root, text='remove backup files',
-                                                    variable=self.remove_backups)
+                                                    variable=self.remove_backups, takefocus=0)
             self.remove_backups_check.place(x=63 + self.x, y=95 + self.y, anchor='w')
 
         def export_c4z(self):
@@ -958,26 +966,24 @@ class C4IconSwapper:
                     if formatted_name == '':
                         formatted_name = name_change[0]
                     name_change[1] = formatted_name
-                for name_change in state_name_changes:
-                    for name_compare in state_name_changes:
-                        if state_name_changes.index(name_change) == state_name_changes.index(name_compare):
-                            continue
-                        if name_change[1] == name_compare[1]:
-                            name_change[1] += 'A' + str(random.randint(1111, 9999))
-                            break
+                # for name_change in state_name_changes:
+                #     for name_compare in state_name_changes:
+                #         if state_name_changes.index(name_change) == state_name_changes.index(name_compare):
+                #             continue
+                #         if name_change[1] == name_compare[1]:
+                #             name_change[1] += 'A' + str(random.randint(1111, 9999))
+                #             break
                 pop_list = []
                 for name_change in state_name_changes:
                     if name_change[0] == name_change[1]:
-                        pop_list.append(state_name_changes.index(name_change))
-                pop_list.sort(reverse=True)
-                for index in pop_list:
-                    state_name_changes.pop(index)
-
-                for name_change in state_name_changes:
+                        pop_list.insert(0, state_name_changes.index(name_change))
+                        continue
                     name_change.append(name_change[0].replace(name_change[0][0],
                                                               letters[capital_letters.index(name_change[0][0])]))
                     name_change.append(name_change[1].replace(name_change[1][0],
                                                               letters[capital_letters.index(name_change[1][0])]))
+                for index in pop_list:
+                    state_name_changes.pop(index)
 
                 modified_lua_lines = []
                 with open(self.uc.temp_dir + 'driver/driver.lua', errors='ignore') as driver_lua_file:
@@ -1208,14 +1214,14 @@ class C4IconSwapper:
                 self.type_menu['state'] = DISABLED
 
                 # Buttons
-                self.add_button = tk.Button(self.uc.root, text='Add', width=3, command=self.enable)
+                self.add_button = tk.Button(self.uc.root, text='Add', width=3, command=self.enable, takefocus=0)
                 self.add_button.place(x=self.x, y=self.y, anchor='w')
                 self.add_button['state'] = DISABLED
 
-                self.x_button = tk.Button(self.uc.root, text='x', width=1, command=self.disable)
+                self.x_button = tk.Button(self.uc.root, text='x', width=1, command=self.disable, takefocus=0)
                 self.x_button.place(x=-420, y=-420, anchor='w')
 
-                self.del_button = tk.Button(self.uc.root, text='Del', width=3, command=self.flag_delete)
+                self.del_button = tk.Button(self.uc.root, text='Del', width=3, command=self.flag_delete, takefocus=0)
                 self.del_button.place(x=-420, y=-420, anchor='w')
 
             def enable(self):
@@ -1224,6 +1230,7 @@ class C4IconSwapper:
                 self.add_button.place(x=-420, y=-420, anchor='w')
                 self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
                 self.tags[0].delete = False
+                self.name_entry['takefocus'] = 1
 
             def disable(self):
                 self.name_entry['state'] = DISABLED
@@ -1231,6 +1238,7 @@ class C4IconSwapper:
                 self.add_button.place(x=self.x, y=self.y, anchor='w')
                 self.x_button.place(x=-420, y=-420, anchor='w')
                 self.tags[0].delete = True
+                self.name_entry['takefocus'] = 0
 
             def flag_delete(self):
                 if not self.original:
@@ -1285,6 +1293,7 @@ class C4IconSwapper:
                 self.name_entry.insert(0, 'Connection Name...')
                 self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
                 self.name_entry['state'] = DISABLED
+                self.name_entry['takefocus'] = 0
 
                 # Dropdown
                 self.type.set('HDMI IN')
@@ -1357,38 +1366,22 @@ class C4IconSwapper:
 
     class StatePanel:
         class DriverState:
-            def __init__(self, upper_class, name: str, x_pos: int, y_pos: int):
+            def __init__(self, upper_class, name: str, x_pos: int, y_pos: int, state_name='State69:'):
                 # Initialize Driver State UI Object
                 self.uc = upper_class
                 self.original_name = name
                 self.x = x_pos
                 self.y = y_pos
-                self.delete = False
-                self.add = False
+                self.name = state_name
+
+                # Label
+                self.name_label = tk.Label(self.uc.root, text=self.name)
+                self.name_label.place(x=self.x + 35, y=self.y, anchor='e')
 
                 # Entry
                 self.name_entry = tk.Entry(self.uc.root, width=20)
                 self.name_entry.insert(0, name)
                 self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
-                self.name_entry['state'] = DISABLED
-
-                # Buttons
-                self.add_button = tk.Button(self.uc.root, text='Add', width=3, command=self.flag_add)
-                self.add_button.place(x=-420, y=-420, anchor='w')
-                self.add_button['state'] = DISABLED
-
-                self.del_button = tk.Button(self.uc.root, text='Del', width=3, command=self.flag_delete)
-                self.del_button.place(x=self.x, y=self.y, anchor='w')
-                self.del_button['state'] = DISABLED
-
-            def flag_add(self):
-                self.add_button.place(x=-420, y=-420, anchor='w')
-                self.del_button.place(x=self.x, y=self.y, anchor='w')
-                self.name_entry['state'] = NORMAL
-
-            def flag_delete(self):
-                self.add_button.place(x=self.x, y=self.y, anchor='w')
-                self.del_button.place(x=-420, y=-420, anchor='w')
                 self.name_entry['state'] = DISABLED
 
         def __init__(self, upper_class):
@@ -1402,7 +1395,8 @@ class C4IconSwapper:
             for i in range(13):
                 self.states.append(self.DriverState(self.uc, 'state' + str(i + 1),
                                                     (int(i / 7) * x_spacing) + self.x,
-                                                    ((i % 7) * y_spacing) + 20 + self.y))
+                                                    ((i % 7) * y_spacing) + 20 + self.y,
+                                   state_name='state' + str(i + 1) + ':'))
 
     def __init__(self):
         # Initialize main program
@@ -1480,6 +1474,11 @@ class C4IconSwapper:
         self.connections_panel = self.ConnectionsPanel(self)
         self.state_panel = self.StatePanel(self)
 
+        for conn in self.connections_panel.connections:
+            conn.name_entry['takefocus'] = 0
+        for state in self.state_panel.states:
+            state.name_entry['takefocus'] = 0
+
         # Separators
         self.separator0 = ttk.Separator(self.root, orient='vertical')
         self.separator0.place(x=305, y=0, height=250)
@@ -1492,10 +1491,11 @@ class C4IconSwapper:
 
         # Buttons
         self.toggle_conn_button = tk.Button(self.root, text='Show Connections', width=15,
-                                            command=self.toggle_connections_panel)
+                                            command=self.toggle_connections_panel, takefocus=0)
         self.toggle_conn_button.place(x=700, y=220, anchor='n')
 
-        self.show_states_button = tk.Button(self.root, text='Show States', width=15, command=self.show_states_panel)
+        self.show_states_button = tk.Button(self.root, text='Show States', width=15, command=self.show_states_panel,
+                                            takefocus=0)
         self.show_states_button.place(x=820, y=220, anchor='n')
 
         # Version Label
@@ -1519,17 +1519,50 @@ class C4IconSwapper:
             if self.toggle_conn_button['text'] == 'Show Connections':
                 self.toggle_conn_button['text'] = 'Hide Connections'
                 self.root.geometry('915x510')
+                for conn in self.connections_panel.connections:
+                    if conn.name_entry['state'] == NORMAL:
+                        conn.name_entry['takefocus'] = 1
                 return
             self.toggle_conn_button['text'] = 'Show Connections'
             self.root.geometry('915x250')
+            for conn in self.connections_panel.connections:
+                conn.name_entry['takefocus'] = 0
             return
         if self.toggle_conn_button['text'] == 'Show Connections':
             self.toggle_conn_button['text'] = 'Hide Connections'
             self.root.geometry('1300x510')
+            for conn in self.connections_panel.connections:
+                if conn.name_entry['state'] == NORMAL:
+                    conn.name_entry['takefocus'] = 1
             return
         self.toggle_conn_button['text'] = 'Show Connections'
         self.root.geometry('1300x250')
+        for conn in self.connections_panel.connections:
+            conn.name_entry['takefocus'] = 0
         return
+
+    def show_states_panel(self):
+        if not self.states_enabled:
+            if self.toggle_conn_button['text'] == 'Show Connections':
+                self.root.geometry('1300x250')
+                self.states_enabled = True
+            else:
+                self.root.geometry('1300x510')
+                self.states_enabled = True
+            self.show_states_button['text'] = 'Hide States'
+            for state in self.state_panel.states:
+                if state.name_entry['state'] == NORMAL:
+                    state.name_entry['takefocus'] = 1
+            return
+        elif self.toggle_conn_button['text'] == 'Show Connections':
+            self.root.geometry('915x250')
+            self.states_enabled = False
+        else:
+            self.root.geometry('915x510')
+            self.states_enabled = False
+        for state in self.state_panel.states:
+            state.name_entry['takefocus'] = 0
+        self.show_states_button['text'] = 'Show States'
 
     def restore_entry_text(self):
         if self.schedule_entry_restore:
@@ -1556,27 +1589,7 @@ class C4IconSwapper:
         elif event.keysym == 'Down':
             self.replacement_panel.dec_img_stack()
 
-    def show_states_panel(self):
-        if not self.states_enabled:
-            if self.toggle_conn_button['text'] == 'Show Connections':
-                self.root.geometry('1300x250')
-                self.states_enabled = True
-            else:
-                self.root.geometry('1300x510')
-                self.states_enabled = True
-            self.show_states_button['text'] = 'Hide States'
-        elif self.toggle_conn_button['text'] == 'Show Connections':
-            self.root.geometry('915x250')
-            self.states_enabled = False
-        else:
-            self.root.geometry('915x510')
-            self.states_enabled = False
-        self.show_states_button['text'] = 'Show States'
-
     def enable_states(self, lua_file):
-        for state in self.state_panel.states:
-            state.add_button['state'] = NORMAL
-            state.del_button['state'] = NORMAL
         state_names = []
         find_names = False
         for line in lua_file:
@@ -1608,15 +1621,16 @@ class C4IconSwapper:
 
         for state_name in state_names:
             self.state_panel.states[state_names.index(state_name)].name_entry['state'] = NORMAL
+            if self.states_enabled:
+                self.state_panel.states[state_names.index(state_name)].name_entry['takefocus'] = 1
             self.state_panel.states[state_names.index(state_name)].name_entry.delete(0, END)
             self.state_panel.states[state_names.index(state_name)].name_entry.insert(0, state_name)
             self.state_panel.states[state_names.index(state_name)].original_name = state_name
 
     def disable_states(self):
         for state in self.state_panel.states:
-            state.add_button['state'] = DISABLED
             state.name_entry['state'] = DISABLED
-            state.del_button['state'] = DISABLED
+            state.name_entry['takefocus'] = 0
             state.original_name = ''
 
 
