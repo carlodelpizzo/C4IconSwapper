@@ -320,14 +320,16 @@ class C4IconSwapper:
                     temp_list.append(icon)
                     continue
                 else:
-                    if 'device' not in temp_list[0].path and 'device' not in temp_list[0].root and 'device' not in temp_list[0].name:
+                    if 'device' not in temp_list[0].path and 'device' not in temp_list[0].root and \
+                            'device' not in temp_list[0].name:
                         self.icon_groups.append(self.IconGroup(temp_list, extra=True))
                     else:
                         self.icon_groups.append(self.IconGroup(temp_list))
                     temp_list = [icon]
 
             if len(temp_list) != 0:
-                if 'device' not in temp_list[0].path or 'device' not in temp_list[0].root:
+                if 'device' not in temp_list[0].path and 'device' not in temp_list[0].root and \
+                        'device' not in temp_list[0].name:
                     self.icon_groups.append(self.IconGroup(temp_list, extra=True))
                 else:
                     self.icon_groups.append(self.IconGroup(temp_list))
