@@ -16,7 +16,7 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.1a'
+version = '5.2a'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -46,11 +46,12 @@ class C4IconSwapper:
                         break
 
         class IconGroup:
-            def __init__(self, icons: list):
+            def __init__(self, icons: list, extra=False):
                 # Initialize Icon Group
                 self.name = icons[0].name
                 self.path = icons[0].path
                 self.icons = icons
+                self.extra = extra
 
         def __init__(self, upper_class):
             # Initialize C4z Panel
@@ -59,6 +60,7 @@ class C4IconSwapper:
             self.uc = upper_class
             self.current_icon = 0
             self.icon_groups = []
+            self.extra_icons = 0
             self.valid_connections = ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI', 'STEREO', 'DIGITAL_OPTICAL',
                                       'IR_OUT', 'HDMI IN', 'COMPOSITE IN', 'VGA IN', 'COMPONENT IN', 'DVI IN',
                                       'STEREO IN', 'DIGITAL_OPTICAL IN', 'HDMI OUT', 'COMPOSITE OUT', 'VGA OUT',
@@ -114,6 +116,22 @@ class C4IconSwapper:
             self.file_entry_field.drop_target_register(DND_FILES)
             self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
+            # Checkbox
+            self.show_extra_icons = IntVar(value=0)
+            self.show_extra_icons.trace('w', self.toggle_extra_icons)
+            self.show_sub_icons_check = Checkbutton(self.uc.root, text='show extra icons',
+                                                    variable=self.show_extra_icons, takefocus=0)
+            self.show_sub_icons_check.place(x=self.x + 177, y=self.y + 176, anchor='nw')
+
+        def toggle_extra_icons(self, *args):
+            if args:  # For IDE unused argument warning
+                pass
+            if not self.uc.driver_selected:
+                return
+            if self.show_extra_icons.get() == 0 and self.uc.c4z_panel.icon_groups[self.uc.c4z_panel.current_icon].extra:
+                self.next_icon()
+            self.update_icon()
+
         def load_gen_driver(self):
             # Upload generic two-state driver from Base64Assets
             self.multi_driver_button['state'] = NORMAL
@@ -165,7 +183,12 @@ class C4IconSwapper:
             self.blank_image_label.configure(image=icon)
             self.blank_image_label.image = icon
 
-            self.icon_label.config(text='icon: ' + str(self.current_icon + 1) + ' of ' + str(len(self.icon_groups)))
+            if self.show_extra_icons.get() == 0 and self.extra_icons != 0:
+                self.icon_label.config(text='icon: ' + str(self.current_icon + 1) + ' of ' +
+                                            str(len(self.icon_groups) - self.extra_icons) +
+                                            ' (' + str(len(self.icon_groups)) + ')')
+            else:
+                self.icon_label.config(text='icon: ' + str(self.current_icon + 1) + ' of ' + str(len(self.icon_groups)))
             self.icon_name_label.config(text='name: ' + self.icon_groups[self.current_icon].name)
 
         def upload_c4z(self, given_path=''):
@@ -297,12 +320,23 @@ class C4IconSwapper:
                     temp_list.append(icon)
                     continue
                 else:
-                    self.icon_groups.append(self.IconGroup(temp_list))
+                    if 'device' not in temp_list[0].path and 'device' not in temp_list[0].root and 'device' not in temp_list[0].name:
+                        self.icon_groups.append(self.IconGroup(temp_list, extra=True))
+                    else:
+                        self.icon_groups.append(self.IconGroup(temp_list))
                     temp_list = [icon]
-                    continue
 
             if len(temp_list) != 0:
-                self.icon_groups.append(self.IconGroup(temp_list))
+                if 'device' not in temp_list[0].path or 'device' not in temp_list[0].root:
+                    self.icon_groups.append(self.IconGroup(temp_list, extra=True))
+                else:
+                    self.icon_groups.append(self.IconGroup(temp_list))
+
+            # Count extra icons
+            self.extra_icons = 0
+            for icon_group in self.icon_groups:
+                if icon_group.extra:
+                    self.extra_icons += 1
 
             # Update entry fields
             if len(self.icon_groups) == 0:
@@ -343,6 +377,7 @@ class C4IconSwapper:
                 self.uc.export_panel.driver_name_entry.delete(0, 'end')
                 self.uc.export_panel.driver_name_entry.insert(0, orig_driver_name)
             self.uc.driver_selected = True
+            self.current_icon = 0
             self.update_icon()
 
             # Update button statuses
@@ -438,6 +473,13 @@ class C4IconSwapper:
             else:
                 self.restore_button['state'] = DISABLED
 
+            if self.show_extra_icons.get() == 0 and self.icon_groups[self.current_icon].extra:
+                while self.icon_groups[self.current_icon].extra:
+                    if self.current_icon - 1 < 0:
+                        self.current_icon = self.current_icon - 1 + len(self.icon_groups)
+                    else:
+                        self.current_icon -= 1
+
             self.update_icon()
 
         def next_icon(self):
@@ -454,6 +496,13 @@ class C4IconSwapper:
                 self.restore_button['state'] = ACTIVE
             else:
                 self.restore_button['state'] = DISABLED
+
+            if self.show_extra_icons.get() == 0 and self.icon_groups[self.current_icon].extra:
+                while self.icon_groups[self.current_icon].extra:
+                    if self.current_icon + 1 >= len(self.icon_groups):
+                        self.current_icon = self.current_icon + 1 - len(self.icon_groups)
+                    else:
+                        self.current_icon += 1
 
             self.update_icon()
 
@@ -765,6 +814,8 @@ class C4IconSwapper:
 
         def replace_all(self):
             for i in range(len(self.uc.c4z_panel.icon_groups)):
+                if self.uc.c4z_panel.show_extra_icons.get() == 0 and self.uc.c4z_panel.icon_groups[i].extra:
+                    continue
                 self.replace_icon(index=i)
 
         def drop_in_replacement(self, event):
@@ -904,17 +955,17 @@ class C4IconSwapper:
 
             # Labels
             self.driver_name_label = tk.Label(self.uc.root, text='Driver Name:')
-            self.driver_name_label.place(x=65 + self.x, y=160 + self.y, anchor='w')
+            self.driver_name_label.place(x=65 + self.x, y=165 + self.y, anchor='w')
 
             # Buttons
             self.export_button = tk.Button(self.uc.root, text='Export', width=20, command=self.export_c4z, takefocus=0)
-            self.export_button.place(x=145 + self.x, y=195 + self.y, anchor='n')
+            self.export_button.place(x=145 + self.x, y=200 + self.y, anchor='n')
             self.export_button['state'] = DISABLED
 
             # Entry
             self.driver_name_entry = tk.Entry(self.uc.root, width=25)
             self.driver_name_entry.insert(0, 'New Driver')
-            self.driver_name_entry.place(x=145 + self.x, y=170 + self.y, anchor='n')
+            self.driver_name_entry.place(x=145 + self.x, y=175 + self.y, anchor='n')
 
             # Checkboxes
             self.inc_driver_version = IntVar(value=1)
