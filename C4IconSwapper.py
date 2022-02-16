@@ -1379,10 +1379,52 @@ class C4IconSwapper:
                 self.name_label.place(x=self.x + 35, y=self.y, anchor='e')
 
                 # Entry
-                self.name_entry = tk.Entry(self.uc.root, width=20)
-                self.name_entry.insert(0, name)
+                self.name_var = StringVar()
+                self.name_var.set(name)
+                self.name_var.trace('w', self.check_dupe)
+                self.name_entry = tk.Entry(self.uc.root, width=20, textvariable=self.name_var)
+                # self.name_entry.insert(0, name)
                 self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
                 self.name_entry['state'] = DISABLED
+
+            def check_dupe(self, *args):
+                if args:  # For IDE unused argument warning
+                    pass
+                duplicate = False
+                for state in self.uc.state_panel.states:
+                    if state is not self and state.name_var.get() == self.name_var.get():
+                        duplicate = True
+                        for dupe_list in self.uc.state_panel.dupes:
+                            if self in dupe_list:
+                                if len(dupe_list) == 2:
+                                    dupe_list[0].name_entry['background'] = 'white'
+                                    dupe_list[1].name_entry['background'] = 'white'
+                                    self.uc.state_panel.dupes.pop(self.uc.state_panel.dupes.index(dupe_list))
+                                    break
+                                dupe_list.pop(dupe_list.index(self))
+                                break
+                        append_new_list = True
+                        for dupe_list in self.uc.state_panel.dupes:
+                            if dupe_list[0].name_var.get() == self.name_var.get():
+                                dupe_list.append(self)
+                                append_new_list = False
+                                break
+                        if append_new_list:
+                            self.uc.state_panel.dupes.append([self, state])
+                        self.name_entry['background'] = 'red'
+                        state.name_entry['background'] = 'red'
+                        break
+                if not duplicate:
+                    for dupe_list in self.uc.state_panel.dupes:
+                        if self in dupe_list:
+                            if len(dupe_list) == 2:
+                                dupe_list[0].name_entry['background'] = 'white'
+                                dupe_list[1].name_entry['background'] = 'white'
+                                self.uc.state_panel.dupes.pop(self.uc.state_panel.dupes.index(dupe_list))
+                                break
+                            dupe_list.pop(dupe_list.index(self))
+                            break
+                    self.name_entry['background'] = 'white'
 
         def __init__(self, upper_class):
             # Initialize State Panel
@@ -1390,6 +1432,7 @@ class C4IconSwapper:
             self.y = 0
             self.uc = upper_class
             self.states = []
+            self.dupes = []
             x_spacing = 200
             y_spacing = 34
             for i in range(13):
