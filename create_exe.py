@@ -7,8 +7,9 @@ cur_dir = os.getcwd() + '/'
 
 
 def make_exe(python_file: str):
-    if python_file[len(python_file) - 3: len(python_file)] != '.py':
-        return print('Not a python file...')
+    if not python_file.endswith('.py'):
+        print('Not a python file...')
+        return
     else:
         python_file_name = python_file[0:len(python_file) - 3]
 
@@ -39,6 +40,7 @@ def make_exe(python_file: str):
 
 # Change to True before running; this is to prevent accidental run; add tkdnd2.8\ to Python\Python38\tcl\tcl8.6\
 execute = False
+
 if execute:
     overwrite_file = '_'
     if os.path.isfile(cur_dir + 'C4IconSwapper.' + version + '.exe'):
