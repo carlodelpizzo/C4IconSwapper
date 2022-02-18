@@ -1015,7 +1015,7 @@ class C4IconSwapper:
                 overwrite_pop_up.destroy()
 
             for state in self.uc.state_panel.states:
-                if state.name_entry['background'] == 'red' or state.name_entry['background'] == 'cyan':
+                if state.name_entry['background'] == 'pink' or state.name_entry['background'] == 'cyan':
                     self.abort = True
                     duplicate_states_pop_up = Toplevel(self.uc.root)
                     duplicate_states_pop_up.title('Duplicate States Found')
@@ -1492,8 +1492,8 @@ class C4IconSwapper:
                                 break
                         if append_new_list:
                             self.uc.state_panel.dupes.append([self, state])
-                        self.name_entry['background'] = 'red'
-                        state.name_entry['background'] = 'red'
+                        self.name_entry['background'] = 'pink'
+                        state.name_entry['background'] = 'pink'
                         break
                 if not duplicate:
                     for dupe_list in self.uc.state_panel.dupes:
@@ -1525,7 +1525,7 @@ class C4IconSwapper:
                             using_existing_name = True
                             break
                     if using_existing_name:
-                        if self.name_entry['background'] != 'red':
+                        if self.name_entry['background'] != 'pink':
                             self.name_entry['background'] = 'cyan'
                         break
 
