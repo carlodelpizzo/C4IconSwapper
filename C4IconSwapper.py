@@ -16,7 +16,7 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.3a'
+version = '5.3.1a'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -148,7 +148,7 @@ class C4IconSwapper:
         def load_gen_multi(self):
             # Upload generic multi-state driver from Base64Assets
             self.gen_driver_button['state'] = NORMAL
-            temp_gen_driver = self.uc.temp_dir + 'generic multi.c4z'
+            temp_gen_driver = self.uc.temp_dir + 'multi generic.c4z'
             with open(temp_gen_driver, 'wb') as gen_driver:
                 gen_driver.write(base64.b64decode(generic_multi))
 
@@ -378,7 +378,7 @@ class C4IconSwapper:
                     continue
                 if orig_file_path[i + 1] == '.':
                     orig_driver_name = orig_file_path[i]
-            if orig_driver_name != 'generic' and orig_driver_name != 'generic multi':
+            if orig_driver_name != 'generic' and orig_driver_name != 'multi generic':
                 self.uc.export_panel.driver_name_entry.delete(0, 'end')
                 self.uc.export_panel.driver_name_entry.insert(0, orig_driver_name)
             self.uc.driver_selected = True
@@ -390,7 +390,6 @@ class C4IconSwapper:
                     self.file_entry_field.get() == 'Invalid driver selected...':
                 self.gen_driver_button['state'] = NORMAL
                 self.multi_driver_button['state'] = NORMAL
-                self.uc.export_panel.over_orig_check['state'] = NORMAL
 
             if len(self.icon_groups) <= 1:
                 self.prev_icon_button['state'] = DISABLED
