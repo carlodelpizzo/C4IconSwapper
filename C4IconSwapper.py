@@ -16,7 +16,7 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.2a'
+version = '5.3a'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -151,6 +151,9 @@ class C4IconSwapper:
             temp_gen_driver = self.uc.temp_dir + 'generic multi.c4z'
             with open(temp_gen_driver, 'wb') as gen_driver:
                 gen_driver.write(base64.b64decode(generic_multi))
+
+            if os.path.isdir(self.uc.temp_dir + 'driver'):
+                shutil.rmtree(self.uc.temp_dir + 'driver')
 
             shutil.unpack_archive(temp_gen_driver, self.uc.temp_dir + 'driver', 'zip')
             os.remove(temp_gen_driver)
@@ -298,7 +301,7 @@ class C4IconSwapper:
 
                 for line in driver_lua_lines:
                     if '_OPTIONS = { {' in line:
-                        self.uc.enable_states(driver_lua_lines)
+                        self.uc.get_states(driver_lua_lines)
                         multi_state = True
                         break
 
@@ -619,7 +622,11 @@ class C4IconSwapper:
                 self.upload_c4z(given_path=dropped_path)
             elif dropped_path.endswith('.png') or dropped_path.endswith('.jpg') or \
                     dropped_path.endswith('.gif') or dropped_path.endswith('.jpeg'):
-                self.uc.replacement_panel.replace_icon(given_path=dropped_path)
+                self.uc.replacement_panel.upload_replacement(given_path=dropped_path)
+            elif '.' not in dropped_path:
+                image_paths = os.listdir(dropped_path)
+                for new_img_path in image_paths:
+                    self.uc.replacement_panel.upload_replacement(dropped_path + '/' + new_img_path)
 
     class ReplacementPanel:
         def __init__(self, upper_class):
@@ -697,15 +704,20 @@ class C4IconSwapper:
             self.file_entry_field.drop_target_register(DND_FILES)
             self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_replacement)
 
-        def upload_replacement(self, give_path=''):
-            if give_path == '':
+        def upload_replacement(self, given_path=''):
+            if given_path == '':
                 filename = filedialog.askopenfilename(filetypes=[("Image", "*.png"), ("Image", "*.jpg"),
                                                                  ("Image", "*.gif"), ("Image", "*.jpeg")])
             else:
-                filename = give_path
+                filename = given_path
 
             if not filename:
                 return
+            if not filename.endswith('.png') and not filename.endswith('.jpg') and not filename.endswith('.gif') and \
+                    not filename.endswith('.jpeg'):
+                print('Not valid image file', filename)
+                return
+
             if self.uc.replacement_selected:
                 self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png')
             shutil.copy(filename, self.uc.temp_dir + 'replacement_icon.png')
@@ -822,11 +834,16 @@ class C4IconSwapper:
 
         def drop_in_replacement(self, event):
             img_path = event.data.replace('{', '').replace('}', '')
+            if '.' not in img_path:
+                image_paths = os.listdir(img_path)
+                for new_img_path in image_paths:
+                    self.upload_replacement(img_path + '/' + new_img_path)
+                return
             if not img_path.endswith('.png') and not img_path.endswith('.jpg') and not img_path.endswith('.gif') and \
                     not img_path.endswith('.jpeg'):
                 print('Not valid image file')
                 return
-            self.upload_replacement(give_path=img_path)
+            self.upload_replacement(given_path=img_path)
 
         def select_stack0(self, event):
             if len(self.img_stack) == 0:
@@ -840,10 +857,10 @@ class C4IconSwapper:
                     break
             if not replacement_in_stack:
                 self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=0)
-                self.upload_replacement(give_path=self.img_stack[-1])
+                self.upload_replacement(given_path=self.img_stack[-1])
                 return
             if len(self.img_stack) > 4 and replacement_index > 3:
-                self.upload_replacement(give_path=self.img_stack[0])
+                self.upload_replacement(given_path=self.img_stack[0])
                 temp = self.img_stack[0]
                 temp_r = self.img_stack[replacement_index]
                 self.img_stack.pop(replacement_index)
@@ -852,7 +869,7 @@ class C4IconSwapper:
                 self.img_stack.insert(replacement_index, temp)
                 self.refresh_img_stack()
                 return
-            self.upload_replacement(give_path=self.img_stack[0])
+            self.upload_replacement(given_path=self.img_stack[0])
 
         def select_stack1(self, event):
             if len(self.img_stack) <= 1:
@@ -866,10 +883,10 @@ class C4IconSwapper:
                     break
             if not replacement_in_stack:
                 self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=1)
-                self.upload_replacement(give_path=self.img_stack[-1])
+                self.upload_replacement(given_path=self.img_stack[-1])
                 return
             if len(self.img_stack) > 4 and replacement_index > 3:
-                self.upload_replacement(give_path=self.img_stack[1])
+                self.upload_replacement(given_path=self.img_stack[1])
                 temp = self.img_stack[1]
                 temp_r = self.img_stack[replacement_index]
                 self.img_stack.pop(replacement_index)
@@ -878,7 +895,7 @@ class C4IconSwapper:
                 self.img_stack.insert(replacement_index, temp)
                 self.refresh_img_stack()
                 return
-            self.upload_replacement(give_path=self.img_stack[1])
+            self.upload_replacement(given_path=self.img_stack[1])
 
         def select_stack2(self, event):
             if len(self.img_stack) <= 2:
@@ -892,10 +909,10 @@ class C4IconSwapper:
                     break
             if not replacement_in_stack:
                 self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=2)
-                self.upload_replacement(give_path=self.img_stack[-1])
+                self.upload_replacement(given_path=self.img_stack[-1])
                 return
             if len(self.img_stack) > 4 and replacement_index > 3:
-                self.upload_replacement(give_path=self.img_stack[2])
+                self.upload_replacement(given_path=self.img_stack[2])
                 temp = self.img_stack[2]
                 temp_r = self.img_stack[replacement_index]
                 self.img_stack.pop(replacement_index)
@@ -904,7 +921,7 @@ class C4IconSwapper:
                 self.img_stack.insert(replacement_index, temp)
                 self.refresh_img_stack()
                 return
-            self.upload_replacement(give_path=self.img_stack[2])
+            self.upload_replacement(given_path=self.img_stack[2])
 
         def select_stack3(self, event):
             if len(self.img_stack) <= 3:
@@ -918,10 +935,10 @@ class C4IconSwapper:
                     break
             if not replacement_in_stack:
                 self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=3)
-                self.upload_replacement(give_path=self.img_stack[-1])
+                self.upload_replacement(given_path=self.img_stack[-1])
                 return
             if len(self.img_stack) > 4 and replacement_index > 3:
-                self.upload_replacement(give_path=self.img_stack[3])
+                self.upload_replacement(given_path=self.img_stack[3])
                 temp = self.img_stack[3]
                 temp_r = self.img_stack[replacement_index]
                 self.img_stack.pop(replacement_index)
@@ -930,7 +947,7 @@ class C4IconSwapper:
                 self.img_stack.insert(replacement_index, temp)
                 self.refresh_img_stack()
                 return
-            self.upload_replacement(give_path=self.img_stack[3])
+            self.upload_replacement(given_path=self.img_stack[3])
 
         def drop_stack0(self, event):
             dropped_path = event.data.replace('{', '').replace('}', '')
@@ -954,6 +971,7 @@ class C4IconSwapper:
             self.x = 615
             self.y = -25
             self.uc = upper_class
+            self.abort = False
 
             # Labels
             self.driver_name_label = tk.Label(self.uc.root, text='Driver Name:')
@@ -979,6 +997,7 @@ class C4IconSwapper:
             self.over_orig_check = Checkbutton(self.uc.root, text='overwrite original file', variable=self.over_orig,
                                                takefocus=0)
             self.over_orig_check.place(x=63 + self.x, y=115 + self.y, anchor='w')
+            self.over_orig_check['state'] = DISABLED
 
             self.remove_backups = IntVar()
             self.remove_backups_check = Checkbutton(self.uc.root, text='remove backup files',
@@ -994,11 +1013,35 @@ class C4IconSwapper:
                 shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + 'driver')
                 base_path = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
                 os.rename(self.uc.cur_dir + driver_name + '.zip', base_path + '.c4z')
-                pop_up.destroy()
+                overwrite_pop_up.destroy()
 
-            # Modify lua file
+            for state in self.uc.state_panel.states:
+                if state.name_entry['background'] == 'red' or state.name_entry['background'] == 'cyan':
+                    self.abort = True
+                    duplicate_states_pop_up = Toplevel(self.uc.root)
+                    duplicate_states_pop_up.title('Duplicate States Found')
+                    duplicate_states_pop_up.geometry('239x70')
+                    duplicate_states_pop_up.grab_set()
+                    duplicate_states_pop_up.transient(self.uc.root)
+                    duplicate_states_pop_up.resizable(False, False)
+
+                    confirm_label = Label(duplicate_states_pop_up,
+                                          text='Cannot Export: Duplicate states found', justify='center')
+                    confirm_label.pack()
+
+                    exit_button = tk.Button(duplicate_states_pop_up, text='Cancel', width='10',
+                                            command=duplicate_states_pop_up.destroy, justify='center')
+                    exit_button.pack(pady=10)
+                    break
+
+            if self.abort:
+                self.abort = False
+                return
+
             # state_name_changes = [original_name, new_name, original_name_lower, new_name_lower]
             state_name_changes = []
+            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
+                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
             if self.uc.states_enabled and os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
                 for state in self.uc.state_panel.states:
                     if state.name_entry['state'] == NORMAL:
@@ -1012,20 +1055,10 @@ class C4IconSwapper:
                         if formatted_name == '' and character in letters:
                             formatted_name += capital_letters[letters.index(character)]
                             continue
-                        if character in capital_letters and formatted_name != '':
-                            formatted_name += letters[capital_letters.index(character)]
-                            continue
                         formatted_name += character
                     if formatted_name == '':
                         formatted_name = name_change[0]
                     name_change[1] = formatted_name
-                # for name_change in state_name_changes:
-                #     for name_compare in state_name_changes:
-                #         if state_name_changes.index(name_change) == state_name_changes.index(name_compare):
-                #             continue
-                #         if name_change[1] == name_compare[1]:
-                #             name_change[1] += 'A' + str(random.randint(1111, 9999))
-                #             break
                 pop_list = []
                 for name_change in state_name_changes:
                     if name_change[0] == name_change[1]:
@@ -1038,22 +1071,26 @@ class C4IconSwapper:
                 for index in pop_list:
                     state_name_changes.pop(index)
 
+                # Modify lua file
                 modified_lua_lines = []
+                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
                 with open(self.uc.temp_dir + 'driver/driver.lua', errors='ignore') as driver_lua_file:
                     driver_lua_lines = driver_lua_file.readlines()
-                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
                 for line in driver_lua_lines:
                     new_line = line
                     for name_change in state_name_changes:
                         if name_change[0] + ' ' in line or name_change[2] + ' ' in line:
-                            new_line = new_line.replace(name_change[0], name_change[1])
-                            new_line = new_line.replace(name_change[2], name_change[3])
+                            new_line = new_line.replace(name_change[0] + ' ', name_change[1] + ' ')
+                            new_line = new_line.replace(name_change[2] + ' ', name_change[3] + ' ')
                         elif name_change[0] + "'" in line or name_change[2] + "'" in line:
-                            new_line = new_line.replace(name_change[0], name_change[1])
-                            new_line = new_line.replace(name_change[2], name_change[3])
+                            new_line = new_line.replace(name_change[0] + "'", name_change[1] + "'")
+                            new_line = new_line.replace(name_change[2] + "'", name_change[3] + "'")
                         elif name_change[0] + '"' in line or name_change[2] + '"' in line:
-                            new_line = new_line.replace(name_change[0], name_change[1])
-                            new_line = new_line.replace(name_change[2], name_change[3])
+                            new_line = new_line.replace(name_change[0] + '"', name_change[1] + '"')
+                            new_line = new_line.replace(name_change[2] + '"', name_change[3] + '"')
+                        elif name_change[0] + '=' in line or name_change[2] + '=' in line:
+                            new_line = new_line.replace(name_change[0] + '=', name_change[1] + '=')
+                            new_line = new_line.replace(name_change[2] + '=', name_change[3] + '=')
 
                     modified_lua_lines.append(new_line)
                 with open(self.uc.temp_dir + 'driver/driver.lua', 'w', errors='ignore') as driver_lua_file:
@@ -1078,37 +1115,56 @@ class C4IconSwapper:
                 self.uc.driver_version = int(self.uc.driver_xml.get_tag('version')[0].value)
             self.uc.driver_version += 1
             self.uc.driver_xml.get_tag('version')[0].value = str(self.uc.driver_version)
+            self.uc.driver_xml.set_restore_point()
 
             # Update connection names
             for conn in self.uc.connections_panel.connections:
                 conn.tags[2].value = conn.name_entry.get()
                 conn.tags[5].value = conn.type.get()
 
-            # Do multi-state related changes
+            # Do multi-state related changes in xml
             if state_name_changes:
                 for item_tag in self.uc.driver_xml.get_tag('item'):
                     for state_name_change in state_name_changes:
-                        if state_name_change[0] in item_tag.value:
+                        if state_name_change[0] == item_tag.value:
                             item_tag.value = item_tag.value.replace(state_name_change[0], state_name_change[1])
                             break
-                        if state_name_change[2] in item_tag.value:
+                        if state_name_change[2] == item_tag.value:
                             item_tag.value = item_tag.value.replace(state_name_change[2], state_name_change[3])
                             break
                 for name_tag in self.uc.driver_xml.get_tag('name'):
                     for state_name_change in state_name_changes:
                         if state_name_change[0] in name_tag.value:
+                            skip = False
+                            for state_compare in self.uc.states_orig_names:
+                                if state_compare[0] == state_name_change[0]:
+                                    continue
+                                if state_compare[0] in name_tag.value:
+                                    skip = True
+                                    break
+                            if skip:
+                                continue
                             name_tag.value = name_tag.value.replace(state_name_change[0], state_name_change[1])
                             break
                         if state_name_change[2] in name_tag.value:
+                            skip = False
+                            for state_compare in self.uc.states_orig_names:
+                                if state_compare[1] == state_name_change[2]:
+                                    continue
+                                if state_compare[1] in name_tag.value:
+                                    skip = True
+                                    break
+                            if skip:
+                                continue
                             name_tag.value = name_tag.value.replace(state_name_change[2], state_name_change[3])
                             break
                 for description_tag in self.uc.driver_xml.get_tag('description'):
                     for state_name_change in state_name_changes:
-                        if state_name_change[0] in description_tag.value:
+                        if state_name_change[0] + ' ' in description_tag.value:
                             description_tag.value = description_tag.value.replace(state_name_change[0],
                                                                                   state_name_change[1])
                             break
-                        if state_name_change[2] in description_tag.value:
+                        if state_name_change[2] + ' ' in description_tag.value:
                             description_tag.value = description_tag.value.replace(state_name_change[2],
                                                                                   state_name_change[3])
                             break
@@ -1116,11 +1172,11 @@ class C4IconSwapper:
                     for param in state_tag.parameters:
                         if param[0] == 'id':
                             for state_name_change in state_name_changes:
-                                if state_name_change[0] in state_tag.value:
+                                if state_name_change[0] == state_tag.value:
                                     state_tag.value = state_tag.value.replace(state_name_change[0],
                                                                               state_name_change[1])
                                     break
-                                if state_name_change[2] in state_tag.value:
+                                if state_name_change[2] == state_tag.value:
                                     state_tag.value = state_tag.value.replace(state_name_change[2],
                                                                               state_name_change[3])
                                     break
@@ -1157,77 +1213,38 @@ class C4IconSwapper:
                     shutil.copy(file_list[0] + '/' + file_list[1], temp_temp_dir + file_list[2])
                     os.remove(file_list[0] + '/' + file_list[1])
 
-            # Confirm overwrite original file; Pretty sure this is broken; will fix eventually
-            if self.over_orig.get() == 1:
-                temp_name = 'IcnSwp'
-                for _ in range(9):
-                    temp_name += str(random.randint(0, 9))
+            # Export file
+            if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z') or \
+                    os.path.isfile(self.uc.cur_dir + driver_name + '.zip'):
+                overwrite_pop_up = Toplevel(self.uc.root)
+                overwrite_pop_up.title('Overwrite')
+                overwrite_pop_up.geometry('239x70')
+                overwrite_pop_up.grab_set()
+                overwrite_pop_up.transient(self.uc.root)
+                overwrite_pop_up.resizable(False, False)
 
-                try:
-                    if not os.path.isfile(self.uc.orig_file_path + '.bak'):
-                        shutil.copy(self.uc.orig_file_path, self.uc.orig_file_path + '.bak')
-                    else:
-                        shutil.copy(self.uc.orig_file_path, self.uc.orig_file_path + '.' + temp_name)
-                        os.remove(self.uc.orig_file_path + '.' + temp_name)
-                    shutil.make_archive(temp_name, 'zip', self.uc.temp_dir + 'driver')
-                    base = os.path.splitext(self.uc.cur_dir + temp_name + '.zip')[0]
-                    os.rename(self.uc.cur_dir + temp_name + '.zip', base + '.c4z')
-                    os.remove(self.uc.orig_file_path)
-                    shutil.copy(base + '.c4z', self.uc.orig_file_path)
-                    os.remove(base + '.c4z')
-                except IOError as _:
-                    pop_up = Toplevel(self.uc.root)
-                    pop_up.title('Cannot Overwrite Original File')
-                    pop_up.geometry('239x95')
-                    pop_up.grab_set()
-                    pop_up.transient(self.uc.root)
-                    pop_up.resizable(False, False)
+                confirm_label = Label(overwrite_pop_up, text='Would you like to overwrite the existing file?')
+                confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
 
-                    label_text = 'Access Denied to: ' + self.uc.orig_file_dir
-                    access_label = Label(pop_up, text=label_text)
-                    access_label.grid(row=0, column=0, columnspan=2, sticky='w')
-                    pop_up.update()
-                    if 240 <= access_label.winfo_width():
-                        new_size = str(access_label.winfo_width()) + 'x95'
-                        pop_up.geometry(new_size)
-                        pop_up.update()
+                no_button = tk.Button(overwrite_pop_up, text='No', width='10', command=overwrite_pop_up.destroy)
+                no_button.grid(row=2, column=0, sticky='e', padx=5)
 
-                    write_label = Label(pop_up, text='Export to Current Directory Instead?')
-                    write_label.grid(row=1, column=0, columnspan=2, sticky='w', pady=10)
-
-                    no_button = tk.Button(pop_up, text='No', width='10', command=pop_up.destroy)
-                    no_button.grid(row=2, column=0, sticky='w', padx=5)
-
-                    yes_button = tk.Button(pop_up, text='Yes', width='10', command=confirm_overwrite)
-                    yes_button.grid(row=2, column=0, sticky='w', padx=90)
+                yes_button = tk.Button(overwrite_pop_up, text='Yes', width='10', command=confirm_overwrite)
+                yes_button.grid(row=2, column=1, sticky='w', padx=5)
             else:
-                if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z') or \
-                        os.path.isfile(self.uc.cur_dir + driver_name + '.zip'):
-                    pop_up = Toplevel(self.uc.root)
-                    pop_up.title('Overwrite')
-                    pop_up.geometry('239x70')
-                    pop_up.grab_set()
-                    pop_up.transient(self.uc.root)
-                    pop_up.resizable(False, False)
-
-                    confirm_label = Label(pop_up, text='Would you like to overwrite the existing file?')
-                    confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
-
-                    no_button = tk.Button(pop_up, text='No', width='10', command=pop_up.destroy)
-                    no_button.grid(row=2, column=0, sticky='e', padx=5)
-
-                    yes_button = tk.Button(pop_up, text='Yes', width='10', command=confirm_overwrite)
-                    yes_button.grid(row=2, column=1, sticky='w', padx=5)
-                else:
-                    shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + '/driver')
-                    base_name = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
-                    os.rename(self.uc.cur_dir + driver_name + '.zip', base_name + '.c4z')
+                shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + '/driver')
+                base_name = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
+                os.rename(self.uc.cur_dir + driver_name + '.zip', base_name + '.c4z')
 
             # Cleanup temp files and restore original xml
             if len(bak_files) != 0 and os.path.isdir(temp_temp_dir):
                 for file_list in bak_files:
                     shutil.copy(temp_temp_dir + '/' + file_list[2], file_list[0] + '/' + file_list[1])
                 shutil.rmtree(temp_temp_dir)
+
+            self.uc.driver_xml.restore()
+            os.remove(self.uc.temp_dir + 'driver/driver.lua')
+            os.rename(self.uc.temp_dir + 'driver/driver.lua.bak', self.uc.temp_dir + 'driver/driver.lua')
             os.remove(self.uc.temp_dir + 'driver/driver.xml')
             os.rename(self.uc.temp_dir + 'driver/driver.xml.bak', self.uc.temp_dir + 'driver/driver.xml')
 
@@ -1434,15 +1451,16 @@ class C4IconSwapper:
                 # Entry
                 self.name_var = StringVar()
                 self.name_var.set(name)
-                self.name_var.trace('w', self.check_dupe)
+                self.name_var.trace('w', self.validate_state)
                 self.name_entry = tk.Entry(self.uc.root, width=20, textvariable=self.name_var)
                 # self.name_entry.insert(0, name)
                 self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
                 self.name_entry['state'] = DISABLED
 
-            def check_dupe(self, *args):
+            def validate_state(self, *args):
                 if args:  # For IDE unused argument warning
                     pass
+                self.format_state_name()
                 duplicate = False
                 for state in self.uc.state_panel.states:
                     if state is not self and state.name_var.get() == self.name_var.get():
@@ -1452,14 +1470,22 @@ class C4IconSwapper:
                                 if len(dupe_list) == 2:
                                     dupe_list[0].name_entry['background'] = 'white'
                                     dupe_list[1].name_entry['background'] = 'white'
+                                    to_validate = None
+                                    if dupe_list[0] is not self:
+                                        to_validate = dupe_list[0]
+                                    if dupe_list[1] is not self:
+                                        to_validate = dupe_list[1]
                                     self.uc.state_panel.dupes.pop(self.uc.state_panel.dupes.index(dupe_list))
+                                    if to_validate:
+                                        to_validate.validate_state()
                                     break
                                 dupe_list.pop(dupe_list.index(self))
                                 break
                         append_new_list = True
                         for dupe_list in self.uc.state_panel.dupes:
                             if dupe_list[0].name_var.get() == self.name_var.get():
-                                dupe_list.append(self)
+                                if self not in dupe_list:
+                                    dupe_list.append(self)
                                 append_new_list = False
                                 break
                         if append_new_list:
@@ -1473,11 +1499,48 @@ class C4IconSwapper:
                             if len(dupe_list) == 2:
                                 dupe_list[0].name_entry['background'] = 'white'
                                 dupe_list[1].name_entry['background'] = 'white'
+                                to_validate = None
+                                if dupe_list[0] is not self:
+                                    to_validate = dupe_list[0]
+                                if dupe_list[1] is not self:
+                                    to_validate = dupe_list[1]
                                 self.uc.state_panel.dupes.pop(self.uc.state_panel.dupes.index(dupe_list))
+                                if to_validate:
+                                    to_validate.validate_state()
                                 break
                             dupe_list.pop(dupe_list.index(self))
                             break
                     self.name_entry['background'] = 'white'
+
+                for state in self.uc.state_panel.states:
+                    if state is self:
+                        continue
+                    using_existing_name = False
+                    for orig_name in self.uc.states_orig_names:
+                        if self.uc.state_panel.states.index(self) == self.uc.states_orig_names.index(orig_name):
+                            continue
+                        if self.name_var.get() in orig_name:
+                            using_existing_name = True
+                            break
+                    if using_existing_name:
+                        if self.name_entry['background'] != 'red':
+                            self.name_entry['background'] = 'cyan'
+                        break
+
+            def format_state_name(self):
+                formatted_name = ''
+                for character in self.name_entry.get():
+                    if character == ' ' or (character not in letters and character not in capital_letters and
+                                            character not in numbers):
+                        continue
+                    if formatted_name == '' and character in letters:
+                        formatted_name += capital_letters[letters.index(character)]
+                        continue
+                    formatted_name += character
+                if formatted_name == self.name_entry.get():
+                    return
+                self.name_entry.delete(0, 'end')
+                self.name_entry.insert(0, formatted_name)
 
         def __init__(self, upper_class):
             # Initialize State Panel
@@ -1514,6 +1577,7 @@ class C4IconSwapper:
             os.mkdir(self.temp_dir)
 
         # Class variables
+        self.states_orig_names = []
         self.driver_xml = None
         self.states_enabled = False
         self.device_icon_dir = self.temp_dir + 'driver/www/icons/device/'
@@ -1685,9 +1749,10 @@ class C4IconSwapper:
         elif event.keysym == 'Down':
             self.replacement_panel.dec_img_stack()
 
-    def enable_states(self, lua_file):
+    def get_states(self, lua_file):
         state_names = []
         find_names = False
+        self.states_orig_names = []
         for line in lua_file:
             if '_OPTIONS = { {' in line or find_names:
                 find_names = True
@@ -1701,6 +1766,17 @@ class C4IconSwapper:
                         if character == '=':
                             working_name = working_name[0:-1]
                             state_names.append(working_name)
+                            self.states_orig_names.append([working_name])
+                            if self.states_orig_names[-1][0][0] in capital_letters:
+                                self.states_orig_names[-1].append(
+                                    self.states_orig_names[-1][0].replace(
+                                        self.states_orig_names[-1][0][0],
+                                        letters[capital_letters.index(self.states_orig_names[-1][0][0])]))
+                            else:
+                                self.states_orig_names[-1].insert(
+                                    0, self.states_orig_names[-1][0].replace(
+                                        self.states_orig_names[-1][0][0],
+                                        capital_letters[letters.index(self.states_orig_names[-1][0][0])]))
                             working_name = ''
                             build_name = False
                             continue
