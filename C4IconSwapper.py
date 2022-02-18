@@ -16,7 +16,7 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.3.1a'
+version = '5.4a'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -1190,8 +1190,10 @@ class C4IconSwapper:
                 if param[0] == 'name':
                     param[1] = driver_name
             for icon_tag in self.uc.driver_xml.get_tag('Icon'):
-                result = re.search('driver/(.*)/icons', icon_tag.value).group(1)
-                icon_tag.value = icon_tag.value.replace(result, driver_name)
+                result = re.search('driver/(.*)/icons', icon_tag.value)
+                if result:
+                    result = result.group(1)
+                    icon_tag.value = icon_tag.value.replace(result, driver_name)
 
             os.rename(self.uc.temp_dir + 'driver/driver.xml', self.uc.temp_dir + 'driver/driver.xml.bak')
             with open(self.uc.temp_dir + 'driver/driver.xml', 'w', errors='ignore') as out_file:
@@ -1242,8 +1244,9 @@ class C4IconSwapper:
                 shutil.rmtree(temp_temp_dir)
 
             self.uc.driver_xml.restore()
-            os.remove(self.uc.temp_dir + 'driver/driver.lua')
-            os.rename(self.uc.temp_dir + 'driver/driver.lua.bak', self.uc.temp_dir + 'driver/driver.lua')
+            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
+                os.remove(self.uc.temp_dir + 'driver/driver.lua')
+                os.rename(self.uc.temp_dir + 'driver/driver.lua.bak', self.uc.temp_dir + 'driver/driver.lua')
             os.remove(self.uc.temp_dir + 'driver/driver.xml')
             os.rename(self.uc.temp_dir + 'driver/driver.xml.bak', self.uc.temp_dir + 'driver/driver.xml')
 
