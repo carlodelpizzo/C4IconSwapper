@@ -1015,6 +1015,8 @@ class C4IconSwapper:
                 overwrite_pop_up.destroy()
 
             for state in self.uc.state_panel.states:
+                if state.name_entry['state'] == DISABLED:
+                    continue
                 if state.name_entry['background'] == 'pink' or state.name_entry['background'] == 'cyan':
                     self.abort = True
                     duplicate_states_pop_up = Toplevel(self.uc.root)
@@ -1041,7 +1043,7 @@ class C4IconSwapper:
             state_name_changes = []
             if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
                 shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
-            if self.uc.states_enabled and os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
+            if self.uc.states_shown and os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
                 for state in self.uc.state_panel.states:
                     if state.name_entry['state'] == NORMAL:
                         state_name_changes.append([state.original_name, state.name_entry.get()])
@@ -1581,7 +1583,7 @@ class C4IconSwapper:
         # Class variables
         self.states_orig_names = []
         self.driver_xml = None
-        self.states_enabled = False
+        self.states_shown = False
         self.device_icon_dir = self.temp_dir + 'driver/www/icons/device/'
         self.icon_dir = self.temp_dir + 'driver/www/icons/'
         self.replacement_image_path = self.temp_dir + 'replacement_icon.png'
@@ -1677,7 +1679,7 @@ class C4IconSwapper:
         shutil.rmtree(self.temp_dir)
 
     def toggle_connections_panel(self):
-        if not self.states_enabled:
+        if not self.states_shown:
             if self.toggle_conn_button['text'] == 'Show Connections':
                 self.toggle_conn_button['text'] = 'Hide Connections'
                 self.root.geometry('915x510')
@@ -1704,24 +1706,30 @@ class C4IconSwapper:
         return
 
     def show_states_panel(self):
-        if not self.states_enabled:
+        if not self.states_shown:
             if self.toggle_conn_button['text'] == 'Show Connections':
                 self.root.geometry('1300x250')
-                self.states_enabled = True
+                self.states_shown = True
             else:
                 self.root.geometry('1300x510')
-                self.states_enabled = True
+                self.states_shown = True
             self.show_states_button['text'] = 'Hide States'
+            for i in range(7):
+                if self.connections_panel.connections[-i].name_entry['state'] == NORMAL:
+                    self.connections_panel.connections[-i].name_entry['takefocus'] = 1
             for state in self.state_panel.states:
                 if state.name_entry['state'] == NORMAL:
                     state.name_entry['takefocus'] = 1
             return
         elif self.toggle_conn_button['text'] == 'Show Connections':
             self.root.geometry('915x250')
-            self.states_enabled = False
+            self.states_shown = False
         else:
             self.root.geometry('915x510')
-            self.states_enabled = False
+            self.states_shown = False
+        for i in range(7):
+            if self.connections_panel.connections[-i].name_entry['state'] == NORMAL:
+                self.connections_panel.connections[-i].name_entry['takefocus'] = 0
         for state in self.state_panel.states:
             state.name_entry['takefocus'] = 0
         self.show_states_button['text'] = 'Show States'
@@ -1795,7 +1803,7 @@ class C4IconSwapper:
 
         for state_name in state_names:
             self.state_panel.states[state_names.index(state_name)].name_entry['state'] = NORMAL
-            if self.states_enabled:
+            if self.states_shown:
                 self.state_panel.states[state_names.index(state_name)].name_entry['takefocus'] = 1
             self.state_panel.states[state_names.index(state_name)].name_entry.delete(0, END)
             self.state_panel.states[state_names.index(state_name)].name_entry.insert(0, state_name)
