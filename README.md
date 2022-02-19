@@ -19,4 +19,4 @@ It has not been thoroughly tested, but seems to work from what little testing ha
 Since drag and drop support was added with tkinterdnd2,
 there have been issues with getting the program to run due to missing tkinter dependency.
 I have had some luck with manually copying tkdnd2.8 folder to \tcl\tcl8.6\ sub-folder of the python interpreter.
-The exe file should work either way, but antivirus doesn't like the exe file :(
+The exe file should work either way
