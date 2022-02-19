@@ -16,7 +16,7 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.4a'
+version = '5.5a'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -1004,14 +1004,37 @@ class C4IconSwapper:
             self.remove_backups_check.place(x=63 + self.x, y=95 + self.y, anchor='w')
 
         def export_c4z(self):
+            cur_dir = self.uc.cur_dir
+            temp_dir = self.uc.temp_dir
+            driver_xml = self.uc.driver_xml
+
             def confirm_overwrite():
-                if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z'):
-                    os.remove(self.uc.cur_dir + driver_name + '.c4z')
-                if os.path.isfile(self.uc.cur_dir + driver_name + '.zip'):
-                    os.remove(self.uc.cur_dir + driver_name + '.zip')
-                shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + 'driver')
-                base_path = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
-                os.rename(self.uc.cur_dir + driver_name + '.zip', base_path + '.c4z')
+                # Remove old driver
+                if os.path.isfile(cur_dir + driver_name + '.c4z'):
+                    os.remove(cur_dir + driver_name + '.c4z')
+                if os.path.isfile(cur_dir + driver_name + '.zip'):
+                    os.remove(cur_dir + driver_name + '.zip')
+
+                # Make new driver
+                shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
+                base = os.path.splitext(cur_dir + driver_name + '.zip')[0]
+                os.rename(cur_dir + driver_name + '.zip', base + '.c4z')
+
+                export_cleanup()
+
+            def export_cleanup():
+                # Cleanup temp files and restore original xml
+                if len(bak_files) != 0 and os.path.isdir(temp_temp_dir):
+                    for file_list0 in bak_files:
+                        shutil.copy(temp_temp_dir + '/' + file_list0[2], file_list0[0] + '/' + file_list0[1])
+                    shutil.rmtree(temp_temp_dir)
+                driver_xml.restore()
+                if os.path.isfile(temp_dir + 'driver/driver.lua'):
+                    os.remove(temp_dir + 'driver/driver.lua')
+                    os.rename(temp_dir + 'driver/driver.lua.bak', temp_dir + 'driver/driver.lua')
+                os.remove(temp_dir + 'driver/driver.xml')
+                os.rename(temp_dir + 'driver/driver.xml.bak', temp_dir + 'driver/driver.xml')
+
                 overwrite_pop_up.destroy()
 
             for state in self.uc.state_panel.states:
@@ -1019,10 +1042,16 @@ class C4IconSwapper:
                     continue
                 if state.name_entry['background'] == 'pink' or state.name_entry['background'] == 'cyan':
                     self.abort = True
+
+                    win_x = self.uc.root.winfo_rootx() + self.x
+                    win_y = self.uc.root.winfo_rooty()
+
                     duplicate_states_pop_up = Toplevel(self.uc.root)
                     duplicate_states_pop_up.title('Duplicate States Found')
                     duplicate_states_pop_up.geometry('239x70')
+                    duplicate_states_pop_up.geometry(f'+{win_x}+{win_y}')
                     duplicate_states_pop_up.grab_set()
+                    duplicate_states_pop_up.focus()
                     duplicate_states_pop_up.transient(self.uc.root)
                     duplicate_states_pop_up.resizable(False, False)
 
@@ -1043,7 +1072,6 @@ class C4IconSwapper:
             state_name_changes = []
             if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
                 shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
-            if self.uc.states_shown and os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
                 for state in self.uc.state_panel.states:
                     if state.name_entry['state'] == NORMAL:
                         state_name_changes.append([state.original_name, state.name_entry.get()])
@@ -1128,35 +1156,17 @@ class C4IconSwapper:
                 for item_tag in self.uc.driver_xml.get_tag('item'):
                     for state_name_change in state_name_changes:
                         if state_name_change[0] == item_tag.value:
-                            item_tag.value = item_tag.value.replace(state_name_change[0], state_name_change[1])
+                            item_tag.value = state_name_change[1]
                             break
                         if state_name_change[2] == item_tag.value:
-                            item_tag.value = item_tag.value.replace(state_name_change[2], state_name_change[3])
+                            item_tag.value = state_name_change[3]
                             break
                 for name_tag in self.uc.driver_xml.get_tag('name'):
                     for state_name_change in state_name_changes:
-                        if state_name_change[0] in name_tag.value:
-                            skip = False
-                            for state_compare in self.uc.states_orig_names:
-                                if state_compare[0] == state_name_change[0]:
-                                    continue
-                                if state_compare[0] in name_tag.value:
-                                    skip = True
-                                    break
-                            if skip:
-                                continue
+                        if state_name_change[0] == name_tag.value or name_tag.value.endswith(state_name_change[0]):
                             name_tag.value = name_tag.value.replace(state_name_change[0], state_name_change[1])
                             break
-                        if state_name_change[2] in name_tag.value:
-                            skip = False
-                            for state_compare in self.uc.states_orig_names:
-                                if state_compare[1] == state_name_change[2]:
-                                    continue
-                                if state_compare[1] in name_tag.value:
-                                    skip = True
-                                    break
-                            if skip:
-                                continue
+                        if state_name_change[2] == name_tag.value or name_tag.value.endswith(state_name_change[2]):
                             name_tag.value = name_tag.value.replace(state_name_change[2], state_name_change[3])
                             break
                 for description_tag in self.uc.driver_xml.get_tag('description'):
@@ -1173,13 +1183,11 @@ class C4IconSwapper:
                     for param in state_tag.parameters:
                         if param[0] == 'id':
                             for state_name_change in state_name_changes:
-                                if state_name_change[0] == state_tag.value:
-                                    state_tag.value = state_tag.value.replace(state_name_change[0],
-                                                                              state_name_change[1])
+                                if state_name_change[0] == param[1]:
+                                    param[1] = state_name_change[1]
                                     break
-                                if state_name_change[2] == state_tag.value:
-                                    state_tag.value = state_tag.value.replace(state_name_change[2],
-                                                                              state_name_change[3])
+                                if state_name_change[2] == param[1]:
+                                    param[1] = state_name_change[3]
                                     break
 
             # Update xml with new driver name
@@ -1219,32 +1227,38 @@ class C4IconSwapper:
             # Export file
             if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z') or \
                     os.path.isfile(self.uc.cur_dir + driver_name + '.zip'):
+                win_x = self.uc.root.winfo_rootx() + self.x
+                win_y = self.uc.root.winfo_rooty()
                 overwrite_pop_up = Toplevel(self.uc.root)
                 overwrite_pop_up.title('Overwrite')
                 overwrite_pop_up.geometry('239x70')
+                overwrite_pop_up.geometry(f'+{win_x}+{win_y}')
+                overwrite_pop_up.protocol("WM_DELETE_WINDOW", export_cleanup)
                 overwrite_pop_up.grab_set()
+                overwrite_pop_up.focus()
                 overwrite_pop_up.transient(self.uc.root)
                 overwrite_pop_up.resizable(False, False)
 
                 confirm_label = Label(overwrite_pop_up, text='Would you like to overwrite the existing file?')
                 confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
 
-                no_button = tk.Button(overwrite_pop_up, text='No', width='10', command=overwrite_pop_up.destroy)
+                no_button = tk.Button(overwrite_pop_up, text='No', width='10', command=export_cleanup)
                 no_button.grid(row=2, column=0, sticky='e', padx=5)
 
                 yes_button = tk.Button(overwrite_pop_up, text='Yes', width='10', command=confirm_overwrite)
                 yes_button.grid(row=2, column=1, sticky='w', padx=5)
-            else:
-                shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + '/driver')
-                base_name = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
-                os.rename(self.uc.cur_dir + driver_name + '.zip', base_name + '.c4z')
+                return
+
+            # Make driver
+            shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + '/driver')
+            base_name = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
+            os.rename(self.uc.cur_dir + driver_name + '.zip', base_name + '.c4z')
 
             # Cleanup temp files and restore original xml
             if len(bak_files) != 0 and os.path.isdir(temp_temp_dir):
                 for file_list in bak_files:
                     shutil.copy(temp_temp_dir + '/' + file_list[2], file_list[0] + '/' + file_list[1])
                 shutil.rmtree(temp_temp_dir)
-
             self.uc.driver_xml.restore()
             if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
                 os.remove(self.uc.temp_dir + 'driver/driver.lua')
