@@ -14,7 +14,7 @@ It has two built in generic drivers:
 2) a multi-state "key-status" experience driver ("Load Multi Driver")
 
 The built-in multi-state driver has support for re-naming the 13 driver states.
-It has not been thoroughly tested, but seems to work for what little testing has been done.
+It has not been thoroughly tested, but seems to work from what little testing has been done.
 
 Since drag and drop support was added with tkinterdnd2,
 there have been issues with getting the program to run due to missing tkinter dependency.
