@@ -140,6 +140,24 @@ class C4IconSwapper:
                 return
             with open(temp_gen_driver, 'wb') as gen_driver:
                 gen_driver.write(base64.b64decode(generic_driver))
+
+            if os.path.isdir(self.uc.temp_dir + 'driver'):
+                shutil.rmtree(self.uc.temp_dir + 'driver')
+
+            shutil.unpack_archive(temp_gen_driver, self.uc.temp_dir + 'driver', 'zip')
+            os.remove(temp_gen_driver)
+
+            sizes = [(70, 70), (90, 90), (300, 300), (512, 512)]
+            pictures = os.listdir(self.uc.device_icon_dir)
+            for picture in pictures:
+                resized_icon = Image.open(self.uc.device_icon_dir + picture)
+                for size in sizes:
+                    new_icon = resized_icon.resize(size)
+                    new_icon.save(self.uc.device_icon_dir + picture.replace(str(1024), str(size[0])))
+
+            shutil.make_archive(temp_gen_driver.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
+            os.rename(temp_gen_driver.replace('.c4z', '.zip'), temp_gen_driver)
+
             self.upload_c4z(temp_gen_driver)
             os.remove(temp_gen_driver)
             self.gen_driver_button['state'] = DISABLED
@@ -149,6 +167,8 @@ class C4IconSwapper:
             # Upload generic multi-state driver from Base64Assets
             self.gen_driver_button['state'] = NORMAL
             temp_gen_driver = self.uc.temp_dir + 'multi generic.c4z'
+            if self.file_entry_field.get() == temp_gen_driver:
+                return
             with open(temp_gen_driver, 'wb') as gen_driver:
                 gen_driver.write(base64.b64decode(generic_multi))
 
@@ -1778,7 +1798,7 @@ class C4IconSwapper:
         find_names = False
         self.states_orig_names = []
         for line in lua_file:
-            if '_OPTIONS = { {' in line or find_names:
+            if '_OPTIONS = {' in line or find_names:
                 find_names = True
                 build_name = False
                 working_name = ''
@@ -1812,7 +1832,7 @@ class C4IconSwapper:
                     if working_name == '{ ':
                         build_name = True
                         working_name = ''
-            if 'States, LED = {},' in line:
+            if 'States, LED = {},' in line or 'States = {}' in line:
                 break
 
         for state_name in state_names:
