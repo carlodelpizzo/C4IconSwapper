@@ -16,7 +16,7 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.5a'
+version = '5.5.1a'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -163,8 +163,20 @@ class C4IconSwapper:
             self.gen_driver_button['state'] = DISABLED
             self.uc.export_panel.over_orig_check['state'] = DISABLED
 
-        def load_gen_multi(self):
+        def load_gen_multi(self, test=True):
             # Upload generic multi-state driver from Base64Assets
+            if test:
+                # Show loading image while driver images are created
+                with open(self.uc.temp_dir + 'loading_icon.gif', 'wb') as loading_img:
+                    loading_img.write(base64.b64decode(loading_icon))
+                icon_image = Image.open(self.uc.temp_dir + 'loading_icon.gif')
+                icon = ImageTk.PhotoImage(icon_image)
+                self.blank_image_label.configure(image=icon)
+                self.blank_image_label.image = icon
+                self.multi_driver_button['state'] = DISABLED
+                self.uc.root.after(1, self.uc.test)
+                return
+
             self.gen_driver_button['state'] = NORMAL
             temp_gen_driver = self.uc.temp_dir + 'multi generic.c4z'
             if self.file_entry_field.get() == temp_gen_driver:
@@ -1848,6 +1860,9 @@ class C4IconSwapper:
             state.name_entry['state'] = DISABLED
             state.name_entry['takefocus'] = 0
             state.original_name = ''
+
+    def test(self):
+        self.c4z_panel.load_gen_multi(test=False)
 
 
 def list_all_sub_directories(directory):
