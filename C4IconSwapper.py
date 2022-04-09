@@ -1871,9 +1871,7 @@ def find_valid_id(id_seed: int, list_of_ids: list, inc_up=True, inc_count=0):
         return [id_seed, inc_count]
     if inc_up:
         id_seed += 1
-        inc_count += 1
-        return find_valid_id(id_seed, list_of_ids, inc_count=inc_count)
     else:
         id_seed -= 1
-        inc_count += 1
-        return find_valid_id(id_seed, list_of_ids, inc_count=inc_count)
+    inc_count += 1
+    return find_valid_id(id_seed, list_of_ids, inc_count=inc_count)
