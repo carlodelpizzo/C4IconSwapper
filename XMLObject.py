@@ -1,7 +1,7 @@
 
 
 def get_xml_data(xml_path=None, xml_string=None):
-    new_line_string = '**NEWLINE**'
+    new_line_string = '**NL**'
     if xml_path:
         with open(xml_path, errors='ignore') as xml_file:
             xml_lines = xml_file.readlines()
