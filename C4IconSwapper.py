@@ -1099,8 +1099,10 @@ class C4IconSwapper:
                 invalid_states_pop_up = Toplevel(self.uc.root)
                 if single_invalid_state:
                     invalid_states_pop_up.title('Invalid State Found')
+                    label_text = 'Cannot Export: Invalid state label'
                 else:
                     invalid_states_pop_up.title('Invalid States Found')
+                    label_text = 'Cannot Export: Invalid state labels'
                 invalid_states_pop_up.geometry('239x70')
                 invalid_states_pop_up.geometry(f'+{win_x}+{win_y}')
                 invalid_states_pop_up.grab_set()
@@ -1108,10 +1110,6 @@ class C4IconSwapper:
                 invalid_states_pop_up.transient(self.uc.root)
                 invalid_states_pop_up.resizable(False, False)
 
-                if single_invalid_state:
-                    label_text = 'Cannot Export: Invalid state label'
-                else:
-                    label_text = 'Cannot Export: Invalid state labels'
                 confirm_label = Label(invalid_states_pop_up, text=label_text, justify='center')
                 confirm_label.pack()
 
