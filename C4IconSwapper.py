@@ -16,7 +16,7 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.5.1a'
+version = '5.5.2a'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -56,7 +56,7 @@ class C4IconSwapper:
         def __init__(self, upper_class):
             # Initialize C4z Panel
             self.x = 5
-            self.y = 0
+            self.y = 20
             self.uc = upper_class
             self.current_icon = 0
             self.icon_groups = []
@@ -67,6 +67,9 @@ class C4IconSwapper:
                                       'COMPONENT OUT', 'DVI OUT', 'STEREO OUT', 'DIGITAL_OPTICAL OUT']
 
             # Labels
+            self.panel_label = tk.Label(self.uc.root, text='Driver Selection', font=("Arial", 15))
+            self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
+
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
             self.blank_image_label.image = self.uc.blank
             self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
@@ -663,12 +666,15 @@ class C4IconSwapper:
         def __init__(self, upper_class):
             # Initialize Replacement Panel
             self.x = 303
-            self.y = 0
+            self.y = 20
             self.uc = upper_class
             self.img_stack = []
             self.stack_labels = []
 
             # Labels
+            self.panel_label = tk.Label(self.uc.root, text='Replacement Icons', font=("Arial", 15))
+            self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
+
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
             self.blank_image_label.image = self.uc.blank
             self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
@@ -1005,6 +1011,9 @@ class C4IconSwapper:
             self.abort = False
 
             # Labels
+            self.panel_label = tk.Label(self.uc.root, text='Export', font=("Arial", 15))
+            self.panel_label.place(x=150 + self.x, y=25 + self.y, anchor='n')
+
             self.driver_name_label = tk.Label(self.uc.root, text='Driver Name:')
             self.driver_name_label.place(x=65 + self.x, y=165 + self.y, anchor='w')
 
@@ -1069,32 +1078,46 @@ class C4IconSwapper:
 
                 overwrite_pop_up.destroy()
 
+            invalid_states = False
+            single_invalid_state = False
             for state in self.uc.state_panel.states:
                 if state.name_entry['state'] == DISABLED:
                     continue
                 if state.name_entry['background'] == 'pink' or state.name_entry['background'] == 'cyan':
                     self.abort = True
-
-                    win_x = self.uc.root.winfo_rootx() + self.x
-                    win_y = self.uc.root.winfo_rooty()
-
-                    duplicate_states_pop_up = Toplevel(self.uc.root)
-                    duplicate_states_pop_up.title('Duplicate States Found')
-                    duplicate_states_pop_up.geometry('239x70')
-                    duplicate_states_pop_up.geometry(f'+{win_x}+{win_y}')
-                    duplicate_states_pop_up.grab_set()
-                    duplicate_states_pop_up.focus()
-                    duplicate_states_pop_up.transient(self.uc.root)
-                    duplicate_states_pop_up.resizable(False, False)
-
-                    confirm_label = Label(duplicate_states_pop_up,
-                                          text='Cannot Export: Duplicate states found', justify='center')
-                    confirm_label.pack()
-
-                    exit_button = tk.Button(duplicate_states_pop_up, text='Cancel', width='10',
-                                            command=duplicate_states_pop_up.destroy, justify='center')
-                    exit_button.pack(pady=10)
+                    invalid_states = True
+                    if not single_invalid_state:
+                        single_invalid_state = True
+                        continue
+                    single_invalid_state = False
                     break
+
+            if invalid_states:
+                win_x = self.uc.root.winfo_rootx() + self.x
+                win_y = self.uc.root.winfo_rooty()
+
+                invalid_states_pop_up = Toplevel(self.uc.root)
+                if single_invalid_state:
+                    invalid_states_pop_up.title('Invalid State Found')
+                else:
+                    invalid_states_pop_up.title('Invalid States Found')
+                invalid_states_pop_up.geometry('239x70')
+                invalid_states_pop_up.geometry(f'+{win_x}+{win_y}')
+                invalid_states_pop_up.grab_set()
+                invalid_states_pop_up.focus()
+                invalid_states_pop_up.transient(self.uc.root)
+                invalid_states_pop_up.resizable(False, False)
+
+                if single_invalid_state:
+                    label_text = 'Cannot Export: Invalid state label'
+                else:
+                    label_text = 'Cannot Export: Invalid state labels'
+                confirm_label = Label(invalid_states_pop_up, text=label_text, justify='center')
+                confirm_label.pack()
+
+                exit_button = tk.Button(invalid_states_pop_up, text='Cancel', width='10',
+                                        command=invalid_states_pop_up.destroy, justify='center')
+                exit_button.pack(pady=10)
 
             if self.abort:
                 self.abort = False
@@ -1468,7 +1491,7 @@ class C4IconSwapper:
         def __init__(self, upper_class):
             # Initialize Connection Panel
             self.x = 14
-            self.y = 260
+            self.y = 280
             self.uc = upper_class
             self.connections = []
             self.ids = []
@@ -1500,7 +1523,7 @@ class C4IconSwapper:
 
                 # Entry
                 self.name_var = StringVar()
-                self.name_var.set(name)
+                self.name_var.set('')
                 self.name_var.trace('w', self.validate_state)
                 self.name_entry = tk.Entry(self.uc.root, width=20, textvariable=self.name_var)
                 # self.name_entry.insert(0, name)
@@ -1511,6 +1534,9 @@ class C4IconSwapper:
                 if args:  # For IDE unused argument warning
                     pass
                 self.format_state_name()
+                if self.name_var.get() == '':
+                    self.name_entry['background'] = 'pink'
+                    return
                 duplicate = False
                 for state in self.uc.state_panel.states:
                     if state is not self and state.name_var.get() == self.name_var.get():
@@ -1595,7 +1621,7 @@ class C4IconSwapper:
         def __init__(self, upper_class):
             # Initialize State Panel
             self.x = 930
-            self.y = 0
+            self.y = 27
             self.uc = upper_class
             self.states = []
             self.dupes = []
@@ -1607,13 +1633,17 @@ class C4IconSwapper:
                                                     ((i % 7) * y_spacing) + 20 + self.y,
                                    state_name='state' + str(i + 1) + ':'))
 
+            # Label
+            self.panel_label = tk.Label(self.uc.root, text='Multi-State Labels', font=("Arial", 15))
+            self.panel_label.place(x=185 + self.x, y=-27 + self.y, anchor='n')
+
     def __init__(self):
         # Initialize main program
         self.root = TkinterDnD.Tk()
         self.root.bind('<KeyRelease>', self.key_release)
 
         # Root window properties
-        self.root.geometry('915x250')
+        self.root.geometry('915x270')
         self.root.title('C4 Icon Swapper')
         self.root.resizable(False, False)
 
@@ -1691,22 +1721,22 @@ class C4IconSwapper:
 
         # Separators
         self.separator0 = ttk.Separator(self.root, orient='vertical')
-        self.separator0.place(x=305, y=0, height=250)
+        self.separator0.place(x=305, y=0, height=270)
         self.separator1 = ttk.Separator(self.root, orient='vertical')
-        self.separator1.place(x=610, y=0, height=250)
+        self.separator1.place(x=610, y=0, height=270)
         self.separator2 = ttk.Separator(self.root, orient='horizontal')
-        self.separator2.place(x=0, y=250, relwidth=1)
+        self.separator2.place(x=0, y=270, relwidth=1)
         self.separator1 = ttk.Separator(self.root, orient='vertical')
-        self.separator1.place(x=915, y=0, height=250)
+        self.separator1.place(x=915, y=0, height=270)
 
         # Buttons
         self.toggle_conn_button = tk.Button(self.root, text='Show Connections', width=15,
                                             command=self.toggle_connections_panel, takefocus=0)
-        self.toggle_conn_button.place(x=700, y=220, anchor='n')
+        self.toggle_conn_button.place(x=700, y=240, anchor='n')
 
         self.show_states_button = tk.Button(self.root, text='Show States', width=15, command=self.show_states_panel,
                                             takefocus=0)
-        self.show_states_button.place(x=820, y=220, anchor='n')
+        self.show_states_button.place(x=820, y=240, anchor='n')
 
         # Version Label
         self.version_label = Label(self.root, text=version)
@@ -1728,25 +1758,25 @@ class C4IconSwapper:
         if not self.states_shown:
             if self.toggle_conn_button['text'] == 'Show Connections':
                 self.toggle_conn_button['text'] = 'Hide Connections'
-                self.root.geometry('915x510')
+                self.root.geometry('915x530')
                 for conn in self.connections_panel.connections:
                     if conn.name_entry['state'] == NORMAL:
                         conn.name_entry['takefocus'] = 1
                 return
             self.toggle_conn_button['text'] = 'Show Connections'
-            self.root.geometry('915x250')
+            self.root.geometry('915x270')
             for conn in self.connections_panel.connections:
                 conn.name_entry['takefocus'] = 0
             return
         if self.toggle_conn_button['text'] == 'Show Connections':
             self.toggle_conn_button['text'] = 'Hide Connections'
-            self.root.geometry('1300x510')
+            self.root.geometry('1300x530')
             for conn in self.connections_panel.connections:
                 if conn.name_entry['state'] == NORMAL:
                     conn.name_entry['takefocus'] = 1
             return
         self.toggle_conn_button['text'] = 'Show Connections'
-        self.root.geometry('1300x250')
+        self.root.geometry('1300x270')
         for conn in self.connections_panel.connections:
             conn.name_entry['takefocus'] = 0
         return
@@ -1754,10 +1784,10 @@ class C4IconSwapper:
     def show_states_panel(self):
         if not self.states_shown:
             if self.toggle_conn_button['text'] == 'Show Connections':
-                self.root.geometry('1300x250')
+                self.root.geometry('1300x270')
                 self.states_shown = True
             else:
-                self.root.geometry('1300x510')
+                self.root.geometry('1300x530')
                 self.states_shown = True
             self.show_states_button['text'] = 'Hide States'
             for i in range(7):
@@ -1768,10 +1798,10 @@ class C4IconSwapper:
                     state.name_entry['takefocus'] = 1
             return
         elif self.toggle_conn_button['text'] == 'Show Connections':
-            self.root.geometry('915x250')
+            self.root.geometry('915x270')
             self.states_shown = False
         else:
-            self.root.geometry('915x510')
+            self.root.geometry('915x530')
             self.states_shown = False
         for i in range(7):
             if self.connections_panel.connections[-i].name_entry['state'] == NORMAL:
