@@ -2,7 +2,7 @@
 This program can be used to replace icons for Control 4 drivers.
 
 In addition to swapping icons, the program modifies the diver xml file,
-there is no option prevent xml modification,
+there is no option to prevent xml modification,
 but the outputted .c4z file will have a .bak file of the old driver.xml if you want to restore it manually.
 
 It can add connections such as HDMI IN/OUT,
