@@ -32,7 +32,7 @@ conn_template = ['connection', '', [], [['id', '0', [], []], ['type', '0', [], [
 
 class C4IconSwapper:
     class C4zPanel:
-        class Icon:
+        class SubIcon:
             def __init__(self, root_path: str, path: str, name: str, size: int):
                 # Initialize Icon
                 self.root = root_path
@@ -45,7 +45,7 @@ class C4IconSwapper:
                         self.type = path[i: len(path)]
                         break
 
-        class IconGroup:
+        class Icon:
             def __init__(self, icons: list, extra=False):
                 # Initialize Icon Group
                 self.name = icons[0].name
@@ -59,7 +59,7 @@ class C4IconSwapper:
             self.y = 20
             self.uc = upper_class
             self.current_icon = 0
-            self.icon_groups = []
+            self.icons = []
             self.extra_icons = 0
             self.valid_connections = ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI', 'STEREO', 'DIGITAL_OPTICAL',
                                       'IR_OUT', 'HDMI IN', 'COMPOSITE IN', 'VGA IN', 'COMPONENT IN', 'DVI IN',
@@ -131,7 +131,7 @@ class C4IconSwapper:
                 pass
             if not self.uc.driver_selected:
                 return
-            if self.show_extra_icons.get() == 0 and self.uc.c4z_panel.icon_groups[self.uc.c4z_panel.current_icon].extra:
+            if self.show_extra_icons.get() == 0 and self.uc.c4z_panel.icons[self.uc.c4z_panel.current_icon].extra:
                 self.next_icon()
             self.update_icon()
 
@@ -211,11 +211,11 @@ class C4IconSwapper:
             self.uc.export_panel.over_orig_check['state'] = DISABLED
 
         def update_icon(self):
-            if len(self.icon_groups) == 0:
+            if len(self.icons) == 0:
                 return
-            if abs(self.current_icon) >= len(self.icon_groups):
-                self.current_icon = abs(self.current_icon) % len(self.icon_groups)
-            icon_image = Image.open(self.icon_groups[self.current_icon].path)
+            if abs(self.current_icon) >= len(self.icons):
+                self.current_icon = abs(self.current_icon) % len(self.icons)
+            icon_image = Image.open(self.icons[self.current_icon].path)
             icon = icon_image.resize((128, 128), Image.ANTIALIAS)
             icon = ImageTk.PhotoImage(icon)
             self.blank_image_label.configure(image=icon)
@@ -223,11 +223,11 @@ class C4IconSwapper:
 
             if self.show_extra_icons.get() == 0 and self.extra_icons != 0:
                 self.icon_label.config(text='icon: ' + str(self.current_icon + 1) + ' of ' +
-                                            str(len(self.icon_groups) - self.extra_icons) +
-                                            ' (' + str(len(self.icon_groups)) + ')')
+                                            str(len(self.icons) - self.extra_icons) +
+                                            ' (' + str(len(self.icons)) + ')')
             else:
-                self.icon_label.config(text='icon: ' + str(self.current_icon + 1) + ' of ' + str(len(self.icon_groups)))
-            self.icon_name_label.config(text='name: ' + self.icon_groups[self.current_icon].name)
+                self.icon_label.config(text='icon: ' + str(self.current_icon + 1) + ' of ' + str(len(self.icons)))
+            self.icon_name_label.config(text='name: ' + self.icons[self.current_icon].name)
 
         def upload_c4z(self, given_path=''):
             def get_icons(directory):
@@ -245,10 +245,10 @@ class C4IconSwapper:
                         sub_list.append(string)
                         continue
                     if 'device_lg' in string:
-                        icon_objects.append(self.Icon(directory, directory + '/' + string, 'device', 32))
+                        icon_objects.append(self.SubIcon(directory, directory + '/' + string, 'device', 32))
                         continue
                     elif 'device_sm' in string:
-                        icon_objects.append(self.Icon(directory, directory + '/' + string, 'device', 16))
+                        icon_objects.append(self.SubIcon(directory, directory + '/' + string, 'device', 16))
                         continue
                     temp_name = ''
                     temp_size = ''
@@ -273,7 +273,7 @@ class C4IconSwapper:
                     if temp_size == '':
                         temp_img = PIL.Image.open(directory + '/' + string)
                         temp_size = str(temp_img.size[0])
-                    icons_out.append(self.Icon(directory, directory + '/' + string, temp_name, int(temp_size)))
+                    icons_out.append(self.SubIcon(directory, directory + '/' + string, temp_name, int(temp_size)))
 
                 if len(sub_list) == 0:
                     return icons_out
@@ -295,8 +295,8 @@ class C4IconSwapper:
                 self.uc.time_var = 0
                 self.uc.schedule_entry_restore = False
             temp_bak = '/bak' + str(random.randint(11111111, 99999999)) + '/'
-            if len(self.icon_groups) != 0:
-                icons_groups_bak = self.icon_groups
+            if len(self.icons) != 0:
+                icons_groups_bak = self.icons
                 if os.path.isdir(self.uc.temp_dir + 'driver'):
                     shutil.copytree(self.uc.temp_dir + 'driver', self.uc.temp_dir + temp_bak)
             else:
@@ -351,7 +351,7 @@ class C4IconSwapper:
                 pass
 
             # Form icon groups
-            self.icon_groups = []
+            self.icons = []
             temp_list = []
             for icon in icon_objects:
                 if not temp_list or (icon.name == temp_list[0].name and icon.root == temp_list[0].root):
@@ -360,30 +360,30 @@ class C4IconSwapper:
                 else:
                     if 'device' not in temp_list[0].path and 'device' not in temp_list[0].root and \
                             'device' not in temp_list[0].name:
-                        self.icon_groups.append(self.IconGroup(temp_list, extra=True))
+                        self.icons.append(self.Icon(temp_list, extra=True))
                     else:
-                        self.icon_groups.append(self.IconGroup(temp_list))
+                        self.icons.append(self.Icon(temp_list))
                     temp_list = [icon]
 
             if len(temp_list) != 0:
                 if 'device' not in temp_list[0].path and 'device' not in temp_list[0].root and \
                         'device' not in temp_list[0].name:
-                    self.icon_groups.append(self.IconGroup(temp_list, extra=True))
+                    self.icons.append(self.Icon(temp_list, extra=True))
                 else:
-                    self.icon_groups.append(self.IconGroup(temp_list))
+                    self.icons.append(self.Icon(temp_list))
 
             # Count extra icons
             self.extra_icons = 0
-            for icon_group in self.icon_groups:
+            for icon_group in self.icons:
                 if icon_group.extra:
                     self.extra_icons += 1
 
             # Update entry fields
-            if len(self.icon_groups) == 0:
+            if len(self.icons) == 0:
                 self.file_entry_field['state'] = NORMAL
                 if self.file_entry_field.get() != 'Select .c4z file...' and \
                         self.file_entry_field.get() != 'Invalid driver selected...':
-                    self.icon_groups = icons_groups_bak
+                    self.icons = icons_groups_bak
                     self.uc.schedule_entry_restore = True
                     self.uc.restore_entry_string = self.file_entry_field.get()
                     if os.path.isdir(self.uc.temp_dir + 'driver/'):
@@ -426,7 +426,7 @@ class C4IconSwapper:
                 self.gen_driver_button['state'] = NORMAL
                 self.multi_driver_button['state'] = NORMAL
 
-            if len(self.icon_groups) <= 1:
+            if len(self.icons) <= 1:
                 self.prev_icon_button['state'] = DISABLED
                 self.next_icon_button['state'] = DISABLED
             else:
@@ -454,8 +454,8 @@ class C4IconSwapper:
                 if done:
                     break
 
-            if os.path.isfile(self.icon_groups[self.current_icon].path + '.bak') or \
-                    os.path.isfile(self.icon_groups[self.current_icon].path + '.orig'):
+            if os.path.isfile(self.icons[self.current_icon].path + '.bak') or \
+                    os.path.isfile(self.icons[self.current_icon].path + '.orig'):
                 self.restore_button['state'] = ACTIVE
             else:
                 self.restore_button['state'] = DISABLED
@@ -470,10 +470,10 @@ class C4IconSwapper:
         def restore_icon(self, index=None):
             if index is None:
                 index = self.current_icon
-            elif 0 > index > len(self.icon_groups):
+            elif 0 > index > len(self.icons):
                 return print('icon restore index out of range')
 
-            for icon in self.icon_groups[index].icons:
+            for icon in self.icons[index].icons:
                 if os.path.isfile(icon.path + '.bak'):
                     shutil.copy(icon.path + '.bak', icon.path)
                     os.remove(icon.path + '.bak')
@@ -482,7 +482,7 @@ class C4IconSwapper:
                     os.remove(icon.path + '.orig')
             self.restore_button['state'] = DISABLED
             disable_all_button = True
-            for group in self.icon_groups:
+            for group in self.icons:
                 if os.path.isfile(group.icons[0].path + '.bak') or os.path.isfile(group.icons[0].path + '.orig'):
                     disable_all_button = False
                     break
@@ -491,7 +491,7 @@ class C4IconSwapper:
             self.update_icon()
 
         def restore_all(self):
-            for i in range(len(self.icon_groups)):
+            for i in range(len(self.icons)):
                 self.restore_icon(index=i)
             self.restore_button['state'] = DISABLED
             self.restore_all_button['state'] = DISABLED
@@ -502,20 +502,20 @@ class C4IconSwapper:
                 print('Driver not selected')
                 return
             if self.current_icon - 1 < 0:
-                self.current_icon = self.current_icon - 1 + len(self.icon_groups)
+                self.current_icon = self.current_icon - 1 + len(self.icons)
             else:
                 self.current_icon -= 1
 
-            if os.path.isfile(self.icon_groups[self.current_icon].path + '.bak') or \
-                    os.path.isfile(self.icon_groups[self.current_icon].path + '.orig'):
+            if os.path.isfile(self.icons[self.current_icon].path + '.bak') or \
+                    os.path.isfile(self.icons[self.current_icon].path + '.orig'):
                 self.restore_button['state'] = ACTIVE
             else:
                 self.restore_button['state'] = DISABLED
 
-            if self.show_extra_icons.get() == 0 and self.icon_groups[self.current_icon].extra:
-                while self.icon_groups[self.current_icon].extra:
+            if self.show_extra_icons.get() == 0 and self.icons[self.current_icon].extra:
+                while self.icons[self.current_icon].extra:
                     if self.current_icon - 1 < 0:
-                        self.current_icon = self.current_icon - 1 + len(self.icon_groups)
+                        self.current_icon = self.current_icon - 1 + len(self.icons)
                     else:
                         self.current_icon -= 1
 
@@ -525,21 +525,21 @@ class C4IconSwapper:
             if not self.uc.driver_selected:
                 print('Driver not selected')
                 return
-            if self.current_icon + 1 >= len(self.icon_groups):
-                self.current_icon = self.current_icon + 1 - len(self.icon_groups)
+            if self.current_icon + 1 >= len(self.icons):
+                self.current_icon = self.current_icon + 1 - len(self.icons)
             else:
                 self.current_icon += 1
 
-            if os.path.isfile(self.icon_groups[self.current_icon].path + '.bak') or \
-                    os.path.isfile(self.icon_groups[self.current_icon].path + '.orig'):
+            if os.path.isfile(self.icons[self.current_icon].path + '.bak') or \
+                    os.path.isfile(self.icons[self.current_icon].path + '.orig'):
                 self.restore_button['state'] = ACTIVE
             else:
                 self.restore_button['state'] = DISABLED
 
-            if self.show_extra_icons.get() == 0 and self.icon_groups[self.current_icon].extra:
-                while self.icon_groups[self.current_icon].extra:
-                    if self.current_icon + 1 >= len(self.icon_groups):
-                        self.current_icon = self.current_icon + 1 - len(self.icon_groups)
+            if self.show_extra_icons.get() == 0 and self.icons[self.current_icon].extra:
+                while self.icons[self.current_icon].extra:
+                    if self.current_icon + 1 >= len(self.icons):
+                        self.current_icon = self.current_icon + 1 - len(self.icons)
                     else:
                         self.current_icon += 1
 
@@ -846,7 +846,7 @@ class C4IconSwapper:
         def replace_icon(self, index=None, given_path=''):
             if index is None:
                 index = self.uc.c4z_panel.current_icon
-            elif 0 > index > len(self.uc.c4z_panel.icon_groups):
+            elif 0 > index > len(self.uc.c4z_panel.icons):
                 print('Replace icon index out of range')
                 return
 
@@ -854,7 +854,7 @@ class C4IconSwapper:
                 replacement_icon = Image.open(self.uc.replacement_image_path)
             else:
                 replacement_icon = Image.open(given_path)
-            for icon in self.uc.c4z_panel.icon_groups[index].icons:
+            for icon in self.uc.c4z_panel.icons[index].icons:
                 if not os.path.isfile(icon.path + '.bak'):
                     shutil.copy(icon.path, icon.path + '.bak')
                 new_icon = replacement_icon.resize((icon.size, icon.size))
@@ -864,8 +864,8 @@ class C4IconSwapper:
             self.uc.c4z_panel.update_icon()
 
         def replace_all(self):
-            for i in range(len(self.uc.c4z_panel.icon_groups)):
-                if self.uc.c4z_panel.show_extra_icons.get() == 0 and self.uc.c4z_panel.icon_groups[i].extra:
+            for i in range(len(self.uc.c4z_panel.icons)):
+                if self.uc.c4z_panel.show_extra_icons.get() == 0 and self.uc.c4z_panel.icons[i].extra:
                     continue
                 self.replace_icon(index=i)
 
