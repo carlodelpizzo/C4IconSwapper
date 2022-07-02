@@ -164,7 +164,7 @@ class C4IconSwapperMac:
             self.upload_c4z(temp_gen_driver)
             os.remove(temp_gen_driver)
             self.gen_driver_button['state'] = DISABLED
-            self.uc.export_panel.over_orig_check['state'] = DISABLED
+            # self.uc.export_panel.over_orig_check['state'] = DISABLED
 
         def load_gen_multi(self, test=True):
             # Upload generic multi-state driver from Base64Assets
@@ -208,7 +208,7 @@ class C4IconSwapperMac:
             os.remove(temp_gen_driver)
 
             self.multi_driver_button['state'] = DISABLED
-            self.uc.export_panel.over_orig_check['state'] = DISABLED
+            # self.uc.export_panel.over_orig_check['state'] = DISABLED
 
         def update_icon(self):
             if len(self.icons) == 0:
@@ -237,7 +237,7 @@ class C4IconSwapperMac:
                 path_list = os.listdir(directory)
                 sub_list = []
                 for string in path_list:
-                    if '.bak' in string or '.orig' in string:
+                    if '.bak' in string or '.orig' in string or string[0] == '.':
                         continue
                     if '.' not in string:
                         if 'original_icons' in string or 'old' in string:
@@ -1033,16 +1033,16 @@ class C4IconSwapperMac:
                                                 variable=self.inc_driver_version, takefocus=0)
             self.inc_driver_check.place(x=63 + self.x, y=135 + self.y, anchor='w')
 
-            self.over_orig = IntVar()
-            self.over_orig_check = Checkbutton(self.uc.root, text='overwrite original file', variable=self.over_orig,
-                                               takefocus=0)
-            self.over_orig_check.place(x=63 + self.x, y=115 + self.y, anchor='w')
-            self.over_orig_check['state'] = DISABLED
+            # self.over_orig = IntVar()
+            # self.over_orig_check = Checkbutton(self.uc.root, text='overwrite original file', variable=self.over_orig,
+            #                                    takefocus=0)
+            # self.over_orig_check.place(x=63 + self.x, y=115 + self.y, anchor='w')
+            # self.over_orig_check['state'] = DISABLED
 
-            self.remove_backups = IntVar()
-            self.remove_backups_check = Checkbutton(self.uc.root, text='remove backup files',
-                                                    variable=self.remove_backups, takefocus=0)
-            self.remove_backups_check.place(x=63 + self.x, y=95 + self.y, anchor='w')
+            self.include_backups = IntVar()
+            self.include_backups_check = Checkbutton(self.uc.root, text='include backup files',
+                                                     variable=self.include_backups, takefocus=0)
+            self.include_backups_check.place(x=63 + self.x, y=115 + self.y, anchor='w')
 
         def export_c4z(self):
             cur_dir = self.uc.cur_dir
@@ -1264,7 +1264,7 @@ class C4IconSwapperMac:
 
             bak_files = []
             temp_temp_dir = self.uc.temp_dir + 'temp_bak_files/'
-            if self.remove_backups.get() == 1:
+            if self.include_backups.get() == 0:
                 if not os.path.isdir(temp_temp_dir):
                     os.mkdir(temp_temp_dir)
                 directories = list_all_sub_directories(self.uc.temp_dir)
@@ -1636,7 +1636,7 @@ class C4IconSwapperMac:
             self.panel_label.place(x=185 + self.x, y=-27 + self.y, anchor='n')
 
     def __init__(self):
-        print("Mac")
+        print('Mac Version')
         # Initialize main program
         self.root = TkinterDnD.Tk()
         self.root.bind('<KeyRelease>', self.key_release)
