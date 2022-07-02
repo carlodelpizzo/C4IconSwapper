@@ -1,3 +1,8 @@
+import platform
 from C4IconSwapper import C4IconSwapper
+from C4IconSwapperMac import C4IconSwapperMac
 
-C4IconSwapper()
+if platform.system() == 'Darwin':
+    C4IconSwapperMac()
+else:
+    C4IconSwapper()

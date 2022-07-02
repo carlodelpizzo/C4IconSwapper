@@ -30,7 +30,7 @@ conn_template = ['connection', '', [], [['id', '0', [], []], ['type', '0', [], [
                                         ['classes', '', [], [['class', '', [], [['classname', 'REPLACE', [], []]]]]]]]
 
 
-class C4IconSwapper:
+class C4IconSwapperMac:
     class C4zPanel:
         class SubIcon:
             def __init__(self, root_path: str, path: str, name: str, size: int):
@@ -1636,6 +1636,7 @@ class C4IconSwapper:
             self.panel_label.place(x=185 + self.x, y=-27 + self.y, anchor='n')
 
     def __init__(self):
+        print("Mac")
         # Initialize main program
         self.root = TkinterDnD.Tk()
         self.root.bind('<KeyRelease>', self.key_release)
