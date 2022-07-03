@@ -1408,14 +1408,14 @@ class C4IconSwapperMac:
                 self.name_entry['state'] = NORMAL
                 self.type_menu['state'] = NORMAL
                 self.add_button.place(x=-420, y=-420, anchor='w')
-                self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
+                self.x_button.place(x=self.x + 18, y=self.y - 3, anchor='w')
                 self.tags[0].delete = False
                 self.name_entry['takefocus'] = 1
 
             def disable(self):
                 self.name_entry['state'] = DISABLED
                 self.type_menu['state'] = DISABLED
-                self.add_button.place(x=self.x, y=self.y, anchor='w')
+                self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
                 self.x_button.place(x=-420, y=-420, anchor='w')
                 self.tags[0].delete = True
                 self.name_entry['takefocus'] = 0
@@ -1471,17 +1471,17 @@ class C4IconSwapperMac:
                 self.name_entry['state'] = NORMAL
                 self.name_entry.delete(0, END)
                 self.name_entry.insert(0, 'Connection Name...')
-                self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+                self.name_entry.place(x=self.x + 60, y=self.y, anchor='w')
                 self.name_entry['state'] = DISABLED
                 self.name_entry['takefocus'] = 0
 
                 # Dropdown
                 self.type.set('HDMI IN')
-                self.type_menu.place(x=self.x + 160, y=self.y, anchor='w')
+                self.type_menu.place(x=self.x + 207, y=self.y, anchor='w')
                 self.type_menu['state'] = DISABLED
 
                 # Buttons
-                self.add_button.place(x=self.x, y=self.y, anchor='w')
+                self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
                 self.x_button.place(x=-420, y=-420, anchor='w')
                 self.del_button.place(x=-420, y=-420, anchor='w')
 
@@ -1527,13 +1527,13 @@ class C4IconSwapperMac:
 
         def __init__(self, upper_class):
             # Initialize Connection Panel
-            self.x = 30
+            self.x = 10
             self.y = 300
             self.uc = upper_class
             self.connections = []
             self.ids = []
 
-            x_spacing = 348
+            x_spacing = 365
             y_spacing = 40
             for x in range(0, 4):
                 for i in range(0, 6):
