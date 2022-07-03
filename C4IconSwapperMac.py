@@ -6,6 +6,8 @@ import base64
 import time
 import random
 import re
+import traceback
+
 import PIL.Image
 import tkinter as tk
 from tkinter import *
@@ -1697,7 +1699,6 @@ class C4IconSwapperMac:
             self.panel_label.place(x=185 + self.x, y=-27 + self.y, anchor='n')
 
     def __init__(self):
-        print('Mac Version')
         # Initialize main program
         # self.root = TkinterDnD.Tk()
         self.root = tk.Tk()
