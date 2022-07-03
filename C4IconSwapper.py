@@ -1726,8 +1726,8 @@ class C4IconSwapper:
         self.separator1.place(x=610, y=0, height=270)
         self.separator2 = ttk.Separator(self.root, orient='horizontal')
         self.separator2.place(x=0, y=270, relwidth=1)
-        self.separator1 = ttk.Separator(self.root, orient='vertical')
-        self.separator1.place(x=915, y=0, height=270)
+        self.separator3 = ttk.Separator(self.root, orient='vertical')
+        self.separator3.place(x=915, y=0, height=270)
 
         # Buttons
         self.toggle_conn_button = tk.Button(self.root, text='Show Connections', width=15,
