@@ -7,8 +7,6 @@ import base64
 import time
 import random
 import re
-import traceback
-
 import PIL.Image
 import tkinter as tk
 from tkinter import *
