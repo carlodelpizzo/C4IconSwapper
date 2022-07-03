@@ -1427,7 +1427,9 @@ class C4IconSwapper:
                 self.delete = False
                 self.prior_txt = ''
                 self.prior_type = ''
-                self.tags = []
+                if self.tags:
+                    self.disable()
+                    self.tags = []
                 self.id_group = []
 
                 # Entry
