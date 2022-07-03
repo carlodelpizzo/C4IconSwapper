@@ -30,7 +30,7 @@ def get_path(filename):
     name = os.path.splitext(filename)[0]
     ext = os.path.splitext(filename)[1]
     file = NSBundle.mainBundle().pathForResource_ofType_(name, ext)
-    return file
+    return file or os.path.realpath(filename)
 
 
 version = '5.6b'
