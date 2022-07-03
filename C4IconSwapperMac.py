@@ -68,7 +68,7 @@ class C4IconSwapperMac:
 
             # Labels
             self.panel_label = tk.Label(self.uc.root, text='Driver Selection', font=("Arial", 15))
-            self.panel_label.place(x=190 + self.x, y=-20 + self.y, anchor='n')
+            self.panel_label.place(x=165 + self.x, y=-20 + self.y, anchor='n')
 
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
             self.blank_image_label.image = self.uc.blank
@@ -675,7 +675,7 @@ class C4IconSwapperMac:
 
             # Labels
             self.panel_label = tk.Label(self.uc.root, text='Replacement Icons', font=("Arial", 15))
-            self.panel_label.place(x=190 + self.x, y=-20 + self.y, anchor='n')
+            self.panel_label.place(x=165 + self.x, y=-20 + self.y, anchor='n')
 
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
             self.blank_image_label.image = self.uc.blank
@@ -685,31 +685,38 @@ class C4IconSwapperMac:
 
             self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
             self.stack_labels[-1].image = self.uc.stack_blank
-            self.stack_labels[-1].place(x=31 + self.x, y=176 + self.y, anchor='nw')
+            self.stack_labels[-1].place(x=18 + self.x, y=176 + self.y, anchor='nw')
             self.stack_labels[-1].bind('<Button-1>', self.select_stack0)
             self.stack_labels[-1].drop_target_register(DND_FILES)
             self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack0)
 
             self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
             self.stack_labels[-1].image = self.uc.stack_blank
-            self.stack_labels[-1].place(x=92 + self.x, y=176 + self.y, anchor='nw')
+            self.stack_labels[-1].place(x=79 + self.x, y=176 + self.y, anchor='nw')
             self.stack_labels[-1].bind('<Button-1>', self.select_stack1)
             self.stack_labels[-1].drop_target_register(DND_FILES)
             self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack1)
 
             self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
             self.stack_labels[-1].image = self.uc.stack_blank
-            self.stack_labels[-1].place(x=153 + self.x, y=176 + self.y, anchor='nw')
+            self.stack_labels[-1].place(x=140 + self.x, y=176 + self.y, anchor='nw')
             self.stack_labels[-1].bind('<Button-1>', self.select_stack2)
             self.stack_labels[-1].drop_target_register(DND_FILES)
             self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack2)
 
             self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
             self.stack_labels[-1].image = self.uc.stack_blank
-            self.stack_labels[-1].place(x=214 + self.x, y=176 + self.y, anchor='nw')
+            self.stack_labels[-1].place(x=201 + self.x, y=176 + self.y, anchor='nw')
             self.stack_labels[-1].bind('<Button-1>', self.select_stack3)
             self.stack_labels[-1].drop_target_register(DND_FILES)
             self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack3)
+
+            self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
+            self.stack_labels[-1].image = self.uc.stack_blank
+            self.stack_labels[-1].place(x=262 + self.x, y=176 + self.y, anchor='nw')
+            self.stack_labels[-1].bind('<Button-1>', self.select_stack4)
+            self.stack_labels[-1].drop_target_register(DND_FILES)
+            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack4)
 
             # Buttons
             self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_replacement,
@@ -1030,14 +1037,14 @@ class C4IconSwapperMac:
             dropped_path = event.data.replace('{', '').replace('}', '')
             self.add_to_img_stack(dropped_path, index=3)
 
-        def drop_stack3(self, event):
+        def drop_stack4(self, event):
             dropped_path = event.data.replace('{', '').replace('}', '')
             self.add_to_img_stack(dropped_path, index=4)
 
     class ExportPanel:
         def __init__(self, upper_class):
             # Initialize Export Panel
-            self.x = 1665
+            self.x = 730
             self.y = -25
             self.uc = upper_class
             self.abort = False
@@ -1650,7 +1657,7 @@ class C4IconSwapperMac:
 
         def __init__(self, upper_class):
             # Initialize State Panel
-            self.x = 930
+            self.x = 1930
             self.y = 27
             self.uc = upper_class
             self.states = []
@@ -1674,7 +1681,7 @@ class C4IconSwapperMac:
         self.root.bind('<KeyRelease>', self.key_release)
 
         # Root window properties
-        self.root.geometry('1115x270')
+        self.root.geometry('1055x290')
         self.root.title('C4 Icon Swapper')
         self.root.resizable(False, False)
 
@@ -1752,22 +1759,22 @@ class C4IconSwapperMac:
 
         # Separators
         self.separator0 = ttk.Separator(self.root, orient='vertical')
-        self.separator0.place(x=350, y=0, height=270)
+        self.separator0.place(x=350, y=0, height=290)
         self.separator1 = ttk.Separator(self.root, orient='vertical')
-        self.separator1.place(x=700, y=0, height=270)
+        self.separator1.place(x=700, y=0, height=290)
         self.separator2 = ttk.Separator(self.root, orient='horizontal')
-        self.separator2.place(x=0, y=270, relwidth=1)
+        self.separator2.place(x=0, y=290, relwidth=1)
         self.separator3 = ttk.Separator(self.root, orient='vertical')
-        self.separator3.place(x=915, y=0, height=270)
+        self.separator3.place(x=1055, y=0, height=290)
 
         # Buttons
         self.toggle_conn_button = tk.Button(self.root, text='Show Connections', width=15,
                                             command=self.toggle_connections_panel, takefocus=0)
-        self.toggle_conn_button.place(x=800, y=240, anchor='n')
+        self.toggle_conn_button.place(x=790, y=240, anchor='n')
 
         self.show_states_button = tk.Button(self.root, text='Show States', width=15, command=self.show_states_panel,
                                             takefocus=0)
-        self.show_states_button.place(x=920, y=240, anchor='n')
+        self.show_states_button.place(x=965, y=240, anchor='n')
 
         # Version Label
         self.version_label = Label(self.root, text=version)
@@ -1789,25 +1796,25 @@ class C4IconSwapperMac:
         if not self.states_shown:
             if self.toggle_conn_button['text'] == 'Show Connections':
                 self.toggle_conn_button['text'] = 'Hide Connections'
-                self.root.geometry('915x530')
+                self.root.geometry('1055x530')
                 for conn in self.connections_panel.connections:
                     if conn.name_entry['state'] == NORMAL:
                         conn.name_entry['takefocus'] = 1
                 return
             self.toggle_conn_button['text'] = 'Show Connections'
-            self.root.geometry('915x270')
+            self.root.geometry('1055x290')
             for conn in self.connections_panel.connections:
                 conn.name_entry['takefocus'] = 0
             return
         if self.toggle_conn_button['text'] == 'Show Connections':
             self.toggle_conn_button['text'] = 'Hide Connections'
-            self.root.geometry('1300x530')
+            self.root.geometry('1500x530')
             for conn in self.connections_panel.connections:
                 if conn.name_entry['state'] == NORMAL:
                     conn.name_entry['takefocus'] = 1
             return
         self.toggle_conn_button['text'] = 'Show Connections'
-        self.root.geometry('1300x270')
+        self.root.geometry('1500x290')
         for conn in self.connections_panel.connections:
             conn.name_entry['takefocus'] = 0
         return
@@ -1815,10 +1822,10 @@ class C4IconSwapperMac:
     def show_states_panel(self):
         if not self.states_shown:
             if self.toggle_conn_button['text'] == 'Show Connections':
-                self.root.geometry('1300x270')
+                self.root.geometry('1500x290')
                 self.states_shown = True
             else:
-                self.root.geometry('1300x530')
+                self.root.geometry('1500x530')
                 self.states_shown = True
             self.show_states_button['text'] = 'Hide States'
             for i in range(7):
@@ -1829,10 +1836,10 @@ class C4IconSwapperMac:
                     state.name_entry['takefocus'] = 1
             return
         elif self.toggle_conn_button['text'] == 'Show Connections':
-            self.root.geometry('915x270')
+            self.root.geometry('1055x290')
             self.states_shown = False
         else:
-            self.root.geometry('915x530')
+            self.root.geometry('1055x530')
             self.states_shown = False
         for i in range(7):
             if self.connections_panel.connections[-i].name_entry['state'] == NORMAL:
