@@ -235,6 +235,7 @@ class C4IconSwapperMac:
                 if not os.path.isdir(directory):
                     return
                 path_list = os.listdir(directory)
+                path_list.sort()
                 sub_list = []
                 for string in path_list:
                     if '.bak' in string or '.orig' in string or string[0] == '.':
@@ -277,6 +278,7 @@ class C4IconSwapperMac:
 
                 if len(sub_list) == 0:
                     return icons_out
+                sub_list.sort()
                 for sub_dir in sub_list:
                     to_add = get_icons(directory + '/' + sub_dir)
                     for icon_path in to_add:
