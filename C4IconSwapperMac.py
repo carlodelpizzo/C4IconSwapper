@@ -667,7 +667,7 @@ class C4IconSwapperMac:
     class ReplacementPanel:
         def __init__(self, upper_class):
             # Initialize Replacement Panel
-            self.x = 303
+            self.x = 353
             self.y = 20
             self.uc = upper_class
             self.img_stack = []
@@ -1007,7 +1007,7 @@ class C4IconSwapperMac:
     class ExportPanel:
         def __init__(self, upper_class):
             # Initialize Export Panel
-            self.x = 615
+            self.x = 665
             self.y = -25
             self.uc = upper_class
             self.abort = False
