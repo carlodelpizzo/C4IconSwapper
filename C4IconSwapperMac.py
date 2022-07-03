@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter import *
 from tkinter import ttk
 from tkinter import filedialog
-from tkinterdnd2 import DND_FILES, TkinterDnD
+# from tkinterdnd2 import DND_FILES, TkinterDnD
 from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
@@ -90,8 +90,8 @@ class C4IconSwapperMac:
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
             self.blank_image_label.image = self.uc.blank
             self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
-            self.blank_image_label.drop_target_register(DND_FILES)
-            self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
+            # self.blank_image_label.drop_target_register(DND_FILES)
+            # self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
             self.icon_label = tk.Label(self.uc.root, text='0 of 0')
             self.icon_label.place(x=108 + self.x, y=176 + self.y, anchor='n')
@@ -133,8 +133,8 @@ class C4IconSwapperMac:
             self.file_entry_field.insert(0, 'Select .c4z file...')
             self.file_entry_field.place(x=101 + self.x, y=15 + self.y, anchor='n')
             self.file_entry_field['state'] = DISABLED
-            self.file_entry_field.drop_target_register(DND_FILES)
-            self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_c4z)
+            # self.file_entry_field.drop_target_register(DND_FILES)
+            # self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
             # Checkbox
             self.show_extra_icons = IntVar(value=0)
@@ -697,43 +697,43 @@ class C4IconSwapperMac:
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
             self.blank_image_label.image = self.uc.blank
             self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
-            self.blank_image_label.drop_target_register(DND_FILES)
-            self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_replacement)
+            # self.blank_image_label.drop_target_register(DND_FILES)
+            # self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_replacement)
 
             self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
             self.stack_labels[-1].image = self.uc.stack_blank
             self.stack_labels[-1].place(x=18 + self.x, y=176 + self.y, anchor='nw')
             self.stack_labels[-1].bind('<Button-1>', self.select_stack0)
-            self.stack_labels[-1].drop_target_register(DND_FILES)
-            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack0)
+            # self.stack_labels[-1].drop_target_register(DND_FILES)
+            # self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack0)
 
             self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
             self.stack_labels[-1].image = self.uc.stack_blank
             self.stack_labels[-1].place(x=79 + self.x, y=176 + self.y, anchor='nw')
             self.stack_labels[-1].bind('<Button-1>', self.select_stack1)
-            self.stack_labels[-1].drop_target_register(DND_FILES)
-            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack1)
+            # self.stack_labels[-1].drop_target_register(DND_FILES)
+            # self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack1)
 
             self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
             self.stack_labels[-1].image = self.uc.stack_blank
             self.stack_labels[-1].place(x=140 + self.x, y=176 + self.y, anchor='nw')
             self.stack_labels[-1].bind('<Button-1>', self.select_stack2)
-            self.stack_labels[-1].drop_target_register(DND_FILES)
-            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack2)
+            # self.stack_labels[-1].drop_target_register(DND_FILES)
+            # self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack2)
 
             self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
             self.stack_labels[-1].image = self.uc.stack_blank
             self.stack_labels[-1].place(x=201 + self.x, y=176 + self.y, anchor='nw')
             self.stack_labels[-1].bind('<Button-1>', self.select_stack3)
-            self.stack_labels[-1].drop_target_register(DND_FILES)
-            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack3)
+            # self.stack_labels[-1].drop_target_register(DND_FILES)
+            # self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack3)
 
             self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
             self.stack_labels[-1].image = self.uc.stack_blank
             self.stack_labels[-1].place(x=262 + self.x, y=176 + self.y, anchor='nw')
             self.stack_labels[-1].bind('<Button-1>', self.select_stack4)
-            self.stack_labels[-1].drop_target_register(DND_FILES)
-            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack4)
+            # self.stack_labels[-1].drop_target_register(DND_FILES)
+            # self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack4)
 
             # Buttons
             self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_replacement,
@@ -764,8 +764,8 @@ class C4IconSwapperMac:
             self.file_entry_field.insert(0, 'Select image file...')
             self.file_entry_field.place(x=103 + self.x, y=15 + self.y, anchor='n')
             self.file_entry_field['state'] = DISABLED
-            self.file_entry_field.drop_target_register(DND_FILES)
-            self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_replacement)
+            # self.file_entry_field.drop_target_register(DND_FILES)
+            # self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_replacement)
 
         def upload_replacement(self, given_path=''):
             if given_path == '':
@@ -1699,7 +1699,8 @@ class C4IconSwapperMac:
     def __init__(self):
         print('Mac Version')
         # Initialize main program
-        self.root = TkinterDnD.Tk()
+        # self.root = TkinterDnD.Tk()
+        self.root = tk.Tk()
         self.root.bind('<KeyRelease>', self.key_release)
 
         # Root window properties
