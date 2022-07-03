@@ -235,6 +235,7 @@ class C4IconSwapper:
                 if not os.path.isdir(directory):
                     return
                 path_list = os.listdir(directory)
+                path_list.sort()
                 sub_list = []
                 for string in path_list:
                     if '.bak' in string or '.orig' in string:
@@ -277,6 +278,7 @@ class C4IconSwapper:
 
                 if len(sub_list) == 0:
                     return icons_out
+                sub_list.sort()
                 for sub_dir in sub_list:
                     to_add = get_icons(directory + '/' + sub_dir)
                     for icon_path in to_add:
@@ -1906,6 +1908,7 @@ def list_all_sub_directories(directory):
                 new_subs.append(new_sub)
         for new_sub in new_subs:
             subs.append(new_sub)
+    subs.sort()
     return subs
 
 
