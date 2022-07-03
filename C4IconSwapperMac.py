@@ -233,7 +233,7 @@ class C4IconSwapperMac:
             if abs(self.current_icon) >= len(self.icons):
                 self.current_icon = abs(self.current_icon) % len(self.icons)
             icon_image = Image.open(self.icons[self.current_icon].path)
-            icon = icon_image.resize((128, 128), Image.ANTIALIAS)
+            icon = icon_image.resize((128, 128))
             icon = ImageTk.PhotoImage(icon)
             self.blank_image_label.configure(image=icon)
             self.blank_image_label.image = icon
@@ -801,7 +801,7 @@ class C4IconSwapperMac:
                 return
             self.uc.replacement_selected = True
             icon_image = Image.open(self.uc.replacement_image_path)
-            icon = icon_image.resize((128, 128), Image.ANTIALIAS)
+            icon = icon_image.resize((128, 128))
             icon = ImageTk.PhotoImage(icon)
             self.blank_image_label.configure(image=icon)
             self.blank_image_label.image = icon
@@ -848,7 +848,7 @@ class C4IconSwapperMac:
                 if i == 5:
                     break
                 icon_image = Image.open(self.img_stack[i])
-                icon = icon_image.resize((60, 60), Image.ANTIALIAS)
+                icon = icon_image.resize((60, 60))
                 icon = ImageTk.PhotoImage(icon)
                 self.stack_labels[i].configure(image=icon)
                 self.stack_labels[i].image = icon
@@ -1760,9 +1760,9 @@ class C4IconSwapperMac:
         with open(get_path(temp_image_file), 'wb') as blank_img_file:
             blank_img_file.write(base64.b64decode(blank_img_b64))
         blank_image = Image.open(temp_image_file)
-        blank = blank_image.resize((128, 128), Image.ANTIALIAS)
+        blank = blank_image.resize((128, 128))
         self.blank = ImageTk.PhotoImage(blank)
-        stack_blank = blank_image.resize((60, 60), Image.ANTIALIAS)
+        stack_blank = blank_image.resize((60, 60))
         self.stack_blank = ImageTk.PhotoImage(stack_blank)
         blank_image.close()
         os.remove(temp_image_file)
