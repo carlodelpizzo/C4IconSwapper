@@ -17,10 +17,12 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
-from AppKit import NSBundle, NSFileManager
+from AppKit import NSBundle
 
 
 no_dark_mode = None
+
+
 def is_dark_mode():
     global no_dark_mode
 
@@ -32,14 +34,12 @@ def is_dark_mode():
         mac_ver = mac_ver_temp[0]
         ver_check = ''
         one_point = False
-        print(mac_ver, mac_ver_temp)
         for char in mac_ver:
             if char == '.':
                 if one_point:
                     break
                 one_point = True
             ver_check += char
-        print(ver_check)
         if 10.14 > float(ver_check):
             no_dark_mode = True
             return False
