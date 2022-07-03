@@ -1710,7 +1710,9 @@ class C4IconSwapperMac:
         self.root.resizable(False, False)
 
         # Creating temporary directory
-        self.cur_dir = get_path(os.getcwd() + '/')
+        self.cur_dir = filedialog.askopenfilename()
+        self.cur_dir = get_path(self.cur_dir)
+        # self.cur_dir = get_path(os.getcwd() + '/')
         self.temp_dir = self.cur_dir + '/C4IconSwapperTemp/'
         if not os.path.isdir(self.temp_dir):
             os.mkdir(self.temp_dir)
