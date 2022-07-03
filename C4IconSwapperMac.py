@@ -1107,15 +1107,15 @@ class C4IconSwapperMac:
 
             def confirm_overwrite():
                 # Remove old driver
-                if os.path.isfile(cur_dir + driver_name + '.c4z'):
-                    os.remove(cur_dir + driver_name + '.c4z')
-                if os.path.isfile(cur_dir + driver_name + '.zip'):
-                    os.remove(cur_dir + driver_name + '.zip')
+                if os.path.isfile(cur_dir + '/' + driver_name + '.c4z'):
+                    os.remove(cur_dir + '/' + driver_name + '.c4z')
+                if os.path.isfile(cur_dir + '/' + driver_name + '.zip'):
+                    os.remove(cur_dir + '/' + driver_name + '.zip')
 
                 # Make new driver
                 shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
-                base = os.path.splitext(cur_dir + driver_name + '.zip')[0]
-                os.rename(cur_dir + driver_name + '.zip', base + '.c4z')
+                base = os.path.splitext(cur_dir + '/' + driver_name + '.zip')[0]
+                os.rename(cur_dir + '/' + driver_name + '.zip', base + '.c4z')
 
                 export_cleanup()
 
@@ -1126,11 +1126,11 @@ class C4IconSwapperMac:
                         shutil.copy(temp_temp_dir + '/' + file_list0[2], file_list0[0] + '/' + file_list0[1])
                     shutil.rmtree(temp_temp_dir)
                 driver_xml.restore()
-                if os.path.isfile(temp_dir + 'driver/driver.lua'):
-                    os.remove(temp_dir + 'driver/driver.lua')
-                    os.rename(temp_dir + 'driver/driver.lua.bak', temp_dir + 'driver/driver.lua')
-                os.remove(temp_dir + 'driver/driver.xml')
-                os.rename(temp_dir + 'driver/driver.xml.bak', temp_dir + 'driver/driver.xml')
+                if os.path.isfile(temp_dir + '/driver/driver.lua'):
+                    os.remove(temp_dir + '/driver/driver.lua')
+                    os.rename(temp_dir + '/driver/driver.lua.bak', temp_dir + '/driver/driver.lua')
+                os.remove(temp_dir + '/driver/driver.xml')
+                os.rename(temp_dir + '/driver/driver.xml.bak', temp_dir + '/driver/driver.xml')
 
                 overwrite_pop_up.destroy()
 
@@ -1179,8 +1179,8 @@ class C4IconSwapperMac:
 
             # state_name_changes = [original_name, new_name, original_name_lower, new_name_lower]
             state_name_changes = []
-            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
-                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
+            if os.path.isfile(self.uc.temp_dir + '/driver/driver.lua'):
+                shutil.copy(self.uc.temp_dir + '/driver/driver.lua', self.uc.temp_dir + '/driver/driver.lua.bak')
                 for state in self.uc.state_panel.states:
                     if state.name_entry['state'] == NORMAL:
                         state_name_changes.append([state.original_name, state.name_entry.get()])
@@ -1211,8 +1211,8 @@ class C4IconSwapperMac:
 
                 # Modify lua file
                 modified_lua_lines = []
-                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
-                with open(get_path(self.uc.temp_dir + 'driver/driver.lua'), errors='ignore') as driver_lua_file:
+                shutil.copy(self.uc.temp_dir + '/driver/driver.lua', self.uc.temp_dir + '/driver/driver.lua.bak')
+                with open(get_path(self.uc.temp_dir + '/driver/driver.lua'), errors='ignore') as driver_lua_file:
                     driver_lua_lines = driver_lua_file.readlines()
                 for line in driver_lua_lines:
                     new_line = line
@@ -1231,7 +1231,7 @@ class C4IconSwapperMac:
                             new_line = new_line.replace(name_change[2] + '=', name_change[3] + '=')
 
                     modified_lua_lines.append(new_line)
-                with open(get_path(self.uc.temp_dir + 'driver/driver.lua'), 'w', errors='ignore') as driver_lua_file:
+                with open(get_path(self.uc.temp_dir + '/driver/driver.lua'), 'w', errors='ignore') as driver_lua_file:
                     driver_lua_file.writelines(modified_lua_lines)
 
             # Confirm all connections have non-conflicting ids
@@ -1314,12 +1314,12 @@ class C4IconSwapperMac:
                     result = result.group(1)
                     icon_tag.value = icon_tag.value.replace(result, driver_name)
 
-            os.rename(self.uc.temp_dir + 'driver/driver.xml', self.uc.temp_dir + 'driver/driver.xml.bak')
-            with open(get_path(self.uc.temp_dir + 'driver/driver.xml'), 'w', errors='ignore') as out_file:
+            os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.xml.bak')
+            with open(get_path(self.uc.temp_dir + '/driver/driver.xml'), 'w', errors='ignore') as out_file:
                 out_file.writelines(self.uc.driver_xml.get_lines())
 
             bak_files = []
-            temp_temp_dir = self.uc.temp_dir + 'temp_bak_files/'
+            temp_temp_dir = self.uc.temp_dir + '/temp_bak_files/'
             if self.include_backups.get() == 0:
                 if not os.path.isdir(temp_temp_dir):
                     os.mkdir(temp_temp_dir)
@@ -1334,8 +1334,8 @@ class C4IconSwapperMac:
                     os.remove(file_list[0] + '/' + file_list[1])
 
             # Export file
-            if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z') or \
-                    os.path.isfile(self.uc.cur_dir + driver_name + '.zip'):
+            if os.path.isfile(self.uc.cur_dir + '/' + driver_name + '.c4z') or \
+                    os.path.isfile(self.uc.cur_dir + '/' + driver_name + '.zip'):
                 win_x = self.uc.root.winfo_rootx() + self.x
                 win_y = self.uc.root.winfo_rooty()
                 overwrite_pop_up = Toplevel(self.uc.root)
@@ -1360,8 +1360,8 @@ class C4IconSwapperMac:
 
             # Make driver
             shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + '/driver')
-            base_name = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
-            os.rename(self.uc.cur_dir + driver_name + '.zip', base_name + '.c4z')
+            base_name = os.path.splitext(self.uc.cur_dir + '/' + driver_name + '.zip')[0]
+            os.rename(self.uc.cur_dir + '/' + driver_name + '.zip', base_name + '.c4z')
 
             # Cleanup temp files and restore original xml
             if len(bak_files) != 0 and os.path.isdir(temp_temp_dir):
@@ -1369,11 +1369,11 @@ class C4IconSwapperMac:
                     shutil.copy(temp_temp_dir + '/' + file_list[2], file_list[0] + '/' + file_list[1])
                 shutil.rmtree(temp_temp_dir)
             self.uc.driver_xml.restore()
-            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
-                os.remove(self.uc.temp_dir + 'driver/driver.lua')
-                os.rename(self.uc.temp_dir + 'driver/driver.lua.bak', self.uc.temp_dir + 'driver/driver.lua')
-            os.remove(self.uc.temp_dir + 'driver/driver.xml')
-            os.rename(self.uc.temp_dir + 'driver/driver.xml.bak', self.uc.temp_dir + 'driver/driver.xml')
+            if os.path.isfile(self.uc.temp_dir + '/driver/driver.lua'):
+                os.remove(self.uc.temp_dir + '/driver/driver.lua')
+                os.rename(self.uc.temp_dir + '/driver/driver.lua.bak', self.uc.temp_dir + '/driver/driver.lua')
+            os.remove(self.uc.temp_dir + '/driver/driver.xml')
+            os.rename(self.uc.temp_dir + '/driver/driver.xml.bak', self.uc.temp_dir + '/driver/driver.xml')
 
     class ConnectionsPanel:
         class Connection:
@@ -1721,9 +1721,9 @@ class C4IconSwapperMac:
         self.states_orig_names = []
         self.driver_xml = None
         self.states_shown = False
-        self.device_icon_dir = self.temp_dir + 'driver/www/icons/device/'
-        self.icon_dir = self.temp_dir + 'driver/www/icons/'
-        self.replacement_image_path = self.temp_dir + 'replacement_icon.png'
+        self.device_icon_dir = self.temp_dir + '/driver/www/icons/device/'
+        self.icon_dir = self.temp_dir + '/driver/www/icons/'
+        self.replacement_image_path = self.temp_dir + '/replacement_icon.png'
         self.orig_file_dir = ''
         self.orig_file_path = ''
         self.driver_selected = False
