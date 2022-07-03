@@ -84,15 +84,15 @@ class C4IconSwapperMac:
 
             # Buttons
             self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_c4z, takefocus=0)
-            self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
+            self.open_file_button.place(x=203 + self.x, y=27 + self.y, anchor='w')
 
             self.restore_button = tk.Button(self.uc.root, text='Restore\nOriginal Icon', command=self.restore_icon,
                                             takefocus=0)
-            self.restore_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
+            self.restore_button.place(x=258 + self.x, y=91 + self.y, anchor='n')
             self.restore_button['state'] = DISABLED
 
             self.restore_all_button = tk.Button(self.uc.root, text='Restore All', command=self.restore_all, takefocus=0)
-            self.restore_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
+            self.restore_all_button.place(x=258 + self.x, y=58 + self.y, anchor='n')
             self.restore_all_button['state'] = DISABLED
 
             self.prev_icon_button = tk.Button(self.uc.root, text='Prev', command=self.prev_icon, width=5, takefocus=0)
@@ -100,21 +100,21 @@ class C4IconSwapperMac:
             self.prev_icon_button['state'] = DISABLED
 
             self.next_icon_button = tk.Button(self.uc.root, text='Next', command=self.next_icon, width=5, takefocus=0)
-            self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
+            self.next_icon_button.place(x=260 + self.x, y=146 + self.y)
             self.next_icon_button['state'] = DISABLED
 
             self.gen_driver_button = tk.Button(self.uc.root, text='Load Generic Driver', command=self.load_gen_driver,
                                                takefocus=0)
-            self.gen_driver_button.place(x=228 + self.x, y=219 + self.y, anchor='n')
+            self.gen_driver_button.place(x=240 + self.x, y=219 + self.y, anchor='n')
 
             self.multi_driver_button = tk.Button(self.uc.root, text='Load Multi Driver', command=self.load_gen_multi,
                                                  takefocus=0)
-            self.multi_driver_button.place(x=5 + self.x, y=219 + self.y, anchor='nw')
+            self.multi_driver_button.place(x=15 + self.x, y=219 + self.y, anchor='nw')
 
             # Entry
-            self.file_entry_field = tk.Entry(self.uc.root, width=25, takefocus=0)
+            self.file_entry_field = tk.Entry(self.uc.root, width=22, takefocus=0)
             self.file_entry_field.insert(0, 'Select .c4z file...')
-            self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
+            self.file_entry_field.place(x=101 + self.x, y=15 + self.y, anchor='n')
             self.file_entry_field['state'] = DISABLED
             self.file_entry_field.drop_target_register(DND_FILES)
             self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_c4z)
@@ -1007,7 +1007,7 @@ class C4IconSwapperMac:
     class ExportPanel:
         def __init__(self, upper_class):
             # Initialize Export Panel
-            self.x = 665
+            self.x = 1665
             self.y = -25
             self.uc = upper_class
             self.abort = False
@@ -1722,7 +1722,7 @@ class C4IconSwapperMac:
 
         # Separators
         self.separator0 = ttk.Separator(self.root, orient='vertical')
-        self.separator0.place(x=305, y=0, height=270)
+        self.separator0.place(x=350, y=0, height=270)
         self.separator1 = ttk.Separator(self.root, orient='vertical')
         self.separator1.place(x=610, y=0, height=270)
         self.separator2 = ttk.Separator(self.root, orient='horizontal')
