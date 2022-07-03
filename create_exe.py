@@ -1,7 +1,13 @@
 import PyInstaller.__main__
 import shutil
 import os
-from C4IconSwapper import version
+import platform
+if platform.system() == 'Darwin':
+    from C4IconSwapperMac import version
+    on_mac = True
+else:
+    from C4IconSwapper import version
+    on_mac = False
 
 cur_dir = os.getcwd() + '/'
 
