@@ -1527,7 +1527,7 @@ class C4IconSwapperMac:
 
         def __init__(self, upper_class):
             # Initialize Connection Panel
-            self.x = 14
+            self.x = 30
             self.y = 300
             self.uc = upper_class
             self.connections = []
@@ -1562,9 +1562,9 @@ class C4IconSwapperMac:
                 self.name_var = StringVar()
                 self.name_var.set('')
                 self.name_var.trace('w', self.validate_state)
-                self.name_entry = tk.Entry(self.uc.root, width=20, textvariable=self.name_var)
+                self.name_entry = tk.Entry(self.uc.root, width=13, textvariable=self.name_var)
                 # self.name_entry.insert(0, name)
-                self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+                self.name_entry.place(x=self.x + 36, y=self.y, anchor='w')
                 self.name_entry['state'] = DISABLED
 
             def validate_state(self, *args):
@@ -1657,12 +1657,12 @@ class C4IconSwapperMac:
 
         def __init__(self, upper_class):
             # Initialize State Panel
-            self.x = 1930
+            self.x = 1085
             self.y = 27
             self.uc = upper_class
             self.states = []
             self.dupes = []
-            x_spacing = 200
+            x_spacing = 190
             y_spacing = 34
             for i in range(13):
                 self.states.append(self.DriverState(self.uc, 'state' + str(i + 1),
@@ -1796,7 +1796,7 @@ class C4IconSwapperMac:
         if not self.states_shown:
             if self.toggle_conn_button['text'] == 'Show Connections':
                 self.toggle_conn_button['text'] = 'Hide Connections'
-                self.root.geometry('1055x530')
+                self.root.geometry('1055x550')
                 for conn in self.connections_panel.connections:
                     if conn.name_entry['state'] == NORMAL:
                         conn.name_entry['takefocus'] = 1
@@ -1808,13 +1808,13 @@ class C4IconSwapperMac:
             return
         if self.toggle_conn_button['text'] == 'Show Connections':
             self.toggle_conn_button['text'] = 'Hide Connections'
-            self.root.geometry('1500x530')
+            self.root.geometry('1450x550')
             for conn in self.connections_panel.connections:
                 if conn.name_entry['state'] == NORMAL:
                     conn.name_entry['takefocus'] = 1
             return
         self.toggle_conn_button['text'] = 'Show Connections'
-        self.root.geometry('1500x290')
+        self.root.geometry('1450x290')
         for conn in self.connections_panel.connections:
             conn.name_entry['takefocus'] = 0
         return
@@ -1822,10 +1822,10 @@ class C4IconSwapperMac:
     def show_states_panel(self):
         if not self.states_shown:
             if self.toggle_conn_button['text'] == 'Show Connections':
-                self.root.geometry('1500x290')
+                self.root.geometry('1450x290')
                 self.states_shown = True
             else:
-                self.root.geometry('1500x530')
+                self.root.geometry('1450x550')
                 self.states_shown = True
             self.show_states_button['text'] = 'Hide States'
             for i in range(7):
@@ -1839,7 +1839,7 @@ class C4IconSwapperMac:
             self.root.geometry('1055x290')
             self.states_shown = False
         else:
-            self.root.geometry('1055x530')
+            self.root.geometry('1055x550')
             self.states_shown = False
         for i in range(7):
             if self.connections_panel.connections[-i].name_entry['state'] == NORMAL:
