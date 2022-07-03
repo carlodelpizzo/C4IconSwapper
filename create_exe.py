@@ -33,7 +33,7 @@ def make_exe(python_file: str):
         # Remove old builds if any
         clean_up()
         # Build Exe
-        PyInstaller.__main__.run([python_file, '--onefile', '-w'])
+        PyInstaller.__main__.run([python_file, '--onefile', '-w', '--icon=icon.ico'])
         # Move and Rename
         if os.path.isfile(cur_dir + 'dist/' + python_file_name + '.exe'):
             if not os.path.isfile(cur_dir + 'C4IconSwapper.' + version + '.exe'):
@@ -46,7 +46,7 @@ def make_exe(python_file: str):
 
 
 # Change to True before running; this is to prevent accidental run; add tkdnd2.8\ to Python\Python38\tcl\tcl8.6\
-execute = False
+execute = True
 
 if execute:
     if not on_mac:
