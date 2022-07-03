@@ -16,7 +16,7 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
-from AppKit import NSBundle
+from AppKit import NSBundle, NSFileManager
 
 
 def is_dark_mode():
@@ -1710,7 +1710,7 @@ class C4IconSwapperMac:
 
         # Creating temporary directory
         self.cur_dir = get_path(os.getcwd() + '/')
-        self.temp_dir = self.cur_dir + 'C4IconSwapperTemp/'
+        self.temp_dir = self.cur_dir + '/C4IconSwapperTemp/'
         if not os.path.isdir(self.temp_dir):
             os.mkdir(self.temp_dir)
         else:
