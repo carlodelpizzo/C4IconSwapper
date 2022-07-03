@@ -794,7 +794,7 @@ class C4IconSwapperMac:
                 if filecmp.cmp(img, img_path):
                     return
 
-            if len(self.img_stack) >= 4:
+            if len(self.img_stack) >= 5:
                 self.prev_icon_button['state'] = NORMAL
                 self.next_icon_button['state'] = NORMAL
 
@@ -821,7 +821,7 @@ class C4IconSwapperMac:
             if len(self.img_stack) == 0:
                 return
             for i in range(len(self.img_stack)):
-                if i == 4:
+                if i == 5:
                     break
                 icon_image = Image.open(self.img_stack[i])
                 icon = icon_image.resize((60, 60), Image.ANTIALIAS)
@@ -830,7 +830,7 @@ class C4IconSwapperMac:
                 self.stack_labels[i].image = icon
 
         def dec_img_stack(self):
-            if len(self.img_stack) <= 4:
+            if len(self.img_stack) <= 5:
                 return
             temp = self.img_stack[0]
             self.img_stack.pop(0)
@@ -838,7 +838,7 @@ class C4IconSwapperMac:
             self.refresh_img_stack()
 
         def inc_img_stack(self):
-            if len(self.img_stack) <= 4:
+            if len(self.img_stack) <= 5:
                 return
             temp = self.img_stack[-1]
             self.img_stack.pop(-1)
@@ -898,7 +898,7 @@ class C4IconSwapperMac:
                 self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=0)
                 self.upload_replacement(given_path=self.img_stack[-1])
                 return
-            if len(self.img_stack) > 4 and replacement_index > 3:
+            if len(self.img_stack) > 5 and replacement_index > 3:
                 self.upload_replacement(given_path=self.img_stack[0])
                 temp = self.img_stack[0]
                 temp_r = self.img_stack[replacement_index]
@@ -924,7 +924,7 @@ class C4IconSwapperMac:
                 self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=1)
                 self.upload_replacement(given_path=self.img_stack[-1])
                 return
-            if len(self.img_stack) > 4 and replacement_index > 3:
+            if len(self.img_stack) > 5 and replacement_index > 3:
                 self.upload_replacement(given_path=self.img_stack[1])
                 temp = self.img_stack[1]
                 temp_r = self.img_stack[replacement_index]
@@ -950,7 +950,7 @@ class C4IconSwapperMac:
                 self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=2)
                 self.upload_replacement(given_path=self.img_stack[-1])
                 return
-            if len(self.img_stack) > 4 and replacement_index > 3:
+            if len(self.img_stack) > 5 and replacement_index > 3:
                 self.upload_replacement(given_path=self.img_stack[2])
                 temp = self.img_stack[2]
                 temp_r = self.img_stack[replacement_index]
@@ -976,7 +976,7 @@ class C4IconSwapperMac:
                 self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=3)
                 self.upload_replacement(given_path=self.img_stack[-1])
                 return
-            if len(self.img_stack) > 4 and replacement_index > 3:
+            if len(self.img_stack) > 5 and replacement_index > 3:
                 self.upload_replacement(given_path=self.img_stack[3])
                 temp = self.img_stack[3]
                 temp_r = self.img_stack[replacement_index]
@@ -987,6 +987,32 @@ class C4IconSwapperMac:
                 self.refresh_img_stack()
                 return
             self.upload_replacement(given_path=self.img_stack[3])
+
+        def select_stack4(self, event):
+            if len(self.img_stack) <= 4:
+                return event
+            replacement_in_stack = False
+            replacement_index = None
+            for img in self.img_stack:
+                if filecmp.cmp(img, self.uc.temp_dir + 'replacement_icon.png'):
+                    replacement_in_stack = True
+                    replacement_index = self.img_stack.index(img)
+                    break
+            if not replacement_in_stack:
+                self.add_to_img_stack(self.uc.temp_dir + 'replacement_icon.png', index=4)
+                self.upload_replacement(given_path=self.img_stack[-1])
+                return
+            if len(self.img_stack) > 5 and replacement_index > 4:
+                self.upload_replacement(given_path=self.img_stack[4])
+                temp = self.img_stack[4]
+                temp_r = self.img_stack[replacement_index]
+                self.img_stack.pop(replacement_index)
+                self.img_stack.pop(4)
+                self.img_stack.insert(4, temp_r)
+                self.img_stack.insert(replacement_index, temp)
+                self.refresh_img_stack()
+                return
+            self.upload_replacement(given_path=self.img_stack[4])
 
         def drop_stack0(self, event):
             dropped_path = event.data.replace('{', '').replace('}', '')
@@ -1003,6 +1029,10 @@ class C4IconSwapperMac:
         def drop_stack3(self, event):
             dropped_path = event.data.replace('{', '').replace('}', '')
             self.add_to_img_stack(dropped_path, index=3)
+
+        def drop_stack3(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            self.add_to_img_stack(dropped_path, index=4)
 
     class ExportPanel:
         def __init__(self, upper_class):
