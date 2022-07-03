@@ -1,4 +1,5 @@
 import filecmp
+import platform
 import subprocess
 import os
 import shutil
@@ -22,9 +23,22 @@ from AppKit import NSBundle, NSFileManager
 
 
 def is_dark_mode():
+    mac_ver_temp = platform.mac_ver()
+    mac_ver = mac_ver_temp[0]
+    ver_check = ''
+    get_ver = False
+    for char in mac_ver:
+        if not get_ver:
+            if char == '.':
+                get_ver = True
+            continue
+        if get_ver and char == '.':
+            break
+        ver_check += char
+    if 14 <= int(ver_check):
+        return False
     cmd = 'defaults read -g AppleInterfaceStyle'
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE, shell=True)
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     return bool(p.communicate()[0])
 
 
@@ -1846,6 +1860,8 @@ class C4IconSwapperMac:
         return
 
     def show_states_panel(self):
+        for driver_state in self.state_panel.states:
+            driver_state.validate_state()
         if not self.states_shown:
             if self.toggle_conn_button['text'] == 'Show Connections':
                 self.root.geometry('1450x290')
