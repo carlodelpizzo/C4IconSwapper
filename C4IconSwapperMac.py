@@ -16,12 +16,22 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
+from AppKit import NSBundle
+
 
 def is_dark_mode():
     cmd = 'defaults read -g AppleInterfaceStyle'
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE, shell=True)
     return bool(p.communicate()[0])
+
+
+def get_path(filename):
+    name = os.path.splitext(filename)[0]
+    ext = os.path.splitext(filename)[1]
+    file = NSBundle.mainBundle().pathForResource_ofType_(name, ext)
+    return file or os.path.realpath(filename)
+
 
 version = '5.6b'
 
@@ -148,7 +158,7 @@ class C4IconSwapperMac:
             temp_gen_driver = self.uc.temp_dir + 'generic.c4z'
             if self.file_entry_field.get() == temp_gen_driver:
                 return
-            with open(temp_gen_driver, 'wb') as gen_driver:
+            with open(get_path(temp_gen_driver), 'wb') as gen_driver:
                 gen_driver.write(base64.b64decode(generic_driver))
 
             if os.path.isdir(self.uc.temp_dir + 'driver'):
@@ -177,7 +187,7 @@ class C4IconSwapperMac:
             # Upload generic multi-state driver from Base64Assets
             if test:
                 # Show loading image while driver images are created
-                with open(self.uc.temp_dir + 'loading_icon.gif', 'wb') as loading_img:
+                with open(get_path(self.uc.temp_dir + 'loading_icon.gif'), 'wb') as loading_img:
                     loading_img.write(base64.b64decode(loading_icon))
                 icon_image = Image.open(self.uc.temp_dir + 'loading_icon.gif')
                 icon = ImageTk.PhotoImage(icon_image)
@@ -191,7 +201,7 @@ class C4IconSwapperMac:
             temp_gen_driver = self.uc.temp_dir + 'multi generic.c4z'
             if self.file_entry_field.get() == temp_gen_driver:
                 return
-            with open(temp_gen_driver, 'wb') as gen_driver:
+            with open(get_path(temp_gen_driver), 'wb') as gen_driver:
                 gen_driver.write(base64.b64decode(generic_multi))
 
             if os.path.isdir(self.uc.temp_dir + 'driver'):
@@ -340,7 +350,7 @@ class C4IconSwapperMac:
             # Check lua file for multi-state
             multi_state = False
             if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
-                with open(self.uc.temp_dir + 'driver/driver.lua', errors='ignore') as driver_lua_file:
+                with open(get_path(self.uc.temp_dir + 'driver/driver.lua'), errors='ignore') as driver_lua_file:
                     driver_lua_lines = driver_lua_file.readlines()
 
                 for line in driver_lua_lines:
@@ -1202,7 +1212,7 @@ class C4IconSwapperMac:
                 # Modify lua file
                 modified_lua_lines = []
                 shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
-                with open(self.uc.temp_dir + 'driver/driver.lua', errors='ignore') as driver_lua_file:
+                with open(get_path(self.uc.temp_dir + 'driver/driver.lua'), errors='ignore') as driver_lua_file:
                     driver_lua_lines = driver_lua_file.readlines()
                 for line in driver_lua_lines:
                     new_line = line
@@ -1221,7 +1231,7 @@ class C4IconSwapperMac:
                             new_line = new_line.replace(name_change[2] + '=', name_change[3] + '=')
 
                     modified_lua_lines.append(new_line)
-                with open(self.uc.temp_dir + 'driver/driver.lua', 'w', errors='ignore') as driver_lua_file:
+                with open(get_path(self.uc.temp_dir + 'driver/driver.lua'), 'w', errors='ignore') as driver_lua_file:
                     driver_lua_file.writelines(modified_lua_lines)
 
             # Confirm all connections have non-conflicting ids
@@ -1305,7 +1315,7 @@ class C4IconSwapperMac:
                     icon_tag.value = icon_tag.value.replace(result, driver_name)
 
             os.rename(self.uc.temp_dir + 'driver/driver.xml', self.uc.temp_dir + 'driver/driver.xml.bak')
-            with open(self.uc.temp_dir + 'driver/driver.xml', 'w', errors='ignore') as out_file:
+            with open(get_path(self.uc.temp_dir + 'driver/driver.xml'), 'w', errors='ignore') as out_file:
                 out_file.writelines(self.uc.driver_xml.get_lines())
 
             bak_files = []
@@ -1747,7 +1757,7 @@ class C4IconSwapperMac:
 
         # Panels; Creating blank image for panels
         temp_image_file = self.temp_dir + 'blank.gif'
-        with open(temp_image_file, 'wb') as blank_img_file:
+        with open(get_path(temp_image_file), 'wb') as blank_img_file:
             blank_img_file.write(base64.b64decode(blank_img_b64))
         blank_image = Image.open(temp_image_file)
         blank = blank_image.resize((128, 128), Image.ANTIALIAS)
@@ -1794,7 +1804,7 @@ class C4IconSwapperMac:
 
         # Creating window icon
         temp_icon_file = self.temp_dir + 'icon.ico'
-        with open(temp_icon_file, 'wb') as icon_file:
+        with open(get_path(temp_icon_file), 'wb') as icon_file:
             icon_file.write(base64.b64decode(win_icon))
         self.root.wm_iconbitmap(temp_icon_file)
         os.remove(temp_icon_file)
