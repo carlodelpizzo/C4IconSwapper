@@ -1644,7 +1644,7 @@ class C4IconSwapperMac:
         self.root.bind('<KeyRelease>', self.key_release)
 
         # Root window properties
-        self.root.geometry('915x270')
+        self.root.geometry('1015x270')
         self.root.title('C4 Icon Swapper')
         self.root.resizable(False, False)
 
