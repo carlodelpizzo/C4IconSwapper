@@ -68,7 +68,7 @@ class C4IconSwapperMac:
 
             # Labels
             self.panel_label = tk.Label(self.uc.root, text='Driver Selection', font=("Arial", 15))
-            self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
+            self.panel_label.place(x=190 + self.x, y=-20 + self.y, anchor='n')
 
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
             self.blank_image_label.image = self.uc.blank
@@ -667,7 +667,7 @@ class C4IconSwapperMac:
     class ReplacementPanel:
         def __init__(self, upper_class):
             # Initialize Replacement Panel
-            self.x = 353
+            self.x = 355
             self.y = 20
             self.uc = upper_class
             self.img_stack = []
@@ -675,7 +675,7 @@ class C4IconSwapperMac:
 
             # Labels
             self.panel_label = tk.Label(self.uc.root, text='Replacement Icons', font=("Arial", 15))
-            self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
+            self.panel_label.place(x=190 + self.x, y=-20 + self.y, anchor='n')
 
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
             self.blank_image_label.image = self.uc.blank
@@ -714,15 +714,15 @@ class C4IconSwapperMac:
             # Buttons
             self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_replacement,
                                               takefocus=0)
-            self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
+            self.open_file_button.place(x=205 + self.x, y=27 + self.y, anchor='w')
 
             self.replace_all_button = tk.Button(self.uc.root, text='Replace All', command=self.replace_all, takefocus=0)
-            self.replace_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
+            self.replace_all_button.place(x=258 + self.x, y=58 + self.y, anchor='n')
             self.replace_all_button['state'] = DISABLED
 
             self.replace_button = tk.Button(self.uc.root, text='Replace\nCurrent Icon', command=self.replace_icon,
                                             takefocus=0)
-            self.replace_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
+            self.replace_button.place(x=258 + self.x, y=91 + self.y, anchor='n')
             self.replace_button['state'] = DISABLED
 
             self.prev_icon_button = tk.Button(self.uc.root, text='Prev', command=self.dec_img_stack, width=5,
@@ -732,13 +732,13 @@ class C4IconSwapperMac:
 
             self.next_icon_button = tk.Button(self.uc.root, text='Next', command=self.inc_img_stack, width=5,
                                               takefocus=0)
-            self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
+            self.next_icon_button.place(x=260 + self.x, y=146 + self.y)
             self.next_icon_button['state'] = DISABLED
 
             # Entry
-            self.file_entry_field = tk.Entry(self.uc.root, width=25, takefocus=0)
+            self.file_entry_field = tk.Entry(self.uc.root, width=22, takefocus=0)
             self.file_entry_field.insert(0, 'Select image file...')
-            self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
+            self.file_entry_field.place(x=103 + self.x, y=15 + self.y, anchor='n')
             self.file_entry_field['state'] = DISABLED
             self.file_entry_field.drop_target_register(DND_FILES)
             self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_replacement)
@@ -1644,7 +1644,7 @@ class C4IconSwapperMac:
         self.root.bind('<KeyRelease>', self.key_release)
 
         # Root window properties
-        self.root.geometry('1015x270')
+        self.root.geometry('1115x270')
         self.root.title('C4 Icon Swapper')
         self.root.resizable(False, False)
 
@@ -1724,20 +1724,20 @@ class C4IconSwapperMac:
         self.separator0 = ttk.Separator(self.root, orient='vertical')
         self.separator0.place(x=350, y=0, height=270)
         self.separator1 = ttk.Separator(self.root, orient='vertical')
-        self.separator1.place(x=610, y=0, height=270)
+        self.separator1.place(x=700, y=0, height=270)
         self.separator2 = ttk.Separator(self.root, orient='horizontal')
         self.separator2.place(x=0, y=270, relwidth=1)
-        self.separator1 = ttk.Separator(self.root, orient='vertical')
-        self.separator1.place(x=915, y=0, height=270)
+        self.separator3 = ttk.Separator(self.root, orient='vertical')
+        self.separator3.place(x=915, y=0, height=270)
 
         # Buttons
         self.toggle_conn_button = tk.Button(self.root, text='Show Connections', width=15,
                                             command=self.toggle_connections_panel, takefocus=0)
-        self.toggle_conn_button.place(x=700, y=240, anchor='n')
+        self.toggle_conn_button.place(x=800, y=240, anchor='n')
 
         self.show_states_button = tk.Button(self.root, text='Show States', width=15, command=self.show_states_panel,
                                             takefocus=0)
-        self.show_states_button.place(x=820, y=240, anchor='n')
+        self.show_states_button.place(x=920, y=240, anchor='n')
 
         # Version Label
         self.version_label = Label(self.root, text=version)
