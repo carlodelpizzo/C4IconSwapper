@@ -1,4 +1,5 @@
 import filecmp
+import subprocess
 import os
 import shutil
 import base64
@@ -15,6 +16,12 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
+
+def is_dark_mode():
+    cmd = 'defaults read -g AppleInterfaceStyle'
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, shell=True)
+    return bool(p.communicate()[0])
 
 version = '5.6b'
 
@@ -1570,6 +1577,9 @@ class C4IconSwapperMac:
                 self.name_entry['state'] = DISABLED
 
             def validate_state(self, *args):
+                background_color = 'white'
+                if is_dark_mode():
+                    background_color = 'black'
                 if args:  # For IDE unused argument warning
                     pass
                 self.format_state_name()
@@ -1583,8 +1593,8 @@ class C4IconSwapperMac:
                         for dupe_list in self.uc.state_panel.dupes:
                             if self in dupe_list:
                                 if len(dupe_list) == 2:
-                                    dupe_list[0].name_entry['background'] = 'white'
-                                    dupe_list[1].name_entry['background'] = 'white'
+                                    dupe_list[0].name_entry['background'] = background_color
+                                    dupe_list[1].name_entry['background'] = background_color
                                     to_validate = None
                                     if dupe_list[0] is not self:
                                         to_validate = dupe_list[0]
@@ -1612,8 +1622,8 @@ class C4IconSwapperMac:
                     for dupe_list in self.uc.state_panel.dupes:
                         if self in dupe_list:
                             if len(dupe_list) == 2:
-                                dupe_list[0].name_entry['background'] = 'white'
-                                dupe_list[1].name_entry['background'] = 'white'
+                                dupe_list[0].name_entry['background'] = background_color
+                                dupe_list[1].name_entry['background'] = background_color
                                 to_validate = None
                                 if dupe_list[0] is not self:
                                     to_validate = dupe_list[0]
@@ -1625,7 +1635,7 @@ class C4IconSwapperMac:
                                 break
                             dupe_list.pop(dupe_list.index(self))
                             break
-                    self.name_entry['background'] = 'white'
+                    self.name_entry['background'] = background_color
 
                 for state in self.uc.state_panel.states:
                     if state is self:
