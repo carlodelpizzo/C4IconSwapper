@@ -1115,7 +1115,7 @@ class C4IconSwapperMac:
                     os.remove(cur_dir + '/' + driver_name + '.zip')
 
                 # Make new driver
-                shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
+                shutil.make_archive(cur_dir + '/' + driver_name, 'zip', temp_dir + '/driver')
                 base = os.path.splitext(cur_dir + '/' + driver_name + '.zip')[0]
                 os.rename(cur_dir + '/' + driver_name + '.zip', base + '.c4z')
 
@@ -1361,7 +1361,7 @@ class C4IconSwapperMac:
                 return
 
             # Make driver
-            shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + '/driver')
+            shutil.make_archive(self.uc.cur_dir + '/' + driver_name, 'zip', self.uc.temp_dir + '/driver')
             base_name = os.path.splitext(self.uc.cur_dir + '/' + driver_name + '.zip')[0]
             os.rename(self.uc.cur_dir + '/' + driver_name + '.zip', base_name + '.c4z')
 
@@ -1710,7 +1710,7 @@ class C4IconSwapperMac:
         self.root.resizable(False, False)
 
         # Creating temporary directory
-        self.cur_dir = filedialog.askopenfilename()
+        self.cur_dir = filedialog.askdirectory()
         self.cur_dir = get_path(self.cur_dir)
         # self.cur_dir = get_path(os.getcwd() + '/')
         self.temp_dir = self.cur_dir + '/C4IconSwapperTemp/'
