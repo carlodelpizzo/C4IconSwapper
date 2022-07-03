@@ -1377,9 +1377,9 @@ class C4IconSwapperMac:
                 self.id_group = []
 
                 # Entry
-                self.name_entry = tk.Entry(self.uc.root, width=20)
+                self.name_entry = tk.Entry(self.uc.root, width=15)
                 self.name_entry.insert(0, 'Connection Name...')
-                self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+                self.name_entry.place(x=self.x + 60, y=self.y, anchor='w')
                 self.name_entry['state'] = DISABLED
 
                 # Dropdown
@@ -1389,13 +1389,13 @@ class C4IconSwapperMac:
                                             'COMPOSITE OUT', 'VGA IN', 'VGA OUT', 'COMPONENT IN', 'COMPONENT OUT',
                                             'DVI IN', 'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
                                             'DIGITAL_OPTICAL OUT', 'IR_OUT')
-                self.type_menu.place(x=self.x + 160, y=self.y, anchor='w')
+                self.type_menu.place(x=self.x + 207, y=self.y, anchor='w')
                 self.type.trace('w', self.update_id)
                 self.type_menu['state'] = DISABLED
 
                 # Buttons
                 self.add_button = tk.Button(self.uc.root, text='Add', width=3, command=self.enable, takefocus=0)
-                self.add_button.place(x=self.x, y=self.y, anchor='w')
+                self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
                 self.add_button['state'] = DISABLED
 
                 self.x_button = tk.Button(self.uc.root, text='x', width=1, command=self.disable, takefocus=0)
@@ -1528,12 +1528,12 @@ class C4IconSwapperMac:
         def __init__(self, upper_class):
             # Initialize Connection Panel
             self.x = 14
-            self.y = 280
+            self.y = 300
             self.uc = upper_class
             self.connections = []
             self.ids = []
 
-            x_spacing = 318
+            x_spacing = 348
             y_spacing = 40
             for x in range(0, 4):
                 for i in range(0, 6):
