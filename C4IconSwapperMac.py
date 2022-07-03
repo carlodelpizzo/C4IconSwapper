@@ -1709,7 +1709,7 @@ class C4IconSwapperMac:
         self.root.resizable(False, False)
 
         # Creating temporary directory
-        self.cur_dir = os.getcwd() + '/'
+        self.cur_dir = get_path(os.getcwd() + '/')
         self.temp_dir = self.cur_dir + 'C4IconSwapperTemp/'
         if not os.path.isdir(self.temp_dir):
             os.mkdir(self.temp_dir)
@@ -1981,5 +1981,6 @@ def find_valid_id(id_seed: int, list_of_ids: list, inc_up=True, inc_count=0):
         id_seed -= 1
     inc_count += 1
     return find_valid_id(id_seed, list_of_ids, inc_count=inc_count)
+
 
 C4IconSwapperMac()
