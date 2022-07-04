@@ -206,9 +206,9 @@ class C4IconSwapperMac:
             self.gen_driver_button['state'] = DISABLED
             # self.uc.export_panel.over_orig_check['state'] = DISABLED
 
-        def load_gen_multi(self, test=True):
+        def load_gen_multi(self, show_loading_image=True):
             # Upload generic multi-state driver from Base64Assets
-            if test:
+            if show_loading_image:
                 # Show loading image while driver images are created
                 with open(get_path(self.uc.temp_dir + 'loading_icon.gif'), 'wb') as loading_img:
                     loading_img.write(base64.b64decode(loading_icon))
@@ -217,7 +217,7 @@ class C4IconSwapperMac:
                 self.blank_image_label.configure(image=icon)
                 self.blank_image_label.image = icon
                 self.multi_driver_button['state'] = DISABLED
-                self.uc.root.after(1, self.uc.test)
+                self.uc.root.after(1, self.uc.show_loading_image)
                 return
 
             self.gen_driver_button['state'] = NORMAL
@@ -246,9 +246,9 @@ class C4IconSwapperMac:
 
             self.upload_c4z(temp_gen_driver)
             os.remove(temp_gen_driver)
+            os.remove(self.uc.temp_dir + 'loading_icon.gif')
 
             self.multi_driver_button['state'] = DISABLED
-            # self.uc.export_panel.over_orig_check['state'] = DISABLED
 
         def update_icon(self):
             if len(self.icons) == 0:
@@ -1733,7 +1733,6 @@ class C4IconSwapperMac:
         # Creating temporary directory
         self.cur_dir = filedialog.askdirectory()
         self.cur_dir = get_path(self.cur_dir)
-        # self.cur_dir = get_path(os.getcwd() + '/')
         self.temp_dir = self.cur_dir + '/C4IconSwapperTemp/'
         if not os.path.isdir(self.temp_dir):
             os.mkdir(self.temp_dir)
@@ -1979,7 +1978,7 @@ class C4IconSwapperMac:
             state.original_name = ''
 
     def test(self):
-        self.c4z_panel.load_gen_multi(test=False)
+        self.c4z_panel.load_gen_multi(show_loading_image=False)
 
 
 def list_all_sub_directories(directory):
