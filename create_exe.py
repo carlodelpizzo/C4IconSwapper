@@ -59,7 +59,7 @@ def make_exe(python_file: str):
         # Remove build files
         clean_up()
     else:
-        PyInstaller.__main__.run([python_file, 'C4IconSwapperMac.spec'])
+        PyInstaller.__main__.run([python_file, '--onefile', '-w', '--icon=icon.icns'])
 
 
 # Change to True before running; this is to prevent accidental run; add tkdnd2.8\ to Python\Python38\tcl\tcl8.6\
@@ -75,4 +75,4 @@ if execute:
         else:
             make_exe('main.py')
     else:
-        make_exe('C4IconSwapperMac.py')
+        make_exe('mainMac.py')
