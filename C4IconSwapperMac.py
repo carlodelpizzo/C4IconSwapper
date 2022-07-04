@@ -1390,6 +1390,11 @@ class C4IconSwapperMac:
             if args:  # For IDE unused argument warning
                 pass
 
+            if no_dark_mode or not is_dark_mode():
+                self.driver_name_entry['background'] = 'white'
+            else:
+                self.driver_name_entry['background'] = 'black'
+
             driver_name = self.driver_name_var.get()
             temp = ''
             for letter in driver_name:
