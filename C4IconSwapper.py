@@ -238,7 +238,7 @@ class C4IconSwapper:
                 path_list.sort()
                 sub_list = []
                 for string in path_list:
-                    if '.bak' in string or '.orig' in string:
+                    if '.bak' in string or '.orig' in string or string[0] == '.':
                         continue
                     if '.' not in string:
                         if 'original_icons' in string or 'old' in string:
