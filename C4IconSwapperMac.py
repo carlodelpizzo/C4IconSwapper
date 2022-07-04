@@ -1035,13 +1035,13 @@ class C4IconSwapperMac:
         def __init__(self, upper_class):
             # Initialize Export Panel
             self.x = 730
-            self.y = -25
+            self.y = -50
             self.uc = upper_class
             self.abort = False
 
             # Labels
             self.panel_label = tk.Label(self.uc.root, text='Export', font=("Arial", 15))
-            self.panel_label.place(x=150 + self.x, y=25 + self.y, anchor='n')
+            self.panel_label.place(x=150 + self.x, y=50 + self.y, anchor='n')
 
             self.driver_name_label = tk.Label(self.uc.root, text='Driver Name:')
             self.driver_name_label.place(x=65 + self.x, y=165 + self.y, anchor='w')
@@ -1049,12 +1049,12 @@ class C4IconSwapperMac:
             # Buttons
             self.export_button = tk.Button(self.uc.root, text='Quick Export', width=20,
                                            command=self.quick_export, takefocus=0)
-            self.export_button.place(x=145 + self.x, y=200 + self.y, anchor='n')
+            self.export_button.place(x=145 + self.x, y=210 + self.y, anchor='n')
             self.export_button['state'] = DISABLED
 
             self.export_as_button = tk.Button(self.uc.root, text='Export As...', width=20,
                                               command=self.export_c4z, takefocus=0)
-            self.export_as_button.place(x=145 + self.x, y=240 + self.y, anchor='n')
+            self.export_as_button.place(x=145 + self.x, y=238 + self.y, anchor='n')
             self.export_as_button['state'] = DISABLED
 
             # Entry
@@ -1983,10 +1983,16 @@ class C4IconSwapperMac:
     def blink_driver_name_entry(self):
         if self.counter > 0:
             self.counter -= 1
-            if self.export_panel.driver_name_entry['background'] != 'white':
-                self.export_panel.driver_name_entry['background'] = 'white'
+            if no_dark_mode or not is_dark_mode():
+                if self.export_panel.driver_name_entry['background'] != 'white':
+                    self.export_panel.driver_name_entry['background'] = 'white'
+                else:
+                    self.export_panel.driver_name_entry['background'] = 'pink'
             else:
-                self.export_panel.driver_name_entry['background'] = 'pink'
+                if self.export_panel.driver_name_entry['background'] != 'black':
+                    self.export_panel.driver_name_entry['background'] = 'black'
+                else:
+                    self.export_panel.driver_name_entry['background'] = 'pink'
             self.root.after(150, self.blink_driver_name_entry)
 
 
