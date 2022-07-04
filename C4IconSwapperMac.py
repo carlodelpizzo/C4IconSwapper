@@ -17,24 +17,33 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
-from AppKit import NSBundle, NSFileManager
+from AppKit import NSBundle
+
+
+no_dark_mode = None
 
 
 def is_dark_mode():
-    mac_ver_temp = platform.mac_ver()
-    mac_ver = mac_ver_temp[0]
-    ver_check = ''
-    get_ver = False
-    for char in mac_ver:
-        if not get_ver:
-            if char == '.':
-                get_ver = True
-            continue
-        if get_ver and char == '.':
-            break
-        ver_check += char
-    if 14 <= int(ver_check):
+    global no_dark_mode
+
+    if no_dark_mode:
         return False
+
+    if no_dark_mode is None:
+        mac_ver_temp = platform.mac_ver()
+        mac_ver = mac_ver_temp[0]
+        ver_check = ''
+        one_point = False
+        for char in mac_ver:
+            if char == '.':
+                if one_point:
+                    break
+                one_point = True
+            ver_check += char
+        if 10.14 > float(ver_check):
+            no_dark_mode = True
+            return False
+        no_dark_mode = False
     cmd = 'defaults read -g AppleInterfaceStyle'
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     return bool(p.communicate()[0])
