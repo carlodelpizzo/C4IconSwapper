@@ -443,6 +443,7 @@ class C4IconSwapper:
                 self.uc.replacement_panel.replace_all_button['state'] = DISABLED
             if self.uc.driver_selected:
                 self.uc.export_panel.export_button['state'] = ACTIVE
+                self.uc.export_panel.export_as_button['state'] = ACTIVE
 
             done = False
             self.restore_all_button['state'] = DISABLED
@@ -1008,13 +1009,13 @@ class C4IconSwapper:
         def __init__(self, upper_class):
             # Initialize Export Panel
             self.x = 615
-            self.y = -25
+            self.y = -55
             self.uc = upper_class
             self.abort = False
 
             # Labels
             self.panel_label = tk.Label(self.uc.root, text='Export', font=("Arial", 15))
-            self.panel_label.place(x=150 + self.x, y=25 + self.y, anchor='n')
+            self.panel_label.place(x=150 + self.x, y=55 + self.y, anchor='n')
 
             self.driver_name_label = tk.Label(self.uc.root, text='Driver Name:')
             self.driver_name_label.place(x=65 + self.x, y=165 + self.y, anchor='w')
@@ -1028,7 +1029,7 @@ class C4IconSwapper:
             self.export_as_button = tk.Button(self.uc.root, text='Export As...', width=20,
                                               command=self.export_as_c4z, takefocus=0)
             self.export_as_button.place(x=145 + self.x, y=230 + self.y, anchor='n')
-            # self.export_as_button['state'] = DISABLED
+            self.export_as_button['state'] = DISABLED
 
             # Entry
             self.driver_name_entry = tk.Entry(self.uc.root, width=25)
@@ -1056,7 +1057,6 @@ class C4IconSwapper:
             cur_dir = self.uc.cur_dir
             temp_dir = self.uc.temp_dir
             driver_xml = self.uc.driver_xml
-            # test_file = filedialog.asksaveasfile(filetypes=[("Control4 Drivers", "*.c4z")])
 
             def confirm_overwrite():
                 # Remove old driver
