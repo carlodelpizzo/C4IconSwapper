@@ -4,12 +4,15 @@ import os
 import platform
 if platform.system() == 'Darwin':
     from C4IconSwapperMac import version
+    from C4IconSwapperMac import get_path
     on_mac = True
 else:
     from C4IconSwapper import version
     on_mac = False
 
 cur_dir = os.getcwd() + '/'
+if on_mac:
+    cur_dir = get_path(cur_dir)
 
 
 def make_exe(python_file: str):
@@ -20,29 +23,52 @@ def make_exe(python_file: str):
         python_file_name = python_file[0:len(python_file) - 3]
 
     def clean_up():
-        if os.path.isfile(cur_dir + python_file_name + '.spec'):
-            os.remove(cur_dir + python_file_name + '.spec')
-        if os.path.isdir(cur_dir + 'dist/'):
-            shutil.rmtree(cur_dir + 'dist/')
-        if os.path.isdir(cur_dir + 'build/'):
-            shutil.rmtree(cur_dir + 'build/')
-        if os.path.isdir(cur_dir + '__pycache__/'):
-            shutil.rmtree(cur_dir + '__pycache__/')
+        if not on_mac:
+            if os.path.isfile(cur_dir + python_file_name + '.spec'):
+                os.remove(cur_dir + python_file_name + '.spec')
+            if os.path.isdir(cur_dir + 'dist/'):
+                shutil.rmtree(cur_dir + 'dist/')
+            if os.path.isdir(cur_dir + 'build/'):
+                shutil.rmtree(cur_dir + 'build/')
+            if os.path.isdir(cur_dir + '__pycache__/'):
+                shutil.rmtree(cur_dir + '__pycache__/')
+        else:
+            if os.path.isfile(cur_dir + '/' + python_file_name + '.spec'):
+                os.remove(cur_dir + '/' + python_file_name + '.spec')
+            if os.path.isdir(cur_dir + '/dist/'):
+                shutil.rmtree(cur_dir + '/dist/')
+            if os.path.isdir(cur_dir + '/build/'):
+                shutil.rmtree(cur_dir + '/build/')
+            if os.path.isdir(cur_dir + '/__pycache__/'):
+                shutil.rmtree(cur_dir + '/__pycache__/')
 
+    # Remove old builds if any
+    clean_up()
+    # Build Exe
     if not on_mac:
-        # Remove old builds if any
-        clean_up()
-        # Build Exe
         PyInstaller.__main__.run([python_file, '--onefile', '-w', '--icon=icon.ico'])
         # Move and Rename
         if os.path.isfile(cur_dir + 'dist/' + python_file_name + '.exe'):
             if not os.path.isfile(cur_dir + 'C4IconSwapper.' + version + '.exe'):
-                shutil.copy(cur_dir + 'dist/' + python_file_name + '.exe', cur_dir + 'C4IconSwapper.' + version + '.exe')
+                shutil.copy(cur_dir + 'dist/' + python_file_name + '.exe',
+                            cur_dir + 'C4IconSwapper.' + version + '.exe')
             else:
                 os.remove(cur_dir + 'C4IconSwapper.' + version + '.exe')
-                shutil.copy(cur_dir + 'dist/' + python_file_name + '.exe', cur_dir + 'C4IconSwapper.' + version + '.exe')
-        # Remove build files
-        clean_up()
+                shutil.copy(cur_dir + 'dist/' + python_file_name + '.exe',
+                            cur_dir + 'C4IconSwapper.' + version + '.exe')
+    else:
+        PyInstaller.__main__.run([python_file, '--onefile', '-w', '--icon=icon.icns'])
+        # Move and Rename
+        if os.path.isfile(cur_dir + '/dist/' + python_file_name + '.app'):
+            if not os.path.isfile(cur_dir + '/C4IconSwapper.' + version + '.app'):
+                shutil.copy(cur_dir + '/dist/' + python_file_name + '.app',
+                            cur_dir + '/C4IconSwapper.' + version + '.app')
+            else:
+                os.remove(cur_dir + '/C4IconSwapper.' + version + '.app')
+                shutil.copy(cur_dir + '/dist/' + python_file_name + '.app',
+                            cur_dir + '/C4IconSwapper.' + version + '.app')
+    # Remove build files
+    clean_up()
 
 
 # Change to True before running; this is to prevent accidental run; add tkdnd2.8\ to Python\Python38\tcl\tcl8.6\
@@ -57,3 +83,11 @@ if execute:
                 make_exe('main.py')
         else:
             make_exe('main.py')
+    else:
+        overwrite_file = '_'
+        if os.path.isfile(cur_dir + 'C4IconSwapper.' + version + '.app'):
+            overwrite_file = input('Overwrite file? (y/n)... ')
+            if overwrite_file[0] == 'y' or overwrite_file[0] == 'Y':
+                make_exe('C4IconSwapperMac.py')
+        else:
+            make_exe('C4IconSwapperMac.py')
