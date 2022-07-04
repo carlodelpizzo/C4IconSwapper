@@ -165,7 +165,6 @@ class C4IconSwapper:
             self.upload_c4z(temp_gen_driver)
             os.remove(temp_gen_driver)
             self.gen_driver_button['state'] = DISABLED
-            # self.uc.export_panel.over_orig_check['state'] = DISABLED
 
         def load_gen_multi(self, show_loading_image=True):
             # Upload generic multi-state driver from Base64Assets
