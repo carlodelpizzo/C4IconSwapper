@@ -34,43 +34,6 @@ bak_files = []  # I know I shouldn't use this as global variable, but I don't ca
 no_dark_mode = None
 
 
-def is_dark_mode():
-    global no_dark_mode
-
-    if no_dark_mode:
-        return False
-
-    if no_dark_mode is None:
-        mac_ver_temp = platform.mac_ver()
-        mac_ver = mac_ver_temp[0]
-        ver_check = ''
-        one_point = False
-        for char in mac_ver:
-            if char == '.':
-                if one_point:
-                    break
-                one_point = True
-            ver_check += char
-        if 10.14 > float(ver_check):
-            no_dark_mode = True
-            return False
-        no_dark_mode = False
-    cmd = 'defaults read -g AppleInterfaceStyle'
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    return bool(p.communicate()[0])
-
-
-def get_path(filename):
-    name = os.path.splitext(filename)[0]
-    ext = os.path.splitext(filename)[1]
-    file = NSBundle.mainBundle().pathForResource_ofType_(name, ext)
-    return file or os.path.realpath(filename)
-
-
-def natural_key(string):
-    return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
-
-
 class C4IconSwapperMac:
     class C4zPanel:
         class SubIcon:
@@ -1964,3 +1927,40 @@ def find_valid_id(id_seed: int, list_of_ids: list, inc_up=True, inc_count=0):
         id_seed -= 1
     inc_count += 1
     return find_valid_id(id_seed, list_of_ids, inc_count=inc_count)
+
+
+def is_dark_mode():
+    global no_dark_mode
+
+    if no_dark_mode:
+        return False
+
+    if no_dark_mode is None:
+        mac_ver_temp = platform.mac_ver()
+        mac_ver = mac_ver_temp[0]
+        ver_check = ''
+        one_point = False
+        for char in mac_ver:
+            if char == '.':
+                if one_point:
+                    break
+                one_point = True
+            ver_check += char
+        if 10.14 > float(ver_check):
+            no_dark_mode = True
+            return False
+        no_dark_mode = False
+    cmd = 'defaults read -g AppleInterfaceStyle'
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    return bool(p.communicate()[0])
+
+
+def get_path(filename):
+    name = os.path.splitext(filename)[0]
+    ext = os.path.splitext(filename)[1]
+    file = NSBundle.mainBundle().pathForResource_ofType_(name, ext)
+    return file or os.path.realpath(filename)
+
+
+def natural_key(string):
+    return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]

@@ -31,10 +31,6 @@ conn_template = ['connection', '', [], [['id', '0', [], []], ['type', '0', [], [
 bak_files = []  # I know I shouldn't use this as global variable, but I don't care
 
 
-def natural_key(string):
-    return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
-
-
 class C4IconSwapper:
     class C4zPanel:
         class SubIcon:
@@ -2014,3 +2010,7 @@ def find_valid_id(id_seed: int, list_of_ids: list, inc_up=True, inc_count=0):
         id_seed -= 1
     inc_count += 1
     return find_valid_id(id_seed, list_of_ids, inc_count=inc_count)
+
+
+def natural_key(string):
+    return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
