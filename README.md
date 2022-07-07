@@ -15,8 +15,3 @@ It has two built in generic drivers:
 
 The built-in multi-state driver has support for re-naming the 13 driver states.
 It has not been thoroughly tested, but seems to work from what little testing has been done.
-
-Since drag and drop support was added with tkinterdnd2,
-there have been issues with getting the program to run due to missing tkinter dependency.
-I have had some luck with manually copying tkdnd2.8 folder to \tcl\tcl8.6\ sub-folder of the python interpreter.
-The exe file should work either way.
