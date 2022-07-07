@@ -18,7 +18,19 @@ from Base64Assets import *
 from XMLObject import XMLObject
 from AppKit import NSBundle
 
+version = '5.6.2b'
 
+letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+           'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
+capital_letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+                   'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+
+conn_template = ['connection', '', [], [['id', '0', [], []], ['type', '0', [], []],
+                                        ['connectionname', 'REPLACE', [], []],
+                                        ['consumer', 'False', [], []], ['linelevel', 'True', [], []],
+                                        ['classes', '', [], [['class', '', [], [['classname', 'REPLACE', [], []]]]]]]]
+bak_files = []  # I know I shouldn't use this as global variable, but I don't care
 no_dark_mode = None
 
 
@@ -55,19 +67,8 @@ def get_path(filename):
     return file or os.path.realpath(filename)
 
 
-version = '5.6.2b'
-
-letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
-           'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
-capital_letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-                   'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
-numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
-
-conn_template = ['connection', '', [], [['id', '0', [], []], ['type', '0', [], []],
-                                        ['connectionname', 'REPLACE', [], []],
-                                        ['consumer', 'False', [], []], ['linelevel', 'True', [], []],
-                                        ['classes', '', [], [['class', '', [], [['classname', 'REPLACE', [], []]]]]]]]
-bak_files = []  # I know I shouldn't use this as global variable, but I don't care
+def natural_key(string):
+    return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
 
 
 class C4IconSwapperMac:
@@ -409,11 +410,30 @@ class C4IconSwapperMac:
                 else:
                     self.icons.append(self.Icon(temp_list))
 
-            # Count extra icons
+            # Count extra icons & Fix Icon order (sloppy)
+            temp_list = []
+            device_exception = None
             self.extra_icons = 0
-            for icon_group in self.icons:
-                if icon_group.extra:
+            for icon in reversed(self.icons):
+                if icon.extra:
                     self.extra_icons += 1
+                    continue
+                if icon.name == 'device':
+                    device_exception = icon
+                    self.icons.pop(self.icons.index(icon))
+                    continue
+                temp_list.append(icon)
+                self.icons.pop(self.icons.index(icon))
+            temp_name_list = []
+            temp_name_dict = {}
+            for icon in temp_list:
+                temp_name_list.append(icon.name)
+                temp_name_dict[icon.name] = temp_list.index(icon)
+            temp_name_list.sort(key=natural_key)
+            for icon_name in reversed(temp_name_list):
+                self.icons.insert(0, temp_list[temp_name_dict[icon_name]])
+            if device_exception:
+                self.icons.insert(0, device_exception)
 
             # Update entry fields
             if len(self.icons) == 0:
