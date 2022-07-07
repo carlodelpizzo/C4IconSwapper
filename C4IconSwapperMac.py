@@ -55,7 +55,7 @@ def get_path(filename):
     return file or os.path.realpath(filename)
 
 
-version = '5.6.1b'
+version = '5.6.2b'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -477,7 +477,6 @@ class C4IconSwapperMac:
                 self.uc.replacement_panel.replace_button['state'] = DISABLED
                 self.uc.replacement_panel.replace_all_button['state'] = DISABLED
             if self.uc.driver_selected:
-                self.uc.export_panel.export_button['state'] = ACTIVE
                 self.uc.export_panel.export_as_button['state'] = ACTIVE
 
             done = False
@@ -1047,14 +1046,9 @@ class C4IconSwapperMac:
             self.driver_name_label.place(x=65 + self.x, y=165 + self.y, anchor='w')
 
             # Buttons
-            self.export_button = tk.Button(self.uc.root, text='Quick Export', width=20,
-                                           command=self.quick_export, takefocus=0)
-            self.export_button.place(x=145 + self.x, y=210 + self.y, anchor='n')
-            self.export_button['state'] = DISABLED
-
             self.export_as_button = tk.Button(self.uc.root, text='Export As...', width=20,
                                               command=self.export_c4z, takefocus=0)
-            self.export_as_button.place(x=145 + self.x, y=238 + self.y, anchor='n')
+            self.export_as_button.place(x=145 + self.x, y=210 + self.y, anchor='n')
             self.export_as_button['state'] = DISABLED
 
             # Entry
@@ -1075,78 +1069,7 @@ class C4IconSwapperMac:
                                                      variable=self.include_backups, takefocus=0)
             self.include_backups_check.place(x=63 + self.x, y=115 + self.y, anchor='w')
 
-        def quick_export(self, first_call=True, driver_name=''):
-            if first_call:
-                self.export_c4z(quick_export=True)
-                return
-            cur_dir = self.uc.cur_dir
-            temp_dir = self.uc.temp_dir
-            driver_xml = self.uc.driver_xml
-
-            def confirm_overwrite():
-                # Remove old driver
-                if os.path.isfile(cur_dir + driver_name + '.c4z'):
-                    os.remove(cur_dir + driver_name + '.c4z')
-                if os.path.isfile(cur_dir + driver_name + '.zip'):
-                    os.remove(cur_dir + driver_name + '.zip')
-
-                # Make new driver
-                shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
-                base = os.path.splitext(cur_dir + driver_name + '.zip')[0]
-                os.rename(cur_dir + driver_name + '.zip', base + '.c4z')
-
-                export_cleanup()
-
-            def export_cleanup():
-                global bak_files
-
-                temp_temp_dir = self.uc.temp_dir + 'temp_bak_files/'
-                # Cleanup temp files and restore original xml
-                if len(bak_files) != 0 and os.path.isdir(temp_temp_dir):
-                    for file_list in bak_files:
-                        shutil.copy(temp_temp_dir + '/' + file_list[2], file_list[0] + '/' + file_list[1])
-                    shutil.rmtree(temp_temp_dir)
-                bak_files = []
-                driver_xml.restore()
-                if os.path.isfile(temp_dir + 'driver/driver.lua'):
-                    os.remove(temp_dir + 'driver/driver.lua')
-                    os.rename(temp_dir + 'driver/driver.lua.bak', temp_dir + 'driver/driver.lua')
-                os.remove(temp_dir + 'driver/driver.xml')
-                os.rename(temp_dir + 'driver/driver.xml.bak', temp_dir + 'driver/driver.xml')
-
-                overwrite_pop_up.destroy()
-
-            # Export file
-            if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z') or \
-                    os.path.isfile(self.uc.cur_dir + driver_name + '.zip'):
-                win_x = self.uc.root.winfo_rootx() + self.x
-                win_y = self.uc.root.winfo_rooty()
-                overwrite_pop_up = Toplevel(self.uc.root)
-                overwrite_pop_up.title('Overwrite')
-                overwrite_pop_up.geometry('239x70')
-                overwrite_pop_up.geometry(f'+{win_x}+{win_y}')
-                overwrite_pop_up.protocol("WM_DELETE_WINDOW", export_cleanup)
-                overwrite_pop_up.grab_set()
-                overwrite_pop_up.focus()
-                overwrite_pop_up.transient(self.uc.root)
-                overwrite_pop_up.resizable(False, False)
-
-                confirm_label = Label(overwrite_pop_up, text='Would you like to overwrite the existing file?')
-                confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
-
-                no_button = tk.Button(overwrite_pop_up, text='No', width='10', command=export_cleanup)
-                no_button.grid(row=2, column=0, sticky='e', padx=5)
-
-                yes_button = tk.Button(overwrite_pop_up, text='Yes', width='10', command=confirm_overwrite)
-                yes_button.grid(row=2, column=1, sticky='w', padx=5)
-                return False
-
-            # Make driver
-            shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + '/driver')
-            base_name = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
-            os.rename(self.uc.cur_dir + driver_name + '.zip', base_name + '.c4z')
-
-        def export_c4z(self, quick_export=False):
+        def export_c4z(self):
             global bak_files
 
             # Format driver name
@@ -1348,31 +1271,26 @@ class C4IconSwapperMac:
                     shutil.copy(file_list[0] + '/' + file_list[1], temp_temp_dir + file_list[2])
                     os.remove(file_list[0] + '/' + file_list[1])
 
-            # Call export functions
-            if quick_export:
-                if not self.quick_export(first_call=False, driver_name=driver_name):
-                    return
-            else:
-                # Save As Dialog
-                out_file = filedialog.asksaveasfile(initialfile=driver_name + '.c4z',
-                                                    filetypes=[("Control4 Drivers", "*.c4z")])
-                out_file_path = out_file.name
-                out_file.close()
-                flag_remove_empty_file = False
-                if '.c4z' not in out_file_path:
-                    flag_remove_empty_file = True
-                    out_file_path += '.c4z'
+            # Save As Dialog
+            out_file = filedialog.asksaveasfile(initialfile=driver_name + '.c4z',
+                                                filetypes=[("Control4 Drivers", "*.c4z")])
+            out_file_path = out_file.name
+            out_file.close()
+            flag_remove_empty_file = False
+            if '.c4z' not in out_file_path:
+                flag_remove_empty_file = True
+                out_file_path += '.c4z'
 
-                # Export file
-                shutil.make_archive(self.uc.temp_dir + driver_name, 'zip', self.uc.temp_dir + '/driver')
-                base_name = os.path.splitext(self.uc.temp_dir + driver_name + '.zip')[0]
-                os.rename(self.uc.temp_dir + driver_name + '.zip', base_name + '.c4z')
-                if os.path.isfile(out_file_path):
-                    os.remove(out_file_path)
-                shutil.copy(self.uc.temp_dir + driver_name + '.c4z', out_file_path)
-                os.remove(self.uc.temp_dir + driver_name + '.c4z')
-                if flag_remove_empty_file:
-                    os.remove(out_file_path.replace('.c4z', ''))
+            # Export file
+            shutil.make_archive(self.uc.temp_dir + driver_name, 'zip', self.uc.temp_dir + '/driver')
+            base_name = os.path.splitext(self.uc.temp_dir + driver_name + '.zip')[0]
+            os.rename(self.uc.temp_dir + driver_name + '.zip', base_name + '.c4z')
+            if os.path.isfile(out_file_path):
+                os.remove(out_file_path)
+            shutil.copy(self.uc.temp_dir + driver_name + '.c4z', out_file_path)
+            os.remove(self.uc.temp_dir + driver_name + '.c4z')
+            if flag_remove_empty_file:
+                os.remove(out_file_path.replace('.c4z', ''))
 
             # Cleanup temp files and restore original xml
             if len(bak_files) != 0 and os.path.isdir(temp_temp_dir):
@@ -1735,8 +1653,9 @@ class C4IconSwapperMac:
         self.root.resizable(False, False)
 
         # Creating temporary directory
-        self.cur_dir = filedialog.askdirectory()
-        self.cur_dir = get_path(self.cur_dir)
+        # self.cur_dir = filedialog.askdirectory()
+        self.cur_dir = get_path('/tmp')
+        # self.cur_dir = get_path(self.cur_dir)
         self.temp_dir = self.cur_dir + '/C4IconSwapperTemp/'
         if not os.path.isdir(self.temp_dir):
             os.mkdir(self.temp_dir)
