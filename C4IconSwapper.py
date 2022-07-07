@@ -1448,6 +1448,9 @@ class C4IconSwapper:
                     self.name_entry.delete(0, END)
                     self.name_entry.insert(0, 'TO BE DELETED')
                     self.name_entry['state'] = DISABLED
+                    self.del_button['text'] = 'Keep'
+                    self.del_button['width'] = 4
+                    self.del_button.place(x=self.del_button.winfo_x() - 6, y=self.y)
                     if len(self.id_group) > 1:
                         first = True
                         last_alive = True
@@ -1472,6 +1475,9 @@ class C4IconSwapper:
                 self.prior_type = ''
                 self.tags[0].delete = False
                 self.tags[1].delete = False
+                self.del_button['text'] = 'Del'
+                self.del_button['width'] = 3
+                self.del_button.place(x=self.del_button.winfo_x() + 6, y=self.y)
 
             def reinit(self):
                 self.id = 0
