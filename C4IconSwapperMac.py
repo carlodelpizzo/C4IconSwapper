@@ -12,6 +12,7 @@ import tkinter as tk
 from tkinter import *
 from tkinter import ttk
 from tkinter import filedialog
+from tkinterdnd2 import DND_FILES, TkinterDnD
 from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
@@ -113,6 +114,8 @@ class C4IconSwapperMac:
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
             self.blank_image_label.image = self.uc.blank
             self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+            self.blank_image_label.drop_target_register(DND_FILES)
+            self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
             self.icon_label = tk.Label(self.uc.root, text='0 of 0')
             self.icon_label.place(x=108 + self.x, y=176 + self.y, anchor='n')
@@ -154,6 +157,8 @@ class C4IconSwapperMac:
             self.file_entry_field.insert(0, 'Select .c4z file...')
             self.file_entry_field.place(x=101 + self.x, y=15 + self.y, anchor='n')
             self.file_entry_field['state'] = DISABLED
+            self.file_entry_field.drop_target_register(DND_FILES)
+            self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
             # Checkbox
             self.show_extra_icons = IntVar(value=0)
@@ -687,6 +692,18 @@ class C4IconSwapperMac:
             for conn in self.uc.connections_panel.connections:
                 conn.update_id()
 
+        def drop_in_c4z(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            if dropped_path.endswith('.c4z'):
+                self.upload_c4z(given_path=dropped_path)
+            elif dropped_path.endswith('.png') or dropped_path.endswith('.jpg') or \
+                    dropped_path.endswith('.gif') or dropped_path.endswith('.jpeg'):
+                self.uc.replacement_panel.upload_replacement(given_path=dropped_path)
+            elif '.' not in dropped_path:
+                image_paths = os.listdir(dropped_path)
+                for new_img_path in image_paths:
+                    self.uc.replacement_panel.upload_replacement(dropped_path + '/' + new_img_path)
+
     class ReplacementPanel:
         def __init__(self, upper_class):
             # Initialize Replacement Panel
@@ -703,31 +720,43 @@ class C4IconSwapperMac:
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
             self.blank_image_label.image = self.uc.blank
             self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+            self.blank_image_label.drop_target_register(DND_FILES)
+            self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_replacement)
 
             self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
             self.stack_labels[-1].image = self.uc.stack_blank
             self.stack_labels[-1].place(x=18 + self.x, y=176 + self.y, anchor='nw')
             self.stack_labels[-1].bind('<Button-1>', self.select_stack0)
+            self.stack_labels[-1].drop_target_register(DND_FILES)
+            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack0)
 
             self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
             self.stack_labels[-1].image = self.uc.stack_blank
             self.stack_labels[-1].place(x=79 + self.x, y=176 + self.y, anchor='nw')
             self.stack_labels[-1].bind('<Button-1>', self.select_stack1)
+            self.stack_labels[-1].drop_target_register(DND_FILES)
+            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack1)
 
             self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
             self.stack_labels[-1].image = self.uc.stack_blank
             self.stack_labels[-1].place(x=140 + self.x, y=176 + self.y, anchor='nw')
             self.stack_labels[-1].bind('<Button-1>', self.select_stack2)
+            self.stack_labels[-1].drop_target_register(DND_FILES)
+            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack2)
 
             self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
             self.stack_labels[-1].image = self.uc.stack_blank
             self.stack_labels[-1].place(x=201 + self.x, y=176 + self.y, anchor='nw')
             self.stack_labels[-1].bind('<Button-1>', self.select_stack3)
+            self.stack_labels[-1].drop_target_register(DND_FILES)
+            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack3)
 
             self.stack_labels.append(tk.Label(self.uc.root, image=self.uc.stack_blank))
             self.stack_labels[-1].image = self.uc.stack_blank
             self.stack_labels[-1].place(x=262 + self.x, y=176 + self.y, anchor='nw')
             self.stack_labels[-1].bind('<Button-1>', self.select_stack4)
+            self.stack_labels[-1].drop_target_register(DND_FILES)
+            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack4)
 
             # Buttons
             self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_replacement,
@@ -758,6 +787,8 @@ class C4IconSwapperMac:
             self.file_entry_field.insert(0, 'Select image file...')
             self.file_entry_field.place(x=103 + self.x, y=15 + self.y, anchor='n')
             self.file_entry_field['state'] = DISABLED
+            self.file_entry_field.drop_target_register(DND_FILES)
+            self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_replacement)
 
         def upload_replacement(self, given_path=''):
             if given_path == '':
@@ -1029,6 +1060,26 @@ class C4IconSwapperMac:
                 self.refresh_img_stack()
                 return
             self.upload_replacement(given_path=self.img_stack[4])
+
+        def drop_stack0(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            self.add_to_img_stack(dropped_path, index=0)
+
+        def drop_stack1(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            self.add_to_img_stack(dropped_path, index=1)
+
+        def drop_stack2(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            self.add_to_img_stack(dropped_path, index=2)
+
+        def drop_stack3(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            self.add_to_img_stack(dropped_path, index=3)
+
+        def drop_stack4(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            self.add_to_img_stack(dropped_path, index=4)
 
     class ExportPanel:
         def __init__(self, upper_class):
@@ -1644,7 +1695,8 @@ class C4IconSwapperMac:
 
     def __init__(self):
         # Initialize main program
-        self.root = tk.Tk()
+        # self.root = tk.Tk()
+        self.root = TkinterDnD.Tk()
         self.root.bind('<KeyRelease>', self.key_release)
 
         # Root window properties
@@ -1653,9 +1705,7 @@ class C4IconSwapperMac:
         self.root.resizable(False, False)
 
         # Creating temporary directory
-        # self.cur_dir = filedialog.askdirectory()
         self.cur_dir = get_path('/tmp')
-        # self.cur_dir = get_path(self.cur_dir)
         self.temp_dir = self.cur_dir + '/C4IconSwapperTemp/'
         if not os.path.isdir(self.temp_dir):
             os.mkdir(self.temp_dir)
