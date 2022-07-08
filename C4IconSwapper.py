@@ -16,7 +16,7 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.6.2b'
+version = '5.6.3b'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -28,7 +28,6 @@ conn_template = ['connection', '', [], [['id', '0', [], []], ['type', '0', [], [
                                         ['connectionname', 'REPLACE', [], []],
                                         ['consumer', 'False', [], []], ['linelevel', 'True', [], []],
                                         ['classes', '', [], [['class', '', [], [['classname', 'REPLACE', [], []]]]]]]]
-bak_files = []  # I know I shouldn't use this as global variable, but I don't care
 
 
 class C4IconSwapper:
@@ -154,15 +153,17 @@ class C4IconSwapper:
             sizes = [(70, 70), (90, 90), (300, 300), (512, 512)]
             pictures = os.listdir(self.uc.device_icon_dir)
             for picture in pictures:
-                resized_icon = Image.open(self.uc.device_icon_dir + picture)
+                resized_icon = Image.open(self.uc.device_icon_dir + '/' + picture)
                 for size in sizes:
                     new_icon = resized_icon.resize(size)
-                    new_icon.save(self.uc.device_icon_dir + picture.replace(str(1024), str(size[0])))
+                    new_icon.save(self.uc.device_icon_dir + '/' + picture.replace(str(1024), str(size[0])))
 
             shutil.make_archive(temp_gen_driver.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
             os.rename(temp_gen_driver.replace('.c4z', '.zip'), temp_gen_driver)
 
             self.upload_c4z(temp_gen_driver)
+            self.uc.export_panel.driver_name_entry.delete(0, 'end')
+            self.uc.export_panel.driver_name_entry.insert(0, 'New Driver')
             os.remove(temp_gen_driver)
             self.gen_driver_button['state'] = DISABLED
 
@@ -196,15 +197,17 @@ class C4IconSwapper:
             sizes = [(90, 90), (300, 300), (512, 512), (1024, 1024)]
             pictures = os.listdir(self.uc.device_icon_dir)
             for picture in pictures:
-                resized_icon = Image.open(self.uc.device_icon_dir + picture)
+                resized_icon = Image.open(self.uc.device_icon_dir + '/' + picture)
                 for size in sizes:
                     new_icon = resized_icon.resize(size)
-                    new_icon.save(self.uc.device_icon_dir + picture.replace(str(70), str(size[0])))
+                    new_icon.save(self.uc.device_icon_dir + '/' + picture.replace(str(70), str(size[0])))
 
             shutil.make_archive(temp_gen_driver.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
             os.rename(temp_gen_driver.replace('.c4z', '.zip'), temp_gen_driver)
 
             self.upload_c4z(temp_gen_driver)
+            self.uc.export_panel.driver_name_entry.delete(0, 'end')
+            self.uc.export_panel.driver_name_entry.insert(0, 'New Driver')
             os.remove(temp_gen_driver)
             os.remove(self.uc.temp_dir + 'loading_icon.gif')
 
@@ -493,7 +496,7 @@ class C4IconSwapper:
             if index is None:
                 index = self.current_icon
             elif 0 > index > len(self.icons):
-                return print('icon restore index out of range')
+                return
 
             for icon in self.icons[index].icons:
                 if os.path.isfile(icon.path + '.bak'):
@@ -521,7 +524,6 @@ class C4IconSwapper:
 
         def prev_icon(self):
             if not self.uc.driver_selected:
-                print('Driver not selected')
                 return
             if self.current_icon - 1 < 0:
                 self.current_icon = self.current_icon - 1 + len(self.icons)
@@ -545,7 +547,6 @@ class C4IconSwapper:
 
         def next_icon(self):
             if not self.uc.driver_selected:
-                print('Driver not selected')
                 return
             if self.current_icon + 1 >= len(self.icons):
                 self.current_icon = self.current_icon + 1 - len(self.icons)
@@ -569,7 +570,6 @@ class C4IconSwapper:
 
         def get_connections(self):
             if not os.path.isfile(self.uc.temp_dir + 'driver/driver.xml') or not self.uc.driver_selected:
-                print('Driver not found')
                 return
             self.uc.connections_panel.reinit()
 
@@ -774,7 +774,6 @@ class C4IconSwapper:
                 return
             if not filename.endswith('.png') and not filename.endswith('.jpg') and not filename.endswith('.gif') and \
                     not filename.endswith('.jpeg'):
-                print('Not valid image file', filename)
                 return
 
             if self.uc.replacement_selected:
@@ -804,11 +803,9 @@ class C4IconSwapper:
 
         def add_to_img_stack(self, img_path: str, index=None):
             if not os.path.isfile(img_path):
-                print('Image not found')
                 return
             if not img_path.endswith('.png') and not img_path.endswith('.jpg') and not img_path.endswith('.gif') and \
                     not img_path.endswith('.jpeg'):
-                print('Not valid image file')
                 return
             for img in self.img_stack:
                 if filecmp.cmp(img, img_path):
@@ -869,7 +866,6 @@ class C4IconSwapper:
             if index is None:
                 index = self.uc.c4z_panel.current_icon
             elif 0 > index > len(self.uc.c4z_panel.icons):
-                print('Replace icon index out of range')
                 return
 
             if given_path == '':
@@ -900,7 +896,6 @@ class C4IconSwapper:
                 return
             if not img_path.endswith('.png') and not img_path.endswith('.jpg') and not img_path.endswith('.gif') and \
                     not img_path.endswith('.jpeg'):
-                print('Not valid image file')
                 return
             self.upload_replacement(given_path=img_path)
 
@@ -1072,46 +1067,45 @@ class C4IconSwapper:
             if first_call:
                 self.export_c4z(quick_export=True)
                 return
-            cur_dir = self.uc.cur_dir
-            temp_dir = self.uc.temp_dir
-            driver_xml = self.uc.driver_xml
 
             def confirm_overwrite():
                 # Remove old driver
-                if os.path.isfile(cur_dir + driver_name + '.c4z'):
-                    os.remove(cur_dir + driver_name + '.c4z')
-                if os.path.isfile(cur_dir + driver_name + '.zip'):
-                    os.remove(cur_dir + driver_name + '.zip')
+                if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z'):
+                    os.remove(self.uc.cur_dir + driver_name + '.c4z')
 
                 # Make new driver
-                shutil.make_archive(driver_name, 'zip', temp_dir + '/driver')
-                base = os.path.splitext(cur_dir + driver_name + '.zip')[0]
-                os.rename(cur_dir + driver_name + '.zip', base + '.c4z')
+                if self.include_backups.get() == 0:
+                    if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua.bak'):
+                        shutil.copy(self.uc.temp_dir + 'driver/driver.lua.bak', self.uc.temp_dir + 'driver.lua.bak')
+                        os.remove(self.uc.temp_dir + 'driver/driver.lua.bak')
+                    shutil.copy(self.uc.temp_dir + 'driver/driver.xml.bak', self.uc.temp_dir + 'driver.xml.bak')
+                    os.remove(self.uc.temp_dir + 'driver/driver.xml.bak')
+                shutil.make_archive(self.uc.temp_dir + driver_name, 'zip', self.uc.temp_dir + '/driver')
+                base = os.path.splitext(self.uc.temp_dir + driver_name + '.zip')[0]
+                os.rename(self.uc.temp_dir + driver_name + '.zip', base + '.c4z')
+                shutil.copy(self.uc.temp_dir + driver_name + '.c4z', self.uc.cur_dir)
+                os.remove(self.uc.temp_dir + driver_name + '.c4z')
+                if self.include_backups.get() == 0:
+                    shutil.copy(self.uc.temp_dir + 'driver.xml.bak', self.uc.temp_dir + 'driver/driver.xml.bak')
+                    os.remove(self.uc.temp_dir + 'driver.xml.bak')
+                    shutil.copy(self.uc.temp_dir + 'driver.lua.bak', self.uc.temp_dir + 'driver/driver.lua.bak')
+                    os.remove(self.uc.temp_dir + 'driver.lua.bak')
 
                 export_cleanup()
 
             def export_cleanup():
-                global bak_files
-
-                temp_temp_dir = self.uc.temp_dir + 'temp_bak_files/'
-                # Cleanup temp files and restore original xml
-                if len(bak_files) != 0 and os.path.isdir(temp_temp_dir):
-                    for file_list in bak_files:
-                        shutil.copy(temp_temp_dir + '/' + file_list[2], file_list[0] + '/' + file_list[1])
-                    shutil.rmtree(temp_temp_dir)
-                bak_files = []
-                driver_xml.restore()
-                if os.path.isfile(temp_dir + 'driver/driver.lua'):
-                    os.remove(temp_dir + 'driver/driver.lua')
-                    os.rename(temp_dir + 'driver/driver.lua.bak', temp_dir + 'driver/driver.lua')
-                os.remove(temp_dir + 'driver/driver.xml')
-                os.rename(temp_dir + 'driver/driver.xml.bak', temp_dir + 'driver/driver.xml')
+                # Restore original xml and lua file
+                self.uc.driver_xml.restore()
+                if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
+                    os.remove(self.uc.temp_dir + 'driver/driver.lua')
+                    os.rename(self.uc.temp_dir + 'driver/driver.lua.bak', self.uc.temp_dir + 'driver/driver.lua')
+                os.remove(self.uc.temp_dir + 'driver/driver.xml')
+                os.rename(self.uc.temp_dir + 'driver/driver.xml.bak', self.uc.temp_dir + 'driver/driver.xml')
 
                 overwrite_pop_up.destroy()
 
             # Export file
-            if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z') or \
-                    os.path.isfile(self.uc.cur_dir + driver_name + '.zip'):
+            if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z'):
                 win_x = self.uc.root.winfo_rootx() + self.x
                 win_y = self.uc.root.winfo_rooty()
                 overwrite_pop_up = Toplevel(self.uc.root)
@@ -1132,16 +1126,28 @@ class C4IconSwapper:
 
                 yes_button = tk.Button(overwrite_pop_up, text='Yes', width='10', command=confirm_overwrite)
                 yes_button.grid(row=2, column=1, sticky='w', padx=5)
-                return False
+                self.abort = True
+                return
 
             # Make driver
-            shutil.make_archive(driver_name, 'zip', self.uc.temp_dir + '/driver')
-            base_name = os.path.splitext(self.uc.cur_dir + driver_name + '.zip')[0]
-            os.rename(self.uc.cur_dir + driver_name + '.zip', base_name + '.c4z')
+            if self.include_backups.get() == 0:
+                if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua.bak'):
+                    shutil.copy(self.uc.temp_dir + 'driver/driver.lua.bak', self.uc.temp_dir + 'driver.lua.bak')
+                    os.remove(self.uc.temp_dir + 'driver/driver.lua.bak')
+                shutil.copy(self.uc.temp_dir + 'driver/driver.xml.bak', self.uc.temp_dir + 'driver.xml.bak')
+                os.remove(self.uc.temp_dir + 'driver/driver.xml.bak')
+            shutil.make_archive(self.uc.temp_dir + driver_name, 'zip', self.uc.temp_dir + 'driver')
+            base_name = os.path.splitext(self.uc.temp_dir + driver_name + '.zip')[0]
+            os.rename(self.uc.temp_dir + driver_name + '.zip', base_name + '.c4z')
+            shutil.copy(self.uc.temp_dir + driver_name + '.c4z', self.uc.cur_dir)
+            os.remove(self.uc.temp_dir + driver_name + '.c4z')
+            if self.include_backups.get() == 0:
+                shutil.copy(self.uc.temp_dir + 'driver.xml.bak', self.uc.temp_dir + 'driver/driver.xml.bak')
+                os.remove(self.uc.temp_dir + 'driver.xml.bak')
+                shutil.copy(self.uc.temp_dir + 'driver.lua.bak', self.uc.temp_dir + 'driver/driver.lua.bak')
+                os.remove(self.uc.temp_dir + 'driver.lua.bak')
 
         def export_c4z(self, quick_export=False):
-            global bak_files
-
             # Format driver name
             driver_name = self.driver_name_var.get()
             temp = ''
@@ -1323,28 +1329,20 @@ class C4IconSwapper:
                     result = result.group(1)
                     icon_tag.value = icon_tag.value.replace(result, driver_name)
 
+            # Backup xml file and write new xml
             os.rename(self.uc.temp_dir + 'driver/driver.xml', self.uc.temp_dir + 'driver/driver.xml.bak')
             with open(self.uc.temp_dir + 'driver/driver.xml', 'w', errors='ignore') as out_file:
                 out_file.writelines(self.uc.driver_xml.get_lines())
 
-            bak_files = []
-            temp_temp_dir = self.uc.temp_dir + 'temp_bak_files/'
-            if self.include_backups.get() == 0:
-                if not os.path.isdir(temp_temp_dir):
-                    os.mkdir(temp_temp_dir)
-                directories = list_all_sub_directories(self.uc.temp_dir)
-                for directory in directories:
-                    files = os.listdir(directory)
-                    for file in files:
-                        if '.bak' in file or '.orig' in file:
-                            bak_files.append([directory, file, str(random.randint(1111111111, 9999999999)) + '.bak'])
-                for file_list in bak_files:
-                    shutil.copy(file_list[0] + '/' + file_list[1], temp_temp_dir + file_list[2])
-                    os.remove(file_list[0] + '/' + file_list[1])
+            # Backup lua file if needed
+            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
+                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
 
             # Call export functions
             if quick_export:
-                if not self.quick_export(first_call=False, driver_name=driver_name):
+                self.quick_export(first_call=False, driver_name=driver_name)
+                if self.abort:
+                    self.abort = False
                     return
             else:
                 # Save As Dialog
@@ -1358,7 +1356,13 @@ class C4IconSwapper:
                     out_file_path += '.c4z'
 
                 # Export file
-                shutil.make_archive(self.uc.temp_dir + driver_name, 'zip', self.uc.temp_dir + '/driver')
+                if self.include_backups.get() == 0:
+                    if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua.bak'):
+                        shutil.copy(self.uc.temp_dir + 'driver/driver.lua.bak', self.uc.temp_dir + 'driver.lua.bak')
+                        os.remove(self.uc.temp_dir + 'driver/driver.lua.bak')
+                    shutil.copy(self.uc.temp_dir + 'driver/driver.xml.bak', self.uc.temp_dir + 'driver.xml.bak')
+                    os.remove(self.uc.temp_dir + 'driver/driver.xml.bak')
+                shutil.make_archive(self.uc.temp_dir + driver_name, 'zip', self.uc.temp_dir + 'driver')
                 base_name = os.path.splitext(self.uc.temp_dir + driver_name + '.zip')[0]
                 os.rename(self.uc.temp_dir + driver_name + '.zip', base_name + '.c4z')
                 if os.path.isfile(out_file_path):
@@ -1367,12 +1371,13 @@ class C4IconSwapper:
                 os.remove(self.uc.temp_dir + driver_name + '.c4z')
                 if flag_remove_empty_file:
                     os.remove(out_file_path.replace('.c4z', ''))
+                if self.include_backups.get() == 0:
+                    shutil.copy(self.uc.temp_dir + 'driver.xml.bak', self.uc.temp_dir + 'driver/driver.xml.bak')
+                    os.remove(self.uc.temp_dir + 'driver.xml.bak')
+                    shutil.copy(self.uc.temp_dir + 'driver.lua.bak', self.uc.temp_dir + 'driver/driver.lua.bak')
+                    os.remove(self.uc.temp_dir + 'driver.lua.bak')
 
-            # Cleanup temp files and restore original xml
-            if len(bak_files) != 0 and os.path.isdir(temp_temp_dir):
-                for file_list in bak_files:
-                    shutil.copy(temp_temp_dir + '/' + file_list[2], file_list[0] + '/' + file_list[1])
-                shutil.rmtree(temp_temp_dir)
+            # Restore original xml and lua
             self.uc.driver_xml.restore()
             if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
                 os.remove(self.uc.temp_dir + 'driver/driver.lua')
@@ -1740,8 +1745,8 @@ class C4IconSwapper:
         self.states_orig_names = []
         self.driver_xml = None
         self.states_shown = False
-        self.device_icon_dir = self.temp_dir + 'driver/www/icons/device/'
-        self.icon_dir = self.temp_dir + 'driver/www/icons/'
+        self.device_icon_dir = self.temp_dir + 'driver/www/icons/device'
+        self.icon_dir = self.temp_dir + 'driver/www/icons'
         self.replacement_image_path = self.temp_dir + 'replacement_icon.png'
         self.orig_file_dir = ''
         self.orig_file_path = ''
