@@ -1338,23 +1338,38 @@ class C4IconSwapper:
         def export_file(self, driver_name: str, path=None):
             if path is None:
                 path = self.uc.cur_dir + driver_name + '.c4z'
-            print(path)
+            bak_files_dict = {}
+            bak_files = []
+            bak_folder = self.uc.temp_dir + 'bak_files/'
+
+            # Backup and move all .bak files
             if self.include_backups.get() == 0:
-                if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua.bak'):
-                    shutil.copy(self.uc.temp_dir + 'driver/driver.lua.bak', self.uc.temp_dir + 'driver.lua.bak')
-                    os.remove(self.uc.temp_dir + 'driver/driver.lua.bak')
-                shutil.copy(self.uc.temp_dir + 'driver/driver.xml.bak', self.uc.temp_dir + 'driver.xml.bak')
-                os.remove(self.uc.temp_dir + 'driver/driver.xml.bak')
+                directories = list_all_sub_directories(self.uc.temp_dir + 'driver')
+                directories.insert(0, self.uc.temp_dir + 'driver')
+                if os.path.isdir(bak_folder):
+                    shutil.rmtree(bak_folder)
+                os.mkdir(bak_folder)
+                for directory in directories:
+                    for file in os.listdir(directory):
+                        if file.endswith('.bak'):
+                            random_tag = str(random.randint(1111111, 9999999))
+                            bak_files.append(directory + '/' + file)
+                            bak_files_dict[directory + '/' + file] = bak_folder + file + random_tag
+                            shutil.copy(directory + '/' + file, bak_folder + file + random_tag)
+                            os.remove(directory + '/' + file)
+
+            # Create .c4z file
             shutil.make_archive(self.uc.temp_dir + driver_name, 'zip', self.uc.temp_dir + '/driver')
             base = os.path.splitext(self.uc.temp_dir + driver_name + '.zip')[0]
             os.rename(self.uc.temp_dir + driver_name + '.zip', base + '.c4z')
             shutil.copy(self.uc.temp_dir + driver_name + '.c4z', path)
             os.remove(self.uc.temp_dir + driver_name + '.c4z')
+
+            # Restore .bak files
             if self.include_backups.get() == 0:
-                shutil.copy(self.uc.temp_dir + 'driver.xml.bak', self.uc.temp_dir + 'driver/driver.xml.bak')
-                os.remove(self.uc.temp_dir + 'driver.xml.bak')
-                shutil.copy(self.uc.temp_dir + 'driver.lua.bak', self.uc.temp_dir + 'driver/driver.lua.bak')
-                os.remove(self.uc.temp_dir + 'driver.lua.bak')
+                for file in bak_files:
+                    shutil.copy(bak_files_dict[file], file)
+                shutil.rmtree(bak_folder)
 
         def validate_driver_name(self, *args):
             if args:  # For IDE unused argument warning
@@ -1705,11 +1720,9 @@ class C4IconSwapper:
         # Creating temporary directory
         self.cur_dir = os.getcwd() + '/'
         self.temp_dir = self.cur_dir + 'C4IconSwapperTemp/'
-        if not os.path.isdir(self.temp_dir):
-            os.mkdir(self.temp_dir)
-        else:
+        if os.path.isdir(self.temp_dir):
             shutil.rmtree(self.temp_dir)
-            os.mkdir(self.temp_dir)
+        os.mkdir(self.temp_dir)
 
         # Class variables
         self.counter = 0
