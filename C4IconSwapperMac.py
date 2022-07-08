@@ -18,7 +18,7 @@ from Base64Assets import *
 from XMLObject import XMLObject
 from AppKit import NSBundle
 
-version = '5.6.2b'
+version = '5.6.3b'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -30,7 +30,6 @@ conn_template = ['connection', '', [], [['id', '0', [], []], ['type', '0', [], [
                                         ['connectionname', 'REPLACE', [], []],
                                         ['consumer', 'False', [], []], ['linelevel', 'True', [], []],
                                         ['classes', '', [], [['class', '', [], [['classname', 'REPLACE', [], []]]]]]]]
-bak_files = []  # I know I shouldn't use this as global variable, but I don't care
 no_dark_mode = None
 
 
@@ -1030,7 +1029,7 @@ class C4IconSwapperMac:
 
             # Buttons
             self.export_as_button = tk.Button(self.uc.root, text='Export As...', width=20,
-                                              command=self.export_c4z, takefocus=0)
+                                              command=self.do_export, takefocus=0)
             self.export_as_button.place(x=145 + self.x, y=210 + self.y, anchor='n')
             self.export_as_button['state'] = DISABLED
 
@@ -1047,14 +1046,12 @@ class C4IconSwapperMac:
                                                 variable=self.inc_driver_version, takefocus=0)
             self.inc_driver_check.place(x=63 + self.x, y=135 + self.y, anchor='w')
 
-            self.include_backups = IntVar()
+            self.include_backups = IntVar(value=1)
             self.include_backups_check = Checkbutton(self.uc.root, text='include backup files',
                                                      variable=self.include_backups, takefocus=0)
             self.include_backups_check.place(x=63 + self.x, y=115 + self.y, anchor='w')
 
-        def export_c4z(self):
-            global bak_files
-
+        def do_export(self):
             # Format driver name
             driver_name = self.driver_name_var.get()
             temp = ''
@@ -1109,10 +1106,11 @@ class C4IconSwapperMac:
                 self.abort = False
                 return
 
+            # Update state names in lua file
             # state_name_changes = [original_name, new_name, original_name_lower, new_name_lower]
             state_name_changes = []
-            if os.path.isfile(self.uc.temp_dir + '/driver/driver.lua'):
-                shutil.copy(self.uc.temp_dir + '/driver/driver.lua', self.uc.temp_dir + '/driver/driver.lua.bak')
+            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
+                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
                 for state in self.uc.state_panel.states:
                     if state.name_entry['state'] == NORMAL:
                         state_name_changes.append([state.original_name, state.name_entry.get()])
@@ -1143,8 +1141,8 @@ class C4IconSwapperMac:
 
                 # Modify lua file
                 modified_lua_lines = []
-                shutil.copy(self.uc.temp_dir + '/driver/driver.lua', self.uc.temp_dir + '/driver/driver.lua.bak')
-                with open(get_path(self.uc.temp_dir + '/driver/driver.lua'), errors='ignore') as driver_lua_file:
+                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
+                with open(self.uc.temp_dir + 'driver/driver.lua', errors='ignore') as driver_lua_file:
                     driver_lua_lines = driver_lua_file.readlines()
                 for line in driver_lua_lines:
                     new_line = line
@@ -1162,7 +1160,7 @@ class C4IconSwapperMac:
                             new_line = new_line.replace(name_change[0] + '=', name_change[1] + '=')
                             new_line = new_line.replace(name_change[2] + '=', name_change[3] + '=')
                     modified_lua_lines.append(new_line)
-                with open(get_path(self.uc.temp_dir + '/driver/driver.lua'), 'w', errors='ignore') as driver_lua_file:
+                with open(self.uc.temp_dir + 'driver/driver.lua', 'w', errors='ignore') as driver_lua_file:
                     driver_lua_file.writelines(modified_lua_lines)
 
             # Confirm all connections have non-conflicting ids
@@ -1235,24 +1233,14 @@ class C4IconSwapperMac:
                     result = result.group(1)
                     icon_tag.value = icon_tag.value.replace(result, driver_name)
 
-            os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.xml.bak')
-            with open(get_path(self.uc.temp_dir + '/driver/driver.xml'), 'w', errors='ignore') as out_file:
+            # Backup xml file and write new xml
+            os.rename(self.uc.temp_dir + 'driver/driver.xml', self.uc.temp_dir + 'driver/driver.xml.bak')
+            with open(self.uc.temp_dir + 'driver/driver.xml', 'w', errors='ignore') as out_file:
                 out_file.writelines(self.uc.driver_xml.get_lines())
 
-            bak_files = []
-            temp_temp_dir = self.uc.temp_dir + '/temp_bak_files/'
-            if self.include_backups.get() == 0:
-                if not os.path.isdir(temp_temp_dir):
-                    os.mkdir(temp_temp_dir)
-                directories = list_all_sub_directories(self.uc.temp_dir)
-                for directory in directories:
-                    files = os.listdir(directory)
-                    for file in files:
-                        if '.bak' in file or '.orig' in file:
-                            bak_files.append([directory, file, str(random.randint(1111111111, 9999999999)) + '.bak'])
-                for file_list in bak_files:
-                    shutil.copy(file_list[0] + '/' + file_list[1], temp_temp_dir + file_list[2])
-                    os.remove(file_list[0] + '/' + file_list[1])
+            # Backup lua file if needed
+            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
+                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
 
             # Save As Dialog
             out_file = filedialog.asksaveasfile(initialfile=driver_name + '.c4z',
@@ -1265,27 +1253,51 @@ class C4IconSwapperMac:
                 out_file_path += '.c4z'
 
             # Export file
-            shutil.make_archive(self.uc.temp_dir + driver_name, 'zip', self.uc.temp_dir + '/driver')
-            base_name = os.path.splitext(self.uc.temp_dir + driver_name + '.zip')[0]
-            os.rename(self.uc.temp_dir + driver_name + '.zip', base_name + '.c4z')
             if os.path.isfile(out_file_path):
                 os.remove(out_file_path)
+            bak_files_dict = {}
+            bak_files = []
+            bak_folder = self.uc.temp_dir + 'bak_files/'
+
+            # Backup and move all .bak files
+            if self.include_backups.get() == 0:
+                directories = list_all_sub_directories(self.uc.temp_dir + 'driver')
+                directories.insert(0, self.uc.temp_dir + 'driver')
+                if os.path.isdir(bak_folder):
+                    shutil.rmtree(bak_folder)
+                os.mkdir(bak_folder)
+                for directory in directories:
+                    for file in os.listdir(directory):
+                        if file.endswith('.bak'):
+                            random_tag = str(random.randint(1111111, 9999999))
+                            bak_files.append(directory + '/' + file)
+                            bak_files_dict[directory + '/' + file] = bak_folder + file + random_tag
+                            shutil.copy(directory + '/' + file, bak_folder + file + random_tag)
+                            os.remove(directory + '/' + file)
+
+            # Create .c4z file
+            shutil.make_archive(self.uc.temp_dir + driver_name, 'zip', self.uc.temp_dir + '/driver')
+            base = os.path.splitext(self.uc.temp_dir + driver_name + '.zip')[0]
+            os.rename(self.uc.temp_dir + driver_name + '.zip', base + '.c4z')
             shutil.copy(self.uc.temp_dir + driver_name + '.c4z', out_file_path)
             os.remove(self.uc.temp_dir + driver_name + '.c4z')
+
+            # Restore .bak files
+            if self.include_backups.get() == 0:
+                for file in bak_files:
+                    shutil.copy(bak_files_dict[file], file)
+                shutil.rmtree(bak_folder)
+
             if flag_remove_empty_file:
                 os.remove(out_file_path.replace('.c4z', ''))
 
-            # Cleanup temp files and restore original xml
-            if len(bak_files) != 0 and os.path.isdir(temp_temp_dir):
-                for file_list in bak_files:
-                    shutil.copy(temp_temp_dir + '/' + file_list[2], file_list[0] + '/' + file_list[1])
-                shutil.rmtree(temp_temp_dir)
+            # Restore original xml and lua
             self.uc.driver_xml.restore()
-            if os.path.isfile(self.uc.temp_dir + '/driver/driver.lua'):
-                os.remove(self.uc.temp_dir + '/driver/driver.lua')
-                os.rename(self.uc.temp_dir + '/driver/driver.lua.bak', self.uc.temp_dir + '/driver/driver.lua')
-            os.remove(self.uc.temp_dir + '/driver/driver.xml')
-            os.rename(self.uc.temp_dir + '/driver/driver.xml.bak', self.uc.temp_dir + '/driver/driver.xml')
+            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
+                os.remove(self.uc.temp_dir + 'driver/driver.lua')
+                os.rename(self.uc.temp_dir + 'driver/driver.lua.bak', self.uc.temp_dir + 'driver/driver.lua')
+            os.remove(self.uc.temp_dir + 'driver/driver.xml')
+            os.rename(self.uc.temp_dir + 'driver/driver.xml.bak', self.uc.temp_dir + 'driver/driver.xml')
 
         def validate_driver_name(self, *args):
             if args:  # For IDE unused argument warning
