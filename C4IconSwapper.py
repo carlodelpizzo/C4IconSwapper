@@ -1058,7 +1058,7 @@ class C4IconSwapper:
                                                 variable=self.inc_driver_version, takefocus=0)
             self.inc_driver_check.place(x=63 + self.x, y=135 + self.y, anchor='w')
 
-            self.include_backups = IntVar()
+            self.include_backups = IntVar(value=1)
             self.include_backups_check = Checkbutton(self.uc.root, text='include backup files',
                                                      variable=self.include_backups, takefocus=0)
             self.include_backups_check.place(x=63 + self.x, y=115 + self.y, anchor='w')
