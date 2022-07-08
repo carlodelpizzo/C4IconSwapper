@@ -1109,8 +1109,8 @@ class C4IconSwapperMac:
             # Update state names in lua file
             # state_name_changes = [original_name, new_name, original_name_lower, new_name_lower]
             state_name_changes = []
-            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
-                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
+            if os.path.isfile(self.uc.temp_dir + '/driver/driver.lua'):
+                shutil.copy(self.uc.temp_dir + '/driver/driver.lua', self.uc.temp_dir + '/driver/driver.lua.bak')
                 for state in self.uc.state_panel.states:
                     if state.name_entry['state'] == NORMAL:
                         state_name_changes.append([state.original_name, state.name_entry.get()])
@@ -1141,8 +1141,8 @@ class C4IconSwapperMac:
 
                 # Modify lua file
                 modified_lua_lines = []
-                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
-                with open(self.uc.temp_dir + 'driver/driver.lua', errors='ignore') as driver_lua_file:
+                shutil.copy(self.uc.temp_dir + '/driver/driver.lua', self.uc.temp_dir + '/driver/driver.lua.bak')
+                with open(get_path(self.uc.temp_dir + '/driver/driver.lua'), errors='ignore') as driver_lua_file:
                     driver_lua_lines = driver_lua_file.readlines()
                 for line in driver_lua_lines:
                     new_line = line
@@ -1160,7 +1160,7 @@ class C4IconSwapperMac:
                             new_line = new_line.replace(name_change[0] + '=', name_change[1] + '=')
                             new_line = new_line.replace(name_change[2] + '=', name_change[3] + '=')
                     modified_lua_lines.append(new_line)
-                with open(self.uc.temp_dir + 'driver/driver.lua', 'w', errors='ignore') as driver_lua_file:
+                with open(get_path(self.uc.temp_dir + '/driver/driver.lua'), 'w', errors='ignore') as driver_lua_file:
                     driver_lua_file.writelines(modified_lua_lines)
 
             # Confirm all connections have non-conflicting ids
@@ -1234,13 +1234,13 @@ class C4IconSwapperMac:
                     icon_tag.value = icon_tag.value.replace(result, driver_name)
 
             # Backup xml file and write new xml
-            os.rename(self.uc.temp_dir + 'driver/driver.xml', self.uc.temp_dir + 'driver/driver.xml.bak')
-            with open(self.uc.temp_dir + 'driver/driver.xml', 'w', errors='ignore') as out_file:
+            os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.xml.bak')
+            with open(get_path(self.uc.temp_dir + '/driver/driver.xml'), 'w', errors='ignore') as out_file:
                 out_file.writelines(self.uc.driver_xml.get_lines())
 
             # Backup lua file if needed
-            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
-                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
+            if os.path.isfile(self.uc.temp_dir + '/driver/driver.lua'):
+                shutil.copy(self.uc.temp_dir + '/driver/driver.lua', self.uc.temp_dir + '/driver/driver.lua.bak')
 
             # Save As Dialog
             out_file = filedialog.asksaveasfile(initialfile=driver_name + '.c4z',
@@ -1261,8 +1261,8 @@ class C4IconSwapperMac:
 
             # Backup and move all .bak files
             if self.include_backups.get() == 0:
-                directories = list_all_sub_directories(self.uc.temp_dir + 'driver')
-                directories.insert(0, self.uc.temp_dir + 'driver')
+                directories = list_all_sub_directories(self.uc.temp_dir + '/driver')
+                directories.insert(0, self.uc.temp_dir + '/driver')
                 if os.path.isdir(bak_folder):
                     shutil.rmtree(bak_folder)
                 os.mkdir(bak_folder)
@@ -1276,11 +1276,11 @@ class C4IconSwapperMac:
                             os.remove(directory + '/' + file)
 
             # Create .c4z file
-            shutil.make_archive(self.uc.temp_dir + driver_name, 'zip', self.uc.temp_dir + '/driver')
-            base = os.path.splitext(self.uc.temp_dir + driver_name + '.zip')[0]
-            os.rename(self.uc.temp_dir + driver_name + '.zip', base + '.c4z')
-            shutil.copy(self.uc.temp_dir + driver_name + '.c4z', out_file_path)
-            os.remove(self.uc.temp_dir + driver_name + '.c4z')
+            shutil.make_archive(self.uc.temp_dir + '/' + driver_name, 'zip', self.uc.temp_dir + '/driver')
+            base = os.path.splitext(self.uc.temp_dir + '/' + driver_name + '.zip')[0]
+            os.rename(self.uc.temp_dir + '/' + driver_name + '.zip', base + '.c4z')
+            shutil.copy(self.uc.temp_dir + '/' + driver_name + '.c4z', out_file_path)
+            os.remove(self.uc.temp_dir + '/' + driver_name + '.c4z')
 
             # Restore .bak files
             if self.include_backups.get() == 0:
@@ -1293,11 +1293,11 @@ class C4IconSwapperMac:
 
             # Restore original xml and lua
             self.uc.driver_xml.restore()
-            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
-                os.remove(self.uc.temp_dir + 'driver/driver.lua')
-                os.rename(self.uc.temp_dir + 'driver/driver.lua.bak', self.uc.temp_dir + 'driver/driver.lua')
-            os.remove(self.uc.temp_dir + 'driver/driver.xml')
-            os.rename(self.uc.temp_dir + 'driver/driver.xml.bak', self.uc.temp_dir + 'driver/driver.xml')
+            if os.path.isfile(self.uc.temp_dir + '/driver/driver.lua'):
+                os.remove(self.uc.temp_dir + '/driver/driver.lua')
+                os.rename(self.uc.temp_dir + '/driver/driver.lua.bak', self.uc.temp_dir + '/driver/driver.lua')
+            os.remove(self.uc.temp_dir + '/driver/driver.xml')
+            os.rename(self.uc.temp_dir + '/driver/driver.xml.bak', self.uc.temp_dir + '/driver/driver.xml')
 
         def validate_driver_name(self, *args):
             if args:  # For IDE unused argument warning
