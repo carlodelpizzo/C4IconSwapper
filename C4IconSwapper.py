@@ -303,8 +303,6 @@ class C4IconSwapper:
             # Backup existing driver data
             temp_bak = '/bak' + str(random.randint(11111111, 99999999)) + '/'
             icons_bak = None
-            ids_bak = self.uc.connections_panel.ids
-            xml_bak = self.uc.driver_xml
             if len(self.icons) != 0:
                 icons_bak = self.icons
                 if os.path.isdir(self.uc.temp_dir + 'driver'):
@@ -329,33 +327,7 @@ class C4IconSwapper:
             # Unpack selected driver
             shutil.unpack_archive(filename, self.uc.temp_dir + 'driver', 'zip')
 
-            # Read driver.xml and update used id tags
-            self.uc.driver_xml = XMLObject(self.uc.temp_dir + 'driver/driver.xml')
-            id_tags = self.uc.driver_xml.get_tag('id')
-            if id_tags is not None:
-                self.uc.connections_panel.ids = []
-                for id_tag in id_tags:
-                    try:
-                        if int(id_tag.value) not in self.uc.connections_panel.ids:
-                            self.uc.connections_panel.ids.append(int(id_tag.value))
-                    except ValueError:
-                        pass
-
-            # Check lua file for multi-state
-            multi_state = False
-            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
-                with open(self.uc.temp_dir + 'driver/driver.lua', errors='ignore') as driver_lua_file:
-                    driver_lua_lines = driver_lua_file.readlines()
-
-                for line in driver_lua_lines:
-                    if '_OPTIONS = { {' in line:
-                        self.uc.get_states(driver_lua_lines)
-                        multi_state = True
-                        break
-
-            if not multi_state:
-                self.uc.disable_states()
-
+            # Get all individual icons from driver
             icon_objects = []
             try:
                 for icon in get_icons(self.uc.icon_dir):
@@ -363,7 +335,7 @@ class C4IconSwapper:
             except TypeError:
                 pass
 
-            # Form icon groups
+            # Form icon groups; I should probably rewrite this
             self.icons = []
             temp_list = []
             for icon in icon_objects:
@@ -377,7 +349,6 @@ class C4IconSwapper:
                     else:
                         self.icons.append(self.Icon(temp_list))
                     temp_list = [icon]
-
             if len(temp_list) != 0:
                 if 'device' not in temp_list[0].path and 'device' not in temp_list[0].root and \
                         'device' not in temp_list[0].name:
@@ -410,29 +381,26 @@ class C4IconSwapper:
             if device_exception:
                 self.icons.insert(0, device_exception)
 
-            # Update entry fields
+            # Update entry fields and restore driver if necessary
             if len(self.icons) == 0:
                 self.file_entry_field['state'] = NORMAL
-                # Restore existing driver data if invalid driver selected
                 if self.file_entry_field.get() != 'Select .c4z file...' and \
                         self.file_entry_field.get() != 'Invalid driver selected...':
+                    # Restore existing driver data if invalid driver selected
                     self.icons = icons_bak
-                    self.uc.connections_panel.ids = ids_bak
-                    self.uc.driver_xml = xml_bak
+                    if os.path.isdir(self.uc.temp_dir + temp_bak):
+                        if os.path.isdir(self.uc.temp_dir + 'driver/'):
+                            shutil.rmtree(self.uc.temp_dir + 'driver/')
+                        shutil.copytree(self.uc.temp_dir + temp_bak, self.uc.temp_dir + 'driver/')
+                        shutil.rmtree(self.uc.temp_dir + temp_bak)
                     self.uc.schedule_entry_restore = True
                     self.uc.restore_entry_string = self.file_entry_field.get()
-                    if os.path.isdir(self.uc.temp_dir + 'driver/'):
-                        shutil.rmtree(self.uc.temp_dir + 'driver/')
-                    shutil.copytree(self.uc.temp_dir + temp_bak, self.uc.temp_dir + 'driver/')
-                    if os.path.isdir(self.uc.temp_dir + temp_bak):
-                        shutil.rmtree(self.uc.temp_dir + temp_bak)
                     self.uc.driver_selected = True
-                    self.uc.driver_version = -1
                 self.file_entry_field.delete(0, 'end')
                 self.file_entry_field.insert(0, 'Invalid driver selected...')
                 self.file_entry_field['state'] = DISABLED
                 return
-
+            # Update entry with driver file path
             self.file_entry_field['state'] = NORMAL
             self.file_entry_field.delete(0, 'end')
             self.file_entry_field.insert(0, filename)
@@ -455,29 +423,56 @@ class C4IconSwapper:
             self.current_icon = 0
             self.update_icon()
 
+            # Read driver.xml and update used id tags
+            self.uc.driver_xml = XMLObject(self.uc.temp_dir + 'driver/driver.xml')
+            id_tags = self.uc.driver_xml.get_tag('id')
+            if id_tags is not None:
+                self.uc.connections_panel.ids = []
+                for id_tag in id_tags:
+                    try:
+                        if int(id_tag.value) not in self.uc.connections_panel.ids:
+                            self.uc.connections_panel.ids.append(int(id_tag.value))
+                    except ValueError:
+                        pass
+
+            # Check lua file for multi-state
+            multi_state = False
+            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
+                with open(self.uc.temp_dir + 'driver/driver.lua', errors='ignore') as driver_lua_file:
+                    driver_lua_lines = driver_lua_file.readlines()
+                for line in driver_lua_lines:
+                    if '_OPTIONS = { {' in line:
+                        self.uc.get_states(driver_lua_lines)
+                        multi_state = True
+                        break
+            if not multi_state:
+                self.uc.disable_states()
+
             # Update button statuses
             if not self.file_entry_field.get().endswith('generic.c4z') and not\
                     self.file_entry_field.get() == 'Invalid driver selected...':
+                # Update generic driver buttons
                 self.gen_driver_button['state'] = NORMAL
                 self.multi_driver_button['state'] = NORMAL
-
+            # Update driver prev/next buttons
             if len(self.icons) <= 1:
                 self.prev_icon_button['state'] = DISABLED
                 self.next_icon_button['state'] = DISABLED
             else:
                 self.prev_icon_button['state'] = ACTIVE
                 self.next_icon_button['state'] = ACTIVE
-
+            # Update replacement prev/next buttons
             if self.uc.replacement_selected and self.uc.driver_selected:
                 self.uc.replacement_panel.replace_button['state'] = ACTIVE
                 self.uc.replacement_panel.replace_all_button['state'] = ACTIVE
             else:
                 self.uc.replacement_panel.replace_button['state'] = DISABLED
                 self.uc.replacement_panel.replace_all_button['state'] = DISABLED
+            # Update Export button(s)
             if self.uc.driver_selected:
                 self.uc.export_panel.export_button['state'] = ACTIVE
                 self.uc.export_panel.export_as_button['state'] = ACTIVE
-
+            # Update 'Restore All' button in driver panel
             done = False
             self.restore_all_button['state'] = DISABLED
             for path in list_all_sub_directories(self.uc.temp_dir + 'driver/'):
@@ -489,7 +484,7 @@ class C4IconSwapper:
                         break
                 if done:
                     break
-
+            # Update restore current icon button in driver panel
             if os.path.isfile(self.icons[self.current_icon].path + '.bak') or \
                     os.path.isfile(self.icons[self.current_icon].path + '.orig'):
                 self.restore_button['state'] = ACTIVE
