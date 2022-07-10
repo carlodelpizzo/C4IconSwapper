@@ -465,7 +465,6 @@ class C4IconSwapperMac:
                 self.uc.replacement_panel.replace_all_button['state'] = DISABLED
             # Update Export button(s)
             if self.uc.driver_selected:
-                self.uc.export_panel.export_button['state'] = ACTIVE
                 self.uc.export_panel.export_as_button['state'] = ACTIVE
             # Update 'Restore All' button in driver panel
             done = False
