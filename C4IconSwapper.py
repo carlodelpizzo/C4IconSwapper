@@ -16,7 +16,7 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.6.3b'
+version = '5.6.4b'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -232,14 +232,14 @@ class C4IconSwapper:
                 self.icon_label.config(text='icon: ' + str(self.current_icon + 1) + ' of ' + str(len(self.icons)))
             self.icon_name_label.config(text='name: ' + self.icons[self.current_icon].name)
 
-        def upload_c4z(self, given_path=''):
+        def upload_c4z(self, given_path=None):
             def get_icons(directory):
-                icons_out = []
                 if not os.path.isdir(directory):
                     return
+                icons_out = []
+                sub_list = []
                 path_list = os.listdir(directory)
                 path_list.sort()
-                sub_list = []
                 for string in path_list:
                     if '.bak' in string or '.orig' in string or string[0] == '.':
                         continue
@@ -299,33 +299,41 @@ class C4IconSwapper:
                 self.uc.restore_entry_string = ''
                 self.uc.time_var = 0
                 self.uc.schedule_entry_restore = False
+
+            # Backup existing driver data
             temp_bak = '/bak' + str(random.randint(11111111, 99999999)) + '/'
+            icons_bak = None
+            ids_bak = self.uc.connections_panel.ids
+            xml_bak = self.uc.driver_xml
             if len(self.icons) != 0:
-                icons_groups_bak = self.icons
+                icons_bak = self.icons
                 if os.path.isdir(self.uc.temp_dir + 'driver'):
                     shutil.copytree(self.uc.temp_dir + 'driver', self.uc.temp_dir + temp_bak)
-            else:
-                icons_groups_bak = None
 
-            if given_path == '':
+            # File select dialog
+            if given_path is None:
                 filename = filedialog.askopenfilename(filetypes=[("Control4 Drivers", "*.c4z")])
+                # If no file selected
+                if not filename:
+                    if os.path.isdir(self.uc.temp_dir + temp_bak):
+                        shutil.rmtree(self.uc.temp_dir + temp_bak)
+                    return
             else:
                 filename = given_path
 
-            if not filename:
-                if os.path.isdir(self.uc.temp_dir + temp_bak):
-                    shutil.rmtree(self.uc.temp_dir + temp_bak)
-                return
-
+            # Delete existing driver
             self.uc.driver_selected = False
             if os.path.isdir(self.uc.temp_dir + 'driver/'):
                 shutil.rmtree(self.uc.temp_dir + 'driver/')
 
+            # Unpack selected driver
             shutil.unpack_archive(filename, self.uc.temp_dir + 'driver', 'zip')
 
+            # Read driver.xml and update used id tags
             self.uc.driver_xml = XMLObject(self.uc.temp_dir + 'driver/driver.xml')
             id_tags = self.uc.driver_xml.get_tag('id')
             if id_tags is not None:
+                self.uc.connections_panel.ids = []
                 for id_tag in id_tags:
                     try:
                         if int(id_tag.value) not in self.uc.connections_panel.ids:
@@ -405,9 +413,12 @@ class C4IconSwapper:
             # Update entry fields
             if len(self.icons) == 0:
                 self.file_entry_field['state'] = NORMAL
+                # Restore existing driver data if invalid driver selected
                 if self.file_entry_field.get() != 'Select .c4z file...' and \
                         self.file_entry_field.get() != 'Invalid driver selected...':
-                    self.icons = icons_groups_bak
+                    self.icons = icons_bak
+                    self.uc.connections_panel.ids = ids_bak
+                    self.uc.driver_xml = xml_bak
                     self.uc.schedule_entry_restore = True
                     self.uc.restore_entry_string = self.file_entry_field.get()
                     if os.path.isdir(self.uc.temp_dir + 'driver/'):
