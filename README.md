@@ -1,13 +1,13 @@
 # C4IconSwapper
-This program can be used to replace icons for Control 4 drivers.
+This program can be used to replace icons for Control4 drivers.
 
-In addition to swapping icons, the program modifies the diver xml file,
+In addition to swapping icons, the program modifies the driver xml file,
 there is no option to prevent xml modification,
-but the outputted .c4z file will have a .bak file of the old driver.xml if you want to restore it manually
+but the exported driver will have a .bak file of the old driver.xml if you want to restore it manually
 (must have 'include backup files' selected).
 
 It can add connections such as HDMI IN/OUT,
-has drag and drop support for .c4z files and image files,
+has drag and drop support for .c4z files and image files (Windows version only),
 and currently has limited support for modifying multi-state experience drivers.
 
 It has two built in generic drivers:
