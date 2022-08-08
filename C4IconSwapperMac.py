@@ -18,7 +18,7 @@ from Base64Assets import *
 from XMLObject import XMLObject
 from AppKit import NSBundle
 
-version = '5.6.4b'
+version = '5.6.5b'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -1116,6 +1116,9 @@ class C4IconSwapperMac:
             # state_name_changes = [original_name, new_name, original_name_lower, new_name_lower]
             state_name_changes = []
             if os.path.isfile(self.uc.temp_dir + '/driver/driver.lua'):
+                # First lua backup
+                if os.path.isfile(self.uc.temp_dir + '/driver/driver.lua.bak'):
+                    os.remove(self.uc.temp_dir + '/driver/driver.lua.bak')
                 shutil.copy(self.uc.temp_dir + '/driver/driver.lua', self.uc.temp_dir + '/driver/driver.lua.bak')
                 for state in self.uc.state_panel.states:
                     if state.name_entry['state'] == NORMAL:
@@ -1147,6 +1150,9 @@ class C4IconSwapperMac:
 
                 # Modify lua file
                 modified_lua_lines = []
+                # Second lua backup??
+                if os.path.isfile(self.uc.temp_dir + '/driver/driver.lua.bak'):
+                    os.remove(self.uc.temp_dir + '/driver/driver.lua.bak')
                 shutil.copy(self.uc.temp_dir + '/driver/driver.lua', self.uc.temp_dir + '/driver/driver.lua.bak')
                 with open(get_path(self.uc.temp_dir + '/driver/driver.lua'), errors='ignore') as driver_lua_file:
                     driver_lua_lines = driver_lua_file.readlines()
@@ -1240,12 +1246,16 @@ class C4IconSwapperMac:
                     icon_tag.value = icon_tag.value.replace(result, driver_name)
 
             # Backup xml file and write new xml
+            if os.path.isfile(self.uc.temp_dir + '/driver/driver.xml.bak'):
+                os.remove(self.uc.temp_dir + '/driver/driver.xml.bak')
             os.rename(self.uc.temp_dir + '/driver/driver.xml', self.uc.temp_dir + '/driver/driver.xml.bak')
             with open(get_path(self.uc.temp_dir + '/driver/driver.xml'), 'w', errors='ignore') as out_file:
                 out_file.writelines(self.uc.driver_xml.get_lines())
 
             # Backup lua file if needed
             if os.path.isfile(self.uc.temp_dir + '/driver/driver.lua'):
+                if os.path.isfile(self.uc.temp_dir + '/driver/driver.lua.bak'):
+                    os.remove(self.uc.temp_dir + '/driver/driver.lua.bak')
                 shutil.copy(self.uc.temp_dir + '/driver/driver.lua', self.uc.temp_dir + '/driver/driver.lua.bak')
 
             # Save As Dialog
