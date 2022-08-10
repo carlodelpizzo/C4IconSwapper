@@ -29,21 +29,18 @@ conn_template = ['connection', '', [], [['id', '0', [], []], ['type', '0', [], [
                                         ['consumer', 'False', [], []], ['linelevel', 'True', [], []],
                                         ['classes', '', [], [['class', '', [], [['classname', 'REPLACE', [], []]]]]]]]
 
+label_font = 'Arial'
+
 
 class C4IconSwapper:
     class C4zPanel:
         class SubIcon:
             def __init__(self, root_path: str, path: str, name: str, size: int):
                 # Initialize Icon
-                self.root = root_path
-                self.path = path
+                self.root = root_path  # Path to directory containing image
+                self.path = path  # Full path to image file
                 self.name = name
                 self.size = size
-
-                for i in reversed(range(len(path))):
-                    if path[i] != '.':
-                        self.type = path[i: len(path)]
-                        break
 
         class Icon:
             def __init__(self, icons: list, extra=False):
@@ -67,7 +64,7 @@ class C4IconSwapper:
                                       'COMPONENT OUT', 'DVI OUT', 'STEREO OUT', 'DIGITAL_OPTICAL OUT']
 
             # Labels
-            self.panel_label = tk.Label(self.uc.root, text='Driver Selection', font=("Arial", 15))
+            self.panel_label = tk.Label(self.uc.root, text='Driver Selection', font=(label_font, 15))
             self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
 
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
@@ -700,7 +697,7 @@ class C4IconSwapper:
             self.stack_labels = []
 
             # Labels
-            self.panel_label = tk.Label(self.uc.root, text='Replacement Icons', font=("Arial", 15))
+            self.panel_label = tk.Label(self.uc.root, text='Replacement Icons', font=(label_font, 15))
             self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
 
             self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
@@ -1034,7 +1031,7 @@ class C4IconSwapper:
             self.abort = False
 
             # Labels
-            self.panel_label = tk.Label(self.uc.root, text='Export', font=("Arial", 15))
+            self.panel_label = tk.Label(self.uc.root, text='Export', font=(label_font, 15))
             self.panel_label.place(x=150 + self.x, y=50 + self.y, anchor='n')
 
             self.driver_name_label = tk.Label(self.uc.root, text='Driver Name:')
@@ -1720,7 +1717,7 @@ class C4IconSwapper:
                                    state_name='state' + str(i + 1) + ':'))
 
             # Label
-            self.panel_label = tk.Label(self.uc.root, text='Multi-State Labels', font=("Arial", 15))
+            self.panel_label = tk.Label(self.uc.root, text='Multi-State Labels', font=(label_font, 15))
             self.panel_label.place(x=185 + self.x, y=-27 + self.y, anchor='n')
 
     def __init__(self):
@@ -1732,6 +1729,13 @@ class C4IconSwapper:
         self.root.geometry('915x270')
         self.root.title('C4 Icon Swapper')
         self.root.resizable(False, False)
+
+        # Version Label
+        self.version_label = Label(self.root, text=version)
+        self.version_label.place(relx=1, rely=1.01, anchor='se')
+        self.version_label.bind('<Button-1>', self.easter)
+        self.easter_counter = 0
+        self.easter_timer = 0
 
         # Creating temporary directory
         self.cur_dir = os.getcwd() + '/'
@@ -1822,10 +1826,6 @@ class C4IconSwapper:
         self.show_states_button = tk.Button(self.root, text='Show States', width=15, command=self.show_states_panel,
                                             takefocus=0)
         self.show_states_button.place(x=820, y=240, anchor='n')
-
-        # Version Label
-        self.version_label = Label(self.root, text=version)
-        self.version_label.place(relx=1, rely=1.01, anchor='se')
 
         # Creating window icon
         temp_icon_file = self.temp_dir + 'icon.ico'
@@ -1987,6 +1987,27 @@ class C4IconSwapper:
             else:
                 self.export_panel.driver_name_entry['background'] = 'pink'
             self.root.after(150, self.blink_driver_name_entry)
+
+    def easter(self, *args):
+        if args:  # For IDE unused argument warning
+            pass
+        self.easter_counter += 1
+        self.easter_timer = 70
+        self.easter_timer_dec()
+
+    def easter_timer_dec(self):
+        self.easter_timer -= 1
+        if self.easter_timer >= 0 and self.easter_counter >= 10:
+            self.version_label.config(text='\u262D', font=('Arial', 20))
+            self.easter_timer = 0
+            self.easter_counter = 0
+            return
+        if self.easter_timer <= 0 and self.easter_counter < 10:
+            self.easter_timer = 0
+            self.easter_counter = 0
+            return
+        if self.easter_timer > 0:
+            self.root.after(5, self.easter_timer_dec)
 
 
 def list_all_sub_directories(directory):
