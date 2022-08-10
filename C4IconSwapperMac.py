@@ -1854,7 +1854,7 @@ class C4IconSwapperMac:
             self.replacement_panel.dec_img_stack()
         elif event.keysym == 'c' and self.easter_counter >= 10:
             self.version_label.config(text='\u262D', font=('Arial', 25))
-            self.version_label.place(relx=1.005, rely=1.02, anchor='se')
+            self.version_label.place(relx=0.9999, rely=1.01, anchor='se')
 
     def get_states(self, lua_file):
         state_names = []
