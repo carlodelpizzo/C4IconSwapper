@@ -1735,7 +1735,6 @@ class C4IconSwapper:
         self.version_label.place(relx=1, rely=1.01, anchor='se')
         self.version_label.bind('<Button-1>', self.easter)
         self.easter_counter = 0
-        self.easter_timer = 0
 
         # Creating temporary directory
         self.cur_dir = os.getcwd() + '/'
@@ -1919,6 +1918,9 @@ class C4IconSwapper:
             self.replacement_panel.inc_img_stack()
         elif event.keysym == 'Down':
             self.replacement_panel.dec_img_stack()
+        elif event.keysym == 'c' and self.easter_counter >= 10:
+            self.version_label.config(text='\u262D', font=('Arial', 25))
+            self.version_label.place(relx=1.005, rely=1.02, anchor='se')
 
     def get_states(self, lua_file):
         state_names = []
@@ -1992,22 +1994,6 @@ class C4IconSwapper:
         if args:  # For IDE unused argument warning
             pass
         self.easter_counter += 1
-        self.easter_timer = 70
-        self.easter_timer_dec()
-
-    def easter_timer_dec(self):
-        self.easter_timer -= 1
-        if self.easter_timer >= 0 and self.easter_counter >= 10:
-            self.version_label.config(text='\u262D', font=('Arial', 20))
-            self.easter_timer = 0
-            self.easter_counter = 0
-            return
-        if self.easter_timer <= 0 and self.easter_counter < 10:
-            self.easter_timer = 0
-            self.easter_counter = 0
-            return
-        if self.easter_timer > 0:
-            self.root.after(5, self.easter_timer_dec)
 
 
 def list_all_sub_directories(directory):
