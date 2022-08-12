@@ -16,7 +16,7 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.6.5b'
+version = '5.7b'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -298,7 +298,7 @@ class C4IconSwapper:
                 self.uc.schedule_entry_restore = False
 
             # Backup existing driver data
-            temp_bak = '/bak' + str(random.randint(11111111, 99999999)) + '/'
+            temp_bak = '/temp_driver_backup/'
             icons_bak = None
             if len(self.icons) != 0:
                 icons_bak = self.icons
@@ -332,54 +332,32 @@ class C4IconSwapper:
             except TypeError:
                 pass
 
-            # Form icon groups; I should probably rewrite this
+            # Form icon groups
             self.icons = []
-            temp_list = []
-            for icon in icon_objects:
-                if not temp_list or (icon.name == temp_list[0].name and icon.root == temp_list[0].root):
-                    temp_list.append(icon)
-                    continue
-                else:
-                    if 'device' not in temp_list[0].path and 'device' not in temp_list[0].root and \
-                            'device' not in temp_list[0].name:
-                        self.icons.append(self.Icon(temp_list, extra=True))
+            if icon_objects:
+                unique_icons = [icon_objects[0]]
+                for icon in icon_objects:
+                    skip = False
+                    for unique_icon in unique_icons:
+                        if icon.name == unique_icon.name and icon.root == unique_icon.root:
+                            skip = True
+                            break
+                    if skip:
+                        continue
+                    unique_icons.append(icon)
+                for unique_icon in unique_icons:
+                    icon_group = [unique_icon]
+                    for icon in icon_objects:
+                        if icon is not unique_icon and icon.name == unique_icon.name and icon.root == unique_icon.root:
+                            icon_group.append(icon)
+                    if 'device' not in icon_group[0].path and 'device' not in icon_group[0].root and \
+                            'device' not in icon_group[0].name:
+                        self.icons.append(self.Icon(icon_group, extra=True))
                     else:
-                        self.icons.append(self.Icon(temp_list))
-                    temp_list = [icon]
-            if len(temp_list) != 0:
-                if 'device' not in temp_list[0].path and 'device' not in temp_list[0].root and \
-                        'device' not in temp_list[0].name:
-                    self.icons.append(self.Icon(temp_list, extra=True))
-                else:
-                    self.icons.append(self.Icon(temp_list))
-
-            # Count extra icons & Fix Icon order (sloppy)
-            temp_list = []
-            device_exception = None
-            self.extra_icons = 0
-            for icon in reversed(self.icons):
-                if icon.extra:
-                    self.extra_icons += 1
-                    continue
-                if icon.name == 'device':
-                    device_exception = icon
-                    self.icons.pop(self.icons.index(icon))
-                    continue
-                temp_list.append(icon)
-                self.icons.pop(self.icons.index(icon))
-            temp_name_list = []
-            temp_name_dict = {}
-            for icon in temp_list:
-                temp_name_list.append(icon.name)
-                temp_name_dict[icon.name] = temp_list.index(icon)
-            temp_name_list.sort(key=natural_key)
-            for icon_name in reversed(temp_name_list):
-                self.icons.insert(0, temp_list[temp_name_dict[icon_name]])
-            if device_exception:
-                self.icons.insert(0, device_exception)
+                        self.icons.append(self.Icon(icon_group))
 
             # Update entry fields and restore driver if necessary
-            if len(self.icons) == 0:
+            elif len(self.icons) == 0:
                 self.file_entry_field['state'] = NORMAL
                 if self.file_entry_field.get() != 'Select .c4z file...' and \
                         self.file_entry_field.get() != 'Invalid driver selected...':
@@ -397,6 +375,45 @@ class C4IconSwapper:
                 self.file_entry_field.insert(0, 'Invalid driver selected...')
                 self.file_entry_field['state'] = DISABLED
                 return
+
+            # Count extra icons & naturally sort icon order
+            not_extra_icons = []
+            device_exception = None
+            self.extra_icons = 0
+            for icon in reversed(self.icons):
+                if icon.extra:
+                    self.extra_icons += 1
+                    continue
+                if icon.name == 'device':
+                    device_exception = icon
+                    self.icons.pop(self.icons.index(icon))
+                    continue
+                not_extra_icons.append(icon)
+                self.icons.pop(self.icons.index(icon))
+            # Sort extra icons
+            temp_name_list = []
+            temp_name_dict = {}
+            temp_icons = []
+            for icon in self.icons:
+                temp_icons.append(icon)
+                temp_name_list.append(icon.name)
+                temp_name_dict[icon.name] = temp_icons.index(icon)
+            temp_name_list.sort(key=natural_key)
+            self.icons = []
+            for icon_name in temp_name_list:
+                self.icons.append(temp_icons[temp_name_dict[icon_name]])
+            # Sort main device icons
+            temp_name_list = []
+            temp_name_dict = {}
+            for icon in not_extra_icons:
+                temp_name_list.append(icon.name)
+                temp_name_dict[icon.name] = not_extra_icons.index(icon)
+            temp_name_list.sort(key=natural_key)
+            for icon_name in reversed(temp_name_list):
+                self.icons.insert(0, not_extra_icons[temp_name_dict[icon_name]])
+            if device_exception:
+                self.icons.insert(0, device_exception)
+
             # Update entry with driver file path
             self.file_entry_field['state'] = NORMAL
             self.file_entry_field.delete(0, 'end')
@@ -433,16 +450,16 @@ class C4IconSwapper:
                         pass
 
             # Check lua file for multi-state
-            multi_state = False
+            self.uc.multi_state_driver = False
             if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
                 with open(self.uc.temp_dir + 'driver/driver.lua', errors='ignore') as driver_lua_file:
                     driver_lua_lines = driver_lua_file.readlines()
                 for line in driver_lua_lines:
                     if '_OPTIONS = { {' in line:
                         self.uc.get_states(driver_lua_lines)
-                        multi_state = True
+                        self.uc.multi_state_driver = True
                         break
-            if not multi_state:
+            if not self.uc.multi_state_driver:
                 self.uc.disable_states()
 
             # Update button statuses
@@ -1131,107 +1148,148 @@ class C4IconSwapper:
                 self.uc.root.after(150, self.uc.blink_driver_name_entry)
                 return
 
-            # Check State Validity
-            invalid_states = False
-            single_invalid_state = False
-            for state in self.uc.state_panel.states:
-                if state.name_entry['state'] == DISABLED:
-                    continue
-                if state.name_entry['background'] == 'pink' or state.name_entry['background'] == 'cyan':
-                    self.abort = True
-                    invalid_states = True
-                    if not single_invalid_state:
-                        single_invalid_state = True
-                        continue
-                    single_invalid_state = False
-                    break
-            if invalid_states:
-                win_x = self.uc.root.winfo_rootx() + self.x
-                win_y = self.uc.root.winfo_rooty()
-                invalid_states_pop_up = Toplevel(self.uc.root)
-                if single_invalid_state:
-                    invalid_states_pop_up.title('Invalid State Found')
-                    label_text = 'Cannot Export: Invalid state label'
-                else:
-                    invalid_states_pop_up.title('Invalid States Found')
-                    label_text = 'Cannot Export: Invalid state labels'
-                invalid_states_pop_up.geometry('239x70')
-                invalid_states_pop_up.geometry(f'+{win_x}+{win_y}')
-                invalid_states_pop_up.grab_set()
-                invalid_states_pop_up.focus()
-                invalid_states_pop_up.transient(self.uc.root)
-                invalid_states_pop_up.resizable(False, False)
-                confirm_label = Label(invalid_states_pop_up, text=label_text, justify='center')
-                confirm_label.pack()
-                exit_button = tk.Button(invalid_states_pop_up, text='Cancel', width='10',
-                                        command=invalid_states_pop_up.destroy, justify='center')
-                exit_button.pack(pady=10)
-            if self.abort:
-                self.abort = False
-                return
-
-            # Update state names in lua file
-            # state_name_changes = [original_name, new_name, original_name_lower, new_name_lower]
-            state_name_changes = []
-            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
-                # First lua backup
-                if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua.bak'):
-                    os.remove(self.uc.temp_dir + 'driver/driver.lua.bak')
-                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
+            # Multi-state
+            if self.uc.multi_state_driver:
+                # Check State Validity
+                invalid_states = False
+                single_invalid_state = False
                 for state in self.uc.state_panel.states:
-                    if state.name_entry['state'] == NORMAL:
-                        state_name_changes.append([state.original_name, state.name_entry.get()])
-                for name_change in state_name_changes:
-                    formatted_name = ''
-                    for character in name_change[1]:
-                        if character == ' ' or (character not in letters and character not in capital_letters and
-                                                character not in numbers):
-                            continue
-                        if formatted_name == '' and character in letters:
-                            formatted_name += capital_letters[letters.index(character)]
-                            continue
-                        formatted_name += character
-                    if formatted_name == '':
-                        formatted_name = name_change[0]
-                    name_change[1] = formatted_name
-                pop_list = []
-                for name_change in state_name_changes:
-                    if name_change[0] == name_change[1]:
-                        pop_list.insert(0, state_name_changes.index(name_change))
+                    if state.name_entry['state'] == DISABLED:
                         continue
-                    name_change.append(name_change[0].replace(name_change[0][0],
-                                                              letters[capital_letters.index(name_change[0][0])]))
-                    name_change.append(name_change[1].replace(name_change[1][0],
-                                                              letters[capital_letters.index(name_change[1][0])]))
-                for index in pop_list:
-                    state_name_changes.pop(index)
+                    if state.name_entry['background'] == 'pink' or state.name_entry['background'] == 'cyan':
+                        self.abort = True
+                        invalid_states = True
+                        if not single_invalid_state:
+                            single_invalid_state = True
+                            continue
+                        single_invalid_state = False
+                        break
+                if invalid_states:
+                    win_x = self.uc.root.winfo_rootx() + self.x
+                    win_y = self.uc.root.winfo_rooty()
+                    invalid_states_pop_up = Toplevel(self.uc.root)
+                    if single_invalid_state:
+                        invalid_states_pop_up.title('Invalid State Found')
+                        label_text = 'Cannot Export: Invalid state label'
+                    else:
+                        invalid_states_pop_up.title('Invalid States Found')
+                        label_text = 'Cannot Export: Invalid state labels'
+                    invalid_states_pop_up.geometry('239x70')
+                    invalid_states_pop_up.geometry(f'+{win_x}+{win_y}')
+                    invalid_states_pop_up.grab_set()
+                    invalid_states_pop_up.focus()
+                    invalid_states_pop_up.transient(self.uc.root)
+                    invalid_states_pop_up.resizable(False, False)
+                    confirm_label = Label(invalid_states_pop_up, text=label_text, justify='center')
+                    confirm_label.pack()
+                    exit_button = tk.Button(invalid_states_pop_up, text='Cancel', width='10',
+                                            command=invalid_states_pop_up.destroy, justify='center')
+                    exit_button.pack(pady=10)
+                if self.abort:
+                    self.abort = False
+                    return
 
-                # Modify lua file
-                modified_lua_lines = []
-                # Second lua backup??
-                if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua.bak'):
-                    os.remove(self.uc.temp_dir + 'driver/driver.lua.bak')
-                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
-                with open(self.uc.temp_dir + 'driver/driver.lua', errors='ignore') as driver_lua_file:
-                    driver_lua_lines = driver_lua_file.readlines()
-                for line in driver_lua_lines:
-                    new_line = line
+                # Update state names in lua file
+                # state_name_changes = [original_name, new_name, original_name_lower, new_name_lower]
+                state_name_changes = []
+                if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
+                    # lua file backup
+                    if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua.bak'):
+                        os.remove(self.uc.temp_dir + 'driver/driver.lua.bak')
+                    shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
+                    for state in self.uc.state_panel.states:
+                        if state.name_entry['state'] == NORMAL:
+                            state_name_changes.append([state.original_name, state.name_entry.get()])
                     for name_change in state_name_changes:
-                        if name_change[0] + ' ' in line or name_change[2] + ' ' in line:
-                            new_line = new_line.replace(name_change[0] + ' ', name_change[1] + ' ')
-                            new_line = new_line.replace(name_change[2] + ' ', name_change[3] + ' ')
-                        elif name_change[0] + "'" in line or name_change[2] + "'" in line:
-                            new_line = new_line.replace(name_change[0] + "'", name_change[1] + "'")
-                            new_line = new_line.replace(name_change[2] + "'", name_change[3] + "'")
-                        elif name_change[0] + '"' in line or name_change[2] + '"' in line:
-                            new_line = new_line.replace(name_change[0] + '"', name_change[1] + '"')
-                            new_line = new_line.replace(name_change[2] + '"', name_change[3] + '"')
-                        elif name_change[0] + '=' in line or name_change[2] + '=' in line:
-                            new_line = new_line.replace(name_change[0] + '=', name_change[1] + '=')
-                            new_line = new_line.replace(name_change[2] + '=', name_change[3] + '=')
-                    modified_lua_lines.append(new_line)
-                with open(self.uc.temp_dir + 'driver/driver.lua', 'w', errors='ignore') as driver_lua_file:
-                    driver_lua_file.writelines(modified_lua_lines)
+                        formatted_name = ''
+                        for character in name_change[1]:
+                            if character == ' ' or (character not in letters and character not in capital_letters and
+                                                    character not in numbers):
+                                continue
+                            if formatted_name == '' and character in letters:
+                                formatted_name += capital_letters[letters.index(character)]
+                                continue
+                            formatted_name += character
+                        if formatted_name == '':
+                            formatted_name = name_change[0]
+                        name_change[1] = formatted_name
+                    pop_list = []
+                    for name_change in state_name_changes:
+                        if name_change[0] == name_change[1]:
+                            pop_list.insert(0, state_name_changes.index(name_change))
+                            continue
+                        name_change.append(name_change[0].replace(name_change[0][0],
+                                                                  letters[capital_letters.index(name_change[0][0])]))
+                        name_change.append(name_change[1].replace(name_change[1][0],
+                                                                  letters[capital_letters.index(name_change[1][0])]))
+                    for index in pop_list:
+                        state_name_changes.pop(index)
+
+                    # Modify lua file
+                    modified_lua_lines = []
+                    with open(self.uc.temp_dir + 'driver/driver.lua', errors='ignore') as driver_lua_file:
+                        driver_lua_lines = driver_lua_file.readlines()
+                    for line in driver_lua_lines:
+                        new_line = line
+                        for name_change in state_name_changes:
+                            if name_change[0] + ' ' in line or name_change[2] + ' ' in line:
+                                new_line = new_line.replace(name_change[0] + ' ', name_change[1] + ' ')
+                                new_line = new_line.replace(name_change[2] + ' ', name_change[3] + ' ')
+                            elif name_change[0] + "'" in line or name_change[2] + "'" in line:
+                                new_line = new_line.replace(name_change[0] + "'", name_change[1] + "'")
+                                new_line = new_line.replace(name_change[2] + "'", name_change[3] + "'")
+                            elif name_change[0] + '"' in line or name_change[2] + '"' in line:
+                                new_line = new_line.replace(name_change[0] + '"', name_change[1] + '"')
+                                new_line = new_line.replace(name_change[2] + '"', name_change[3] + '"')
+                            elif name_change[0] + '=' in line or name_change[2] + '=' in line:
+                                new_line = new_line.replace(name_change[0] + '=', name_change[1] + '=')
+                                new_line = new_line.replace(name_change[2] + '=', name_change[3] + '=')
+                        modified_lua_lines.append(new_line)
+                    with open(self.uc.temp_dir + 'driver/driver.lua', 'w', errors='ignore') as driver_lua_file:
+                        driver_lua_file.writelines(modified_lua_lines)
+
+                # Do multi-state related changes in xml
+                if state_name_changes:
+                    for item_tag in self.uc.driver_xml.get_tag('item'):
+                        for state_name_change in state_name_changes:
+                            if state_name_change[0] == item_tag.value:
+                                item_tag.value = state_name_change[1]
+                                break
+                            if state_name_change[2] == item_tag.value:
+                                item_tag.value = state_name_change[3]
+                                break
+                    for name_tag in self.uc.driver_xml.get_tag('name'):
+                        for state_name_change in state_name_changes:
+                            if state_name_change[0] == name_tag.value or name_tag.value.endswith(
+                                    state_name_change[0]):
+                                name_tag.value = name_tag.value.replace(state_name_change[0],
+                                                                        state_name_change[1])
+                                break
+                            if state_name_change[2] == name_tag.value or name_tag.value.endswith(
+                                    state_name_change[2]):
+                                name_tag.value = name_tag.value.replace(state_name_change[2],
+                                                                        state_name_change[3])
+                                break
+                    for description_tag in self.uc.driver_xml.get_tag('description'):
+                        for state_name_change in state_name_changes:
+                            if state_name_change[0] + ' ' in description_tag.value:
+                                description_tag.value = description_tag.value.replace(state_name_change[0],
+                                                                                      state_name_change[1])
+                                break
+                            if state_name_change[2] + ' ' in description_tag.value:
+                                description_tag.value = description_tag.value.replace(state_name_change[2],
+                                                                                      state_name_change[3])
+                                break
+                    for state_tag in self.uc.driver_xml.get_tag('state'):
+                        for param in state_tag.parameters:
+                            if param[0] == 'id':
+                                for state_name_change in state_name_changes:
+                                    if state_name_change[0] == param[1]:
+                                        param[1] = state_name_change[1]
+                                        break
+                                    if state_name_change[2] == param[1]:
+                                        param[1] = state_name_change[3]
+                                        break
 
             # Confirm all connections have non-conflicting ids
             for conn in self.uc.connections_panel.connections:
@@ -1248,45 +1306,6 @@ class C4IconSwapper:
             for conn in self.uc.connections_panel.connections:
                 conn.tags[2].value = conn.name_entry.get()
                 conn.tags[5].value = conn.type.get()
-
-            # Do multi-state related changes in xml
-            if state_name_changes:
-                for item_tag in self.uc.driver_xml.get_tag('item'):
-                    for state_name_change in state_name_changes:
-                        if state_name_change[0] == item_tag.value:
-                            item_tag.value = state_name_change[1]
-                            break
-                        if state_name_change[2] == item_tag.value:
-                            item_tag.value = state_name_change[3]
-                            break
-                for name_tag in self.uc.driver_xml.get_tag('name'):
-                    for state_name_change in state_name_changes:
-                        if state_name_change[0] == name_tag.value or name_tag.value.endswith(state_name_change[0]):
-                            name_tag.value = name_tag.value.replace(state_name_change[0], state_name_change[1])
-                            break
-                        if state_name_change[2] == name_tag.value or name_tag.value.endswith(state_name_change[2]):
-                            name_tag.value = name_tag.value.replace(state_name_change[2], state_name_change[3])
-                            break
-                for description_tag in self.uc.driver_xml.get_tag('description'):
-                    for state_name_change in state_name_changes:
-                        if state_name_change[0] + ' ' in description_tag.value:
-                            description_tag.value = description_tag.value.replace(state_name_change[0],
-                                                                                  state_name_change[1])
-                            break
-                        if state_name_change[2] + ' ' in description_tag.value:
-                            description_tag.value = description_tag.value.replace(state_name_change[2],
-                                                                                  state_name_change[3])
-                            break
-                for state_tag in self.uc.driver_xml.get_tag('state'):
-                    for param in state_tag.parameters:
-                        if param[0] == 'id':
-                            for state_name_change in state_name_changes:
-                                if state_name_change[0] == param[1]:
-                                    param[1] = state_name_change[1]
-                                    break
-                                if state_name_change[2] == param[1]:
-                                    param[1] = state_name_change[3]
-                                    break
 
             # Update xml with new driver name
             self.uc.driver_xml.get_tag('name')[0].value = driver_name
@@ -1309,12 +1328,6 @@ class C4IconSwapper:
             os.rename(self.uc.temp_dir + 'driver/driver.xml', self.uc.temp_dir + 'driver/driver.xml.bak')
             with open(self.uc.temp_dir + 'driver/driver.xml', 'w', errors='ignore') as out_file:
                 out_file.writelines(self.uc.driver_xml.get_lines())
-
-            # Backup lua file if needed
-            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
-                if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua.bak'):
-                    os.remove(self.uc.temp_dir + 'driver/driver.lua.bak')
-                shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
 
             # Call export functions
             if quick_export:
@@ -1342,30 +1355,38 @@ class C4IconSwapper:
 
             # Restore original xml and lua
             self.uc.driver_xml.restore()
-            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
+            if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua.bak'):
                 os.remove(self.uc.temp_dir + 'driver/driver.lua')
                 os.rename(self.uc.temp_dir + 'driver/driver.lua.bak', self.uc.temp_dir + 'driver/driver.lua')
             os.remove(self.uc.temp_dir + 'driver/driver.xml')
             os.rename(self.uc.temp_dir + 'driver/driver.xml.bak', self.uc.temp_dir + 'driver/driver.xml')
 
         def export_file(self, driver_name: str, path=None):
+            random_tags = []
+
+            def get_random_string():
+                random_string = str(random.randint(1111111, 9999999))
+                if random_string not in random_tags:
+                    random_tags.append(random_string)
+                    return random_string
+                get_random_string()
+
             if path is None:
                 path = self.uc.cur_dir + driver_name + '.c4z'
             bak_files_dict = {}
             bak_files = []
             bak_folder = self.uc.temp_dir + 'bak_files/'
 
-            # Backup and move all .bak files
+            # Backup and move all .bak files if not included
             if self.include_backups.get() == 0:
-                directories = list_all_sub_directories(self.uc.temp_dir + 'driver')
-                directories.insert(0, self.uc.temp_dir + 'driver')
+                directories = list_all_sub_directories(self.uc.temp_dir + 'driver', include_root_dir=True)
                 if os.path.isdir(bak_folder):
                     shutil.rmtree(bak_folder)
                 os.mkdir(bak_folder)
                 for directory in directories:
                     for file in os.listdir(directory):
                         if file.endswith('.bak'):
-                            random_tag = str(random.randint(1111111, 9999999))
+                            random_tag = get_random_string()
                             bak_files.append(directory + '/' + file)
                             bak_files_dict[directory + '/' + file] = bak_folder + file + random_tag
                             shutil.copy(directory + '/' + file, bak_folder + file + random_tag)
@@ -1744,6 +1765,7 @@ class C4IconSwapper:
         os.mkdir(self.temp_dir)
 
         # Class variables
+        self.multi_state_driver = False
         self.counter = 0
         self.states_orig_names = []
         self.driver_xml = None
@@ -1895,6 +1917,10 @@ class C4IconSwapper:
         self.show_states_button['text'] = 'Show States'
 
     def restore_entry_text(self):
+        # Easter counter decay
+        if self.easter_counter > 0:
+            self.easter_counter -= 1
+
         if self.schedule_entry_restore:
             self.time_var = int(round(time.time() * 100))
             self.schedule_entry_restore = False
@@ -1921,6 +1947,7 @@ class C4IconSwapper:
         elif event.keysym == 'c' and self.easter_counter >= 10:
             self.version_label.config(text='\u262D', font=('Arial', 25))
             self.version_label.place(relx=1.005, rely=1.02, anchor='se')
+            self.easter_counter = 0
 
     def get_states(self, lua_file):
         state_names = []
@@ -1974,6 +2001,7 @@ class C4IconSwapper:
 
     def disable_states(self):
         for state in self.state_panel.states:
+            state.name_entry.delete(0, END)
             state.name_entry['state'] = DISABLED
             state.name_entry['takefocus'] = 0
             state.original_name = ''
@@ -1996,7 +2024,7 @@ class C4IconSwapper:
         self.easter_counter += 1
 
 
-def list_all_sub_directories(directory):
+def list_all_sub_directories(directory: str, include_root_dir=False):
     subs = []
     for dir_name in os.listdir(directory):
         if '.' not in dir_name:
@@ -2010,6 +2038,8 @@ def list_all_sub_directories(directory):
         for new_sub in new_subs:
             subs.append(new_sub)
     subs.sort()
+    if include_root_dir:
+        subs.insert(0, directory)
     return subs
 
 
@@ -2024,5 +2054,5 @@ def find_valid_id(id_seed: int, list_of_ids: list, inc_up=True, inc_count=0):
     return find_valid_id(id_seed, list_of_ids, inc_count=inc_count)
 
 
-def natural_key(string):
+def natural_key(string: str):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
