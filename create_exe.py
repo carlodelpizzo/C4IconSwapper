@@ -82,6 +82,6 @@ if execute:
         if os.path.isdir(cur_dir + '/C4IconSwapper.' + version + '.app'):
             overwrite_file = input('Overwrite file? (y/n)... ')
             if overwrite_file[0] == 'y' or overwrite_file[0] == 'Y':
-                make_exe('mainMac.py')
+                make_exe('C4 Icon Swapper for Mac.py')
         else:
-            make_exe('mainMac.py')
+            make_exe('C4 Icon Swapper for Mac.py')
