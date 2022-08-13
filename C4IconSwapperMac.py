@@ -18,7 +18,7 @@ from Base64Assets import *
 from XMLObject import XMLObject
 from AppKit import NSBundle
 
-version = '5.7b'
+version = '5.7.1b'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -49,8 +49,15 @@ class C4IconSwapperMac:
                 # Initialize Icon Group
                 self.name = icons[0].name
                 self.path = icons[0].path
+                self.root = icons[0].root
                 self.icons = icons
                 self.extra = extra
+                self.name_alt = ''
+                self.dupe_number = 0
+                for char in reversed(self.root):
+                    if char == '/':
+                        break
+                    self.name_alt = char + self.name_alt
 
         def __init__(self, upper_class):
             # Initialize C4z Panel
@@ -64,20 +71,6 @@ class C4IconSwapperMac:
                                       'IR_OUT', 'HDMI IN', 'COMPOSITE IN', 'VGA IN', 'COMPONENT IN', 'DVI IN',
                                       'STEREO IN', 'DIGITAL_OPTICAL IN', 'HDMI OUT', 'COMPOSITE OUT', 'VGA OUT',
                                       'COMPONENT OUT', 'DVI OUT', 'STEREO OUT', 'DIGITAL_OPTICAL OUT']
-
-            # Labels
-            self.panel_label = tk.Label(self.uc.root, text='Driver Selection', font=(label_font, 15))
-            self.panel_label.place(x=165 + self.x, y=-20 + self.y, anchor='n')
-
-            self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
-            self.blank_image_label.image = self.uc.blank
-            self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
-
-            self.icon_label = tk.Label(self.uc.root, text='0 of 0')
-            self.icon_label.place(x=108 + self.x, y=176 + self.y, anchor='n')
-
-            self.icon_name_label = tk.Label(self.uc.root, text='icon name')
-            self.icon_name_label.place(x=108 + self.x, y=193 + self.y, anchor='n')
 
             # Buttons
             self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_c4z, takefocus=0)
@@ -120,6 +113,20 @@ class C4IconSwapperMac:
             self.show_sub_icons_check = Checkbutton(self.uc.root, text='show extra icons',
                                                     variable=self.show_extra_icons, takefocus=0)
             self.show_sub_icons_check.place(x=self.x + 177, y=self.y + 176, anchor='nw')
+
+            # Labels
+            self.panel_label = tk.Label(self.uc.root, text='Driver Selection', font=(label_font, 15))
+            self.panel_label.place(x=165 + self.x, y=-20 + self.y, anchor='n')
+
+            self.blank_image_label = tk.Label(self.uc.root, image=self.uc.blank)
+            self.blank_image_label.image = self.uc.blank
+            self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+
+            self.icon_label = tk.Label(self.uc.root, text='0 of 0')
+            self.icon_label.place(x=108 + self.x, y=176 + self.y, anchor='n')
+
+            self.icon_name_label = tk.Label(self.uc.root, text='icon name')
+            self.icon_name_label.place(x=108 + self.x, y=193 + self.y, anchor='n')
 
         def toggle_extra_icons(self, *args):
             if args:  # For IDE unused argument warning
@@ -279,6 +286,33 @@ class C4IconSwapperMac:
                         icons_out.append(icon_path)
                 return icons_out
 
+            def check_dupe_names(recalled=False):
+                recall = False
+                if not recalled:
+                    checked_list = []
+                    for icon_cmp0 in self.icons:
+                        checked_list.append(icon_cmp0)
+                        dupe_count = 0
+                        for icon_cmp1 in self.icons:
+                            if icon_cmp1 not in checked_list and icon_cmp0.name == icon_cmp1.name:
+                                dupe_count += 1
+                                checked_list.append(icon_cmp1)
+                                icon_cmp1.dupe_number = dupe_count
+                for icon_cmp0 in self.icons:
+                    for icon_cmp1 in self.icons:
+                        if icon_cmp0 is not icon_cmp1 and icon_cmp0.name == icon_cmp1.name:
+                            recall = True
+                            if recalled:
+                                # This code should never run
+                                print('debug testing: recalled dupe name check')
+                                icon_cmp1.name += ' (' + str(icon_cmp1.dupe_number) + ')'
+                                break
+                            icon_cmp0.name = icon_cmp0.name_alt
+                            icon_cmp1.name = icon_cmp1.name_alt
+                            break
+                if recall:
+                    check_dupe_names(recalled=True)
+
             if self.file_entry_field.get() == 'Invalid driver selected...':
                 self.file_entry_field['state'] = NORMAL
                 self.file_entry_field.delete(0, 'end')
@@ -349,6 +383,8 @@ class C4IconSwapperMac:
                         self.icons.append(self.Icon(icon_group, extra=True))
                     else:
                         self.icons.append(self.Icon(icon_group))
+                # Rename duplicate named icons
+                check_dupe_names()
 
             # Update entry fields and restore driver if necessary
             elif len(self.icons) == 0:
