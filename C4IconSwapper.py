@@ -16,7 +16,7 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.7.1b'
+version = '5.8b'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -41,21 +41,45 @@ class C4IconSwapper:
                 self.path = path  # Full path to image file
                 self.name = name
                 self.size = size
+                self.size_alt = None
+                self.name_alt = ''
+                for char in reversed(self.root):
+                    if char == '/':
+                        break
+                    self.name_alt = char + self.name_alt
+                self.alt_format = False
+                # Check for alt format of icon
+                if 'x' in self.name_alt:
+                    size0 = ''
+                    size1 = ''
+                    check_size0 = True
+                    for char in self.name_alt:
+                        if char == 'x':
+                            check_size0 = False
+                            continue
+                        if check_size0:
+                            size0 += char
+                            continue
+                        size1 += char
+                    try:
+                        if int(size0) and int(size1):
+                            self.alt_format = True
+                            if int(size0) != int(size1):
+                                self.size_alt = (int(size0, int(size1)))
+                    except ValueError:
+                        pass
 
         class Icon:
             def __init__(self, icons: list, extra=False):
                 # Initialize Icon Group
                 self.name = icons[0].name
+                self.name_orig = self.name
+                self.name_alt = icons[0].name_alt
                 self.path = icons[0].path
                 self.root = icons[0].root
                 self.icons = icons
                 self.extra = extra
-                self.name_alt = ''
                 self.dupe_number = 0
-                for char in reversed(self.root):
-                    if char == '/':
-                        break
-                    self.name_alt = char + self.name_alt
 
         def __init__(self, upper_class):
             # Initialize C4z Panel
@@ -248,20 +272,18 @@ class C4IconSwapper:
                     if '.bak' in string or '.orig' in string or string[0] == '.':
                         continue
                     if '.' not in string:
-                        if 'original_icons' in string or 'old' in string:
-                            continue
                         sub_list.append(string)
                         continue
-                    if 'device_lg' in string:
+                    if 'device_lg' in string or 'icon_large' in string:
                         icon_objects.append(self.SubIcon(directory, directory + '/' + string, 'device', 32))
                         continue
-                    elif 'device_sm' in string:
+                    elif 'device_sm' in string or 'icon_small' in string:
                         icon_objects.append(self.SubIcon(directory, directory + '/' + string, 'device', 16))
                         continue
                     temp_name = ''
-                    temp_size = ''
                     read_size = False
                     read_name = False
+                    alt_sized = False
                     for character in reversed(string):
                         if character == '.':
                             read_size = True
@@ -269,19 +291,22 @@ class C4IconSwapper:
                         if read_size:
                             try:
                                 int(character)
-                                temp_size = character + temp_size
                             except ValueError:
-                                if temp_size == '' and character != '_':
+                                if character != '_':
                                     temp_name = character + temp_name
                                 read_size = False
                                 read_name = True
                             continue
                         if read_name:
                             temp_name = character + temp_name
-                    if temp_size == '':
-                        temp_img = PIL.Image.open(directory + '/' + string)
-                        temp_size = str(temp_img.size[0])
+                    temp_img = PIL.Image.open(directory + '/' + string)
+                    temp_size = str(temp_img.size[0])
+                    if temp_img.size[0] != temp_img.size[1]:
+                        alt_sized = True
                     icons_out.append(self.SubIcon(directory, directory + '/' + string, temp_name, int(temp_size)))
+                    if alt_sized:
+                        icons_out[-1].size_alt = temp_img.size
+                    temp_img.close()
 
                 if len(sub_list) == 0:
                     return icons_out
@@ -312,7 +337,7 @@ class C4IconSwapper:
                                 # This code should never run
                                 print('debug testing: recalled dupe name check')
                                 icon_cmp1.name += ' (' + str(icon_cmp1.dupe_number) + ')'
-                                break
+                                continue
                             icon_cmp0.name = icon_cmp0.name_alt
                             icon_cmp1.name = icon_cmp1.name_alt
                             break
@@ -363,14 +388,22 @@ class C4IconSwapper:
             try:
                 for icon in get_icons(self.uc.icon_dir):
                     icon_objects.append(icon)
+                for icon in get_icons(self.uc.images_dir):
+                    icon_objects.append(icon)
             except TypeError:
                 pass
 
             # Form icon groups
             self.icons = []
             if icon_objects:
-                unique_icons = [icon_objects[0]]
+                unique_icons = []
+                if not icon_objects[0].alt_format:
+                    unique_icons = [icon_objects[0]]
+                alt_format_icons = []
                 for icon in icon_objects:
+                    if icon.alt_format:
+                        alt_format_icons.append(icon)
+                        continue
                     skip = False
                     for unique_icon in unique_icons:
                         if icon.name == unique_icon.name and icon.root == unique_icon.root:
@@ -389,6 +422,33 @@ class C4IconSwapper:
                         self.icons.append(self.Icon(icon_group, extra=True))
                     else:
                         self.icons.append(self.Icon(icon_group))
+                # Form icon groups with alt format
+                if alt_format_icons:
+                    unique_icons = [alt_format_icons[0]]
+                    for icon in alt_format_icons:
+                        skip = False
+                        for unique_icon in unique_icons:
+                            if icon.name == unique_icon.name:
+                                skip = True
+                                break
+                        if skip:
+                            continue
+                        unique_icons.append(icon)
+                    for unique_icon in unique_icons:
+                        icon_group = [unique_icon]
+                        for icon in alt_format_icons:
+                            if icon is not unique_icon and icon.name == unique_icon.name:
+                                icon_group.append(icon)
+                        check_list = [icon_group[0].path, icon_group[0].root, icon_group[0].name]
+                        added = False
+                        for check_string in check_list:
+                            if 'device' not in check_string and 'branding' not in check_string and \
+                                    'icon' not in check_string:
+                                self.icons.append(self.Icon(icon_group, extra=True))
+                                added = True
+                                break
+                        if not added:
+                            self.icons.append(self.Icon(icon_group))
                 # Rename icons with duplicate names
                 check_dupe_names()
 
@@ -931,6 +991,10 @@ class C4IconSwapper:
             for icon in self.uc.c4z_panel.icons[index].icons:
                 if not os.path.isfile(icon.path + '.bak'):
                     shutil.copy(icon.path, icon.path + '.bak')
+                if icon.size_alt:
+                    new_icon = replacement_icon.resize(icon.size_alt)
+                    new_icon.save(icon.path)
+                    continue
                 new_icon = replacement_icon.resize((icon.size, icon.size))
                 new_icon.save(icon.path)
             self.uc.c4z_panel.restore_button['state'] = ACTIVE
@@ -1808,6 +1872,7 @@ class C4IconSwapper:
         self.states_shown = False
         self.device_icon_dir = self.temp_dir + 'driver/www/icons/device'
         self.icon_dir = self.temp_dir + 'driver/www/icons'
+        self.images_dir = self.temp_dir + 'driver/www/images'
         self.replacement_image_path = self.temp_dir + 'replacement_icon.png'
         self.orig_file_dir = ''
         self.orig_file_path = ''
