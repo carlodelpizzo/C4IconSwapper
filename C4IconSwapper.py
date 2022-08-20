@@ -16,7 +16,7 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.9b'
+version = '5.9.1b'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -2018,6 +2018,19 @@ class C4IconSwapper:
             self.panel_label.place(x=185 + self.x, y=-27 + self.y, anchor='n')
 
     def __init__(self):
+        # Check for already running program
+        self.cur_dir = os.getcwd() + '/'
+        self.temp_dir = self.cur_dir + 'C4IconSwapperTemp/'
+        self.instance = str(time.mktime(datetime.now().timetuple()))
+        self.instance_count = 0
+        self.instance_abort = False
+        if os.path.isdir(self.temp_dir):
+            if os.path.isfile(self.temp_dir + 'instance'):
+                with open(self.temp_dir + 'instance', 'w', errors='ignore') as out_file:
+                    out_file.writelines(self.instance + '\n')
+                self.instance_comm(wait=True)
+                if self.instance_abort:
+                    return
         # Initialize main program
         self.root = TkinterDnD.Tk()
         self.root.bind('<KeyRelease>', self.key_release)
@@ -2033,12 +2046,12 @@ class C4IconSwapper:
         self.version_label.bind('<Button-1>', self.easter)
         self.easter_counter = 0
 
-        # Creating temporary directory
-        self.cur_dir = os.getcwd() + '/'
-        self.temp_dir = self.cur_dir + 'C4IconSwapperTemp/'
+        # Create temporary directory
         if os.path.isdir(self.temp_dir):
             shutil.rmtree(self.temp_dir)
         os.mkdir(self.temp_dir)
+        with open(self.temp_dir + 'instance', 'w', errors='ignore') as out_file:
+            out_file.writelines('')
 
         # Class variables
         self.driver_info_win = None
@@ -2143,7 +2156,8 @@ class C4IconSwapper:
         os.remove(temp_icon_file)
 
         # Main Loop
-        self.root.after(0, self.restore_entry_text)
+        self.root.after(2000, self.restore_entry_text)
+        self.root.after(50, self.instance_comm)
         self.root.mainloop()
         shutil.rmtree(self.temp_dir)
 
@@ -2304,6 +2318,44 @@ class C4IconSwapper:
             else:
                 self.export_panel.driver_name_entry['background'] = 'pink'
             self.root.after(150, self.blink_driver_name_entry)
+
+    def instance_comm(self, wait=False):
+        if not wait:
+            if os.path.isfile(self.temp_dir + 'instance'):
+                with open(self.temp_dir + 'instance', 'r', errors='ignore') as instance_file:
+                    instance_lines = instance_file.readlines()
+                if len(instance_lines) == 1:
+                    try:
+                        if float(instance_lines[0]) - float(self.instance) > 0:
+                            instance_lines.append(self.instance + '\n')
+                            with open(self.temp_dir + 'instance', 'w', errors='ignore') as instance_file:
+                                instance_file.writelines(instance_lines)
+                    except ValueError:
+                        pass
+            self.root.after(50, self.instance_comm)
+        while wait:
+            if self.instance_count >= 4269:
+                print('Waited Out')
+                with open(self.temp_dir + 'instance', 'w', errors='ignore') as instance_file:
+                    instance_file.writelines('')
+                self.instance_count = 0
+                break
+            self.instance_count += 1
+            with open(self.temp_dir + 'instance', 'r', errors='ignore') as instance_file:
+                instance_lines = instance_file.readlines()
+            if len(instance_lines) >= 2:
+                for line in instance_lines:
+                    if line != self.instance:
+                        try:
+                            if float(line) - float(self.instance) > 0:
+                                print('Older')
+                            else:
+                                with open(self.temp_dir + 'instance', 'w', errors='ignore') as instance_file:
+                                    instance_file.writelines('')
+                                self.instance_abort = True
+                                return
+                        except ValueError:
+                            print('Value Error: Instance Comm')
 
     def easter(self, *args):
         if args:  # For IDE unused argument warning
