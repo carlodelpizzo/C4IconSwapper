@@ -16,13 +16,20 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.8b'
+version = '5.9b'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
 capital_letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
                    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
 numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+valid_chars = ['_', '-', ' ']
+for item in letters:
+    valid_chars.append(item)
+for item in capital_letters:
+    valid_chars.append(item)
+for item in numbers:
+    valid_chars.append(item)
 
 conn_template = ['connection', '', [], [['id', '0', [], []], ['type', '0', [], []],
                                         ['connectionname', 'REPLACE', [], []],
@@ -533,8 +540,28 @@ class C4IconSwapper:
             self.current_icon = 0
             self.update_icon()
 
-            # Read driver.xml and update used id tags
+            # Read driver.xml and update variables
             self.uc.driver_xml = XMLObject(self.uc.temp_dir + 'driver/driver.xml')
+            man_tag = self.uc.driver_xml.get_tag('manufacturer')
+            if man_tag:
+                self.uc.driver_manufac_var.set(man_tag[0].value)
+            creator_tag = self.uc.driver_xml.get_tag('creator')
+            if creator_tag:
+                self.uc.driver_creator_var.set(creator_tag[0].value)
+            self.uc.driver_version_count = 1
+            version_tag = self.uc.driver_xml.get_tag('version')
+            if version_tag:
+                self.uc.driver_ver_orig.set(version_tag[0].value)
+                temp_str = ''
+                for char in version_tag[0].value:
+                    if char not in numbers:
+                        continue
+                    temp_str += char
+                self.uc.driver_version_var.set(temp_str)
+                if self.uc.export_panel.inc_driver_version.get() == 1:
+                    self.uc.driver_version_new_var.set(str(int(temp_str) + 1))
+                else:
+                    self.uc.driver_version_new_var.set(temp_str)
             id_tags = self.uc.driver_xml.get_tag('id')
             if id_tags is not None:
                 self.uc.connections_panel.ids = []
@@ -1149,20 +1176,24 @@ class C4IconSwapper:
 
             # Labels
             self.panel_label = tk.Label(self.uc.root, text='Export', font=(label_font, 15))
-            self.panel_label.place(x=150 + self.x, y=50 + self.y, anchor='n')
+            self.panel_label.place(x=145 + self.x, y=50 + self.y, anchor='n')
 
             self.driver_name_label = tk.Label(self.uc.root, text='Driver Name:')
-            self.driver_name_label.place(x=65 + self.x, y=165 + self.y, anchor='w')
+            self.driver_name_label.place(x=65 + self.x, y=180 + self.y, anchor='w')
 
             # Buttons
+            self.driver_info_button = tk.Button(self.uc.root, text='Edit Driver Info',
+                                                command=self.edit_driver_info, takefocus=0)
+            self.driver_info_button.place(x=145 + self.x, y=80 + self.y, anchor='n')
+
             self.export_button = tk.Button(self.uc.root, text='Quick Export', width=20,
                                            command=self.quick_export, takefocus=0)
-            self.export_button.place(x=145 + self.x, y=210 + self.y, anchor='n')
+            self.export_button.place(x=145 + self.x, y=220 + self.y, anchor='n')
             self.export_button['state'] = DISABLED
 
             self.export_as_button = tk.Button(self.uc.root, text='Export As...', width=20,
                                               command=self.do_export, takefocus=0)
-            self.export_as_button.place(x=145 + self.x, y=240 + self.y, anchor='n')
+            self.export_as_button.place(x=145 + self.x, y=250 + self.y, anchor='n')
             self.export_as_button['state'] = DISABLED
 
             # Entry
@@ -1170,18 +1201,18 @@ class C4IconSwapper:
             self.driver_name_var.set('New Driver')
             self.driver_name_var.trace('w', self.validate_driver_name)
             self.driver_name_entry = tk.Entry(self.uc.root, width=25, textvariable=self.driver_name_var)
-            self.driver_name_entry.place(x=145 + self.x, y=175 + self.y, anchor='n')
+            self.driver_name_entry.place(x=145 + self.x, y=190 + self.y, anchor='n')
 
             # Checkboxes
             self.inc_driver_version = IntVar(value=1)
-            self.inc_driver_check = Checkbutton(self.uc.root, text='update driver version',
+            self.inc_driver_check = Checkbutton(self.uc.root, text='increment driver version',
                                                 variable=self.inc_driver_version, takefocus=0)
-            self.inc_driver_check.place(x=63 + self.x, y=135 + self.y, anchor='w')
+            self.inc_driver_check.place(x=63 + self.x, y=150 + self.y, anchor='w')
 
             self.include_backups = IntVar(value=1)
             self.include_backups_check = Checkbutton(self.uc.root, text='include backup files',
                                                      variable=self.include_backups, takefocus=0)
-            self.include_backups_check.place(x=63 + self.x, y=115 + self.y, anchor='w')
+            self.include_backups_check.place(x=63 + self.x, y=130 + self.y, anchor='w')
 
         def quick_export(self, first_call=True, driver_name=''):
             if first_call:
@@ -1193,12 +1224,20 @@ class C4IconSwapper:
                 if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z'):
                     os.remove(self.uc.cur_dir + driver_name + '.c4z')
                 self.export_file(driver_name)
-                export_cleanup()
+                export_cleanup(as_abort=False)
 
-            def export_cleanup():
+            def export_cleanup(as_abort=True):
+                if as_abort:
+                    # Abort from Quick Export
+                    pass
+                else:
+                    # Export Success 2
+                    self.uc.driver_version_var.set(self.uc.driver_version_new_var.get())
+                    if self.inc_driver_version.get() == 1:
+                        self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_new_var.get()) + 1))
                 # Restore original xml and lua file
                 self.uc.driver_xml.restore()
-                if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
+                if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua.bak'):
                     os.remove(self.uc.temp_dir + 'driver/driver.lua')
                     os.rename(self.uc.temp_dir + 'driver/driver.lua.bak', self.uc.temp_dir + 'driver/driver.lua')
                 os.remove(self.uc.temp_dir + 'driver/driver.xml')
@@ -1248,7 +1287,7 @@ class C4IconSwapper:
                 self.uc.root.after(150, self.uc.blink_driver_name_entry)
                 return
 
-            # Multi-state
+            # Multi-state related checks
             if self.uc.multi_state_driver:
                 # Check State Validity
                 invalid_states = False
@@ -1391,15 +1430,32 @@ class C4IconSwapper:
                                         param[1] = state_name_change[3]
                                         break
 
+            # Check driver info variables
+            if self.uc.driver_version_new_var.get() == '' or self.uc.driver_manufac_new_var.get() == '' or \
+                    self.uc.driver_creator_new_var.get() == '':
+                win_x = self.uc.root.winfo_rootx() + self.x
+                win_y = self.uc.root.winfo_rooty()
+                missing_driver_info_pop_up = Toplevel(self.uc.root)
+                missing_driver_info_pop_up.title('Missing Driver Information')
+                label_text = 'Cannot Export: Missing driver info'
+                missing_driver_info_pop_up.geometry('239x70')
+                missing_driver_info_pop_up.geometry(f'+{win_x}+{win_y}')
+                missing_driver_info_pop_up.grab_set()
+                missing_driver_info_pop_up.focus()
+                missing_driver_info_pop_up.transient(self.uc.root)
+                missing_driver_info_pop_up.resizable(False, False)
+                confirm_label = Label(missing_driver_info_pop_up, text=label_text, justify='center')
+                confirm_label.pack()
+                exit_button = tk.Button(missing_driver_info_pop_up, text='Cancel', width='10',
+                                        command=missing_driver_info_pop_up.destroy, justify='center')
+                exit_button.pack(pady=10)
+                return
+
             # Confirm all connections have non-conflicting ids
             for conn in self.uc.connections_panel.connections:
                 conn.update_id(refresh=True)
 
-            # Increment driver version on each export
-            if self.uc.driver_version == -1:
-                self.uc.driver_version = int(self.uc.driver_xml.get_tag('version')[0].value)
-            self.uc.driver_version += 1
-            self.uc.driver_xml.get_tag('version')[0].value = str(self.uc.driver_version)
+            # Set restore point for xml object
             self.uc.driver_xml.set_restore_point()
 
             # Update connection names
@@ -1410,9 +1466,13 @@ class C4IconSwapper:
             # Update xml with new driver name
             self.uc.driver_xml.get_tag('name')[0].value = driver_name
             modified_datestamp = str(datetime.now().strftime("%m/%d/%Y %H:%M"))
+            if self.inc_driver_version.get() == 1 and \
+                    int(self.uc.driver_version_var.get()) >= int(self.uc.driver_version_new_var.get()):
+                self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_var.get()) + 1))
+            self.uc.driver_xml.get_tag('version')[0].value = self.uc.driver_version_new_var.get()
             self.uc.driver_xml.get_tag('modified')[0].value = modified_datestamp
-            self.uc.driver_xml.get_tag('creator')[0].value = 'C4IconSwapper'
-            self.uc.driver_xml.get_tag('manufacturer')[0].value = 'C4IconSwapper'
+            self.uc.driver_xml.get_tag('creator')[0].value = self.uc.driver_creator_new_var.get()
+            self.uc.driver_xml.get_tag('manufacturer')[0].value = self.uc.driver_manufac_new_var.get()
             for param in self.uc.driver_xml.get_tag('proxy')[0].parameters:
                 if param[0] == 'name':
                     param[1] = driver_name
@@ -1439,21 +1499,27 @@ class C4IconSwapper:
                 # Save As Dialog
                 out_file = filedialog.asksaveasfile(initialfile=driver_name + '.c4z',
                                                     filetypes=[("Control4 Drivers", "*.c4z")])
-                out_file_path = out_file.name
-                out_file.close()
-                flag_remove_empty_file = False
-                if '.c4z' not in out_file_path:
-                    flag_remove_empty_file = True
-                    out_file_path += '.c4z'
+                try:
+                    out_file_path = out_file.name
+                    out_file.close()
+                    flag_remove_empty_file = False
+                    if '.c4z' not in out_file_path:
+                        flag_remove_empty_file = True
+                        out_file_path += '.c4z'
+                    # Export file
+                    if os.path.isfile(out_file_path):
+                        os.remove(out_file_path)
+                    self.export_file(driver_name, path=out_file_path)
+                    if flag_remove_empty_file:
+                        os.remove(out_file_path.replace('.c4z', ''))
+                except AttributeError:
+                    # Save As Abort
+                    pass
 
-                # Export file
-                if os.path.isfile(out_file_path):
-                    os.remove(out_file_path)
-                self.export_file(driver_name, path=out_file_path)
-                if flag_remove_empty_file:
-                    os.remove(out_file_path.replace('.c4z', ''))
-
-            # Restore original xml and lua
+            # Restore original xml and lua (Export Success 1)
+            self.uc.driver_version_var.set(self.uc.driver_version_new_var.get())
+            if self.inc_driver_version.get() == 1:
+                self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_new_var.get()) + 1))
             self.uc.driver_xml.restore()
             if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua.bak'):
                 os.remove(self.uc.temp_dir + 'driver/driver.lua')
@@ -1509,14 +1575,124 @@ class C4IconSwapper:
             if args:  # For IDE unused argument warning
                 pass
 
-            driver_name = self.driver_name_var.get()
-            temp = ''
-            for letter in driver_name:
-                if str(letter).isalnum() or str(letter) == '_' or str(letter) == '-' or str(letter) == ' ':
-                    temp += str(letter)
-            driver_name = temp
-            self.driver_name_entry.delete(0, 'end')
-            self.driver_name_entry.insert(0, driver_name)
+            driver_name = ''
+            for char in self.driver_name_var.get():
+                if char in valid_chars:
+                    driver_name += char
+            self.driver_name_var.set(driver_name)
+
+        def edit_driver_info(self):
+            def on_win_close():
+                if self.uc.driver_version_new_var.get() == '':
+                    self.uc.driver_version_new_var.set('0')
+                if self.uc.driver_creator_new_var.get() == '':
+                    self.uc.driver_creator_new_var.set('C4IconSwapper')
+                if self.uc.driver_manufac_new_var.get() == '':
+                    self.uc.driver_manufac_new_var.set('C4IconSwapper')
+                if self.inc_driver_version.get() == 1 and self.uc.driver_version_var.get() != '' and \
+                        int(self.uc.driver_version_new_var.get()) <= int(self.uc.driver_version_var.get()):
+                    self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_var.get()) + 1))
+                self.uc.driver_info_win.destroy()
+                self.uc.driver_info_win = None
+
+            def validate_version(*args):
+                if args:  # For IDE unused argument warning
+                    pass
+                version_str = self.uc.driver_version_new_var.get()
+                temp_str = ''
+                for char in version_str:
+                    if char not in numbers:
+                        continue
+                    temp_str += char
+                self.uc.driver_version_new_var.set(temp_str)
+
+            def validate_name(*args):
+                if args:  # For IDE unused argument warning
+                    pass
+                # Check manufacturer variable
+                name = ''
+                for char in self.uc.driver_manufac_new_var.get():
+                    if char in valid_chars:
+                        name += char
+                self.uc.driver_manufac_new_var.set(name)
+
+                # Check creator variable
+                name = ''
+                for char in self.uc.driver_creator_new_var.get():
+                    if char in valid_chars:
+                        name += char
+                self.uc.driver_creator_new_var.set(name)
+
+            if self.uc.driver_info_win:
+                self.uc.driver_info_win.focus()
+                return
+            # Initialize window
+            win_x = self.uc.root.winfo_rootx() + self.x
+            win_y = self.uc.root.winfo_rooty()
+            self.uc.driver_info_win = Toplevel(self.uc.root)
+            self.uc.driver_info_win.focus()
+            self.uc.driver_info_win.protocol("WM_DELETE_WINDOW", on_win_close)
+            self.uc.driver_info_win.title('Edit Driver Info')
+            self.uc.driver_info_win.geometry('255x240')
+            self.uc.driver_info_win.geometry(f'+{win_x}+{win_y}')
+            self.uc.driver_info_win.resizable(False, False)
+
+            # Validate driver version
+            if self.inc_driver_version.get() == 1 and self.uc.driver_version_var.get() != '' and \
+                    int(self.uc.driver_version_new_var.get()) <= int(self.uc.driver_version_var.get()):
+                self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_var.get()) + 1))
+
+            # Labels
+            man_y = 20
+            man_arrow = tk.Label(self.uc.driver_info_win, text='\u2192', font=('', 15))
+            man_arrow.place(x=115, y=man_y, anchor='nw')
+
+            creator_y = man_y + 55
+            creator_arrow = tk.Label(self.uc.driver_info_win, text='\u2192', font=('', 15))
+            creator_arrow.place(x=115, y=creator_y, anchor='nw')
+
+            version_y = creator_y + 55
+            version_arrow = tk.Label(self.uc.driver_info_win, text='\u2192', font=('', 15))
+            version_arrow.place(x=115, y=version_y, anchor='nw')
+
+            driver_man_label = tk.Label(self.uc.driver_info_win, text='Driver Manufacturer', font=(label_font, 10))
+            driver_man_label.place(x=127, y=man_y - 15, anchor='n')
+
+            driver_creator_label = tk.Label(self.uc.driver_info_win, text='Driver Creator', font=(label_font, 10))
+            driver_creator_label.place(x=127, y=creator_y - 15, anchor='n')
+
+            driver_ver_label = tk.Label(self.uc.driver_info_win, text='Driver Version', font=(label_font, 10))
+            driver_ver_label.place(x=127, y=version_y - 15, anchor='n')
+            driver_ver_orig_label = tk.Label(self.uc.driver_info_win, text='Original Version:', font=(label_font, 8))
+            driver_ver_orig_label.place(x=110, y=version_y + 30, anchor='ne')
+
+            # Entry
+            self.uc.driver_manufac_new_var.trace('w', validate_name)
+            driver_man_entry = tk.Entry(self.uc.driver_info_win, width=17, textvariable=self.uc.driver_manufac_var)
+            driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
+            driver_man_entry['state'] = DISABLED
+            driver_man_new_entry = tk.Entry(self.uc.driver_info_win, width=17,
+                                            textvariable=self.uc.driver_manufac_new_var)
+            driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
+
+            self.uc.driver_creator_new_var.trace('w', validate_name)
+            driver_creator_entry = tk.Entry(self.uc.driver_info_win, width=17, textvariable=self.uc.driver_creator_var)
+            driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
+            driver_creator_entry['state'] = DISABLED
+            driver_creator_new_entry = tk.Entry(self.uc.driver_info_win, width=17,
+                                                textvariable=self.uc.driver_creator_new_var)
+            driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
+
+            driver_ver_entry = tk.Entry(self.uc.driver_info_win, width=17, textvariable=self.uc.driver_version_var)
+            driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
+            driver_ver_entry['state'] = DISABLED
+            driver_ver_new_entry = tk.Entry(self.uc.driver_info_win, width=17,
+                                            textvariable=self.uc.driver_version_new_var)
+            driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
+            self.uc.driver_version_new_var.trace('w', validate_version)
+            driver_ver_orig_entry = tk.Entry(self.uc.driver_info_win, width=6, textvariable=self.uc.driver_ver_orig)
+            driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
+            driver_ver_orig_entry['state'] = DISABLED
 
     class ConnectionsPanel:
         class Connection:
@@ -1865,6 +2041,17 @@ class C4IconSwapper:
         os.mkdir(self.temp_dir)
 
         # Class variables
+        self.driver_info_win = None
+        self.driver_manufac_var = StringVar()
+        self.driver_manufac_new_var = StringVar()
+        self.driver_manufac_new_var.set('C4IconSwapper')
+        self.driver_creator_var = StringVar()
+        self.driver_creator_new_var = StringVar()
+        self.driver_creator_new_var.set('C4IconSwapper')
+        self.driver_ver_orig = StringVar()
+        self.driver_version_var = StringVar()
+        self.driver_version_new_var = StringVar()
+        self.driver_version_new_var.set('1')
         self.multi_state_driver = False
         self.counter = 0
         self.states_orig_names = []
@@ -1881,7 +2068,6 @@ class C4IconSwapper:
         self.schedule_entry_restore = False
         self.restore_entry_string = ''
         self.time_var = 0
-        self.driver_version = -1
         self.conn_dict = {}
         for key in ['HDMI IN', 'COMPOSITE IN', 'VGA IN', 'COMPONENT IN', 'DVI IN']:
             self.conn_dict[key] = '\t\t\t<type>5</type>\n\t\t\t' \
