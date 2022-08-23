@@ -16,7 +16,7 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.9.1b'
+version = '5.9.2b'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -2033,14 +2033,22 @@ class C4IconSwapper:
         self.temp_dir = self.temp_root_dir + self.instance_id + '/'
         self.instance = str(time.mktime(datetime.now().timetuple()))
         self.checked_in = False
+        checked_in_instances = []
         if os.path.isdir(self.temp_root_dir):
             if os.path.isfile(self.temp_root_dir + 'instance'):
                 with open(self.temp_root_dir + 'instance', 'r', errors='ignore') as instance_file:
                     current_instances = instance_file.readlines()
                 if len(current_instances) > 0:
                     os.mkdir(self.temp_root_dir + 'check_in')
-                    time.sleep(0.5)
-                    checked_in_instances = os.listdir(self.temp_root_dir + 'check_in')
+                    waiting = True
+                    # I'm sure there is a better way to format this timestamp lol
+                    begin_time = float(time.mktime(datetime.now().timetuple()))
+                    while waiting:
+                        checked_in_instances = os.listdir(self.temp_root_dir + 'check_in')
+                        if len(checked_in_instances) == len(current_instances):
+                            waiting = False
+                        if float(time.mktime(datetime.now().timetuple())) - begin_time >= 2:
+                            waiting = False
                     failed_to_check_in = []
                     for instance_id in current_instances:
                         if instance_id.replace('\n', '') not in checked_in_instances:
@@ -2073,7 +2081,10 @@ class C4IconSwapper:
 
         # Root window properties
         self.root.geometry('915x270')
-        self.root.title('C4 Icon Swapper')
+        if len(checked_in_instances) > 0:
+            self.root.title('C4 Icon Swapper (' + self.instance_id + ')')
+        else:
+            self.root.title('C4 Icon Swapper')
         self.root.resizable(False, False)
 
         # Version Label
@@ -2186,14 +2197,27 @@ class C4IconSwapper:
 
         # Main Loop
         self.root.after(2000, self.restore_entry_text)
-        self.root.after(50, self.instance_check)
+        self.root.after(150, self.instance_check)
         self.root.mainloop()
         # On program close
         with open(self.temp_root_dir + 'instance', 'r', errors='ignore') as instance_file:
             current_instances = instance_file.readlines()
         if len(current_instances) > 1:
+            if os.path.isdir(self.temp_root_dir + 'check_in') and not self.checked_in:
+                return
+            elif os.path.isdir(self.temp_root_dir + 'check_in'):
+                begin_time = float(time.mktime(datetime.now().timetuple()))
+                while os.path.isdir(self.temp_root_dir + 'check_in'):
+                    if float(time.mktime(datetime.now().timetuple())) - begin_time >= 5:
+                        return
             os.mkdir(self.temp_root_dir + 'check_in')
-            time.sleep(0.5)
+            waiting = True
+            begin_time = float(time.mktime(datetime.now().timetuple()))
+            while waiting:
+                if len(os.listdir(self.temp_root_dir + 'check_in')) == len(current_instances):
+                    waiting = False
+                if float(time.mktime(datetime.now().timetuple())) - begin_time >= 2:
+                    waiting = False
             failed_to_check_in = []
             for instance_id in current_instances:
                 if instance_id == self.instance_id + '\n':
@@ -2381,8 +2405,9 @@ class C4IconSwapper:
             with open(self.temp_root_dir + 'check_in/' + self.instance_id, 'w', errors='ignore') as check_in_file:
                 check_in_file.writelines('')
             self.checked_in = True
+            self.root.title('C4 Icon Swapper (' + self.instance_id + ')')
 
-        self.root.after(50, self.instance_check)
+        self.root.after(150, self.instance_check)
 
     def easter(self, *args):
         if args:  # For IDE unused argument warning
