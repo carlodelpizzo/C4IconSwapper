@@ -2018,19 +2018,52 @@ class C4IconSwapper:
             self.panel_label.place(x=185 + self.x, y=-27 + self.y, anchor='n')
 
     def __init__(self):
-        # Check for already running program
+        def valid_instance_id(instance_ids: list):
+            valid_id = str(random.randint(111111, 999999))
+            if valid_id + '\n' in instance_ids:
+                valid_id = valid_instance_id(instance_ids)
+            return valid_id
+        # Create temporary directory
+        self.instance_id = str(random.randint(111111, 999999))
         self.cur_dir = os.getcwd() + '/'
-        self.temp_dir = self.cur_dir + 'C4IconSwapperTemp/'
+        self.temp_root_dir = self.cur_dir + 'C4IconSwapperTemp/'
+        self.temp_dir = self.temp_root_dir + self.instance_id + '/'
         self.instance = str(time.mktime(datetime.now().timetuple()))
-        self.instance_count = 0
-        self.instance_abort = False
-        if os.path.isdir(self.temp_dir):
-            if os.path.isfile(self.temp_dir + 'instance'):
-                with open(self.temp_dir + 'instance', 'w', errors='ignore') as out_file:
-                    out_file.writelines(self.instance + '\n')
-                self.instance_comm(wait=True)
-                if self.instance_abort:
-                    return
+        self.checked_in = False
+        if os.path.isdir(self.temp_root_dir):
+            if os.path.isfile(self.temp_root_dir + 'instance'):
+                with open(self.temp_root_dir + 'instance', 'r', errors='ignore') as instance_file:
+                    current_instances = instance_file.readlines()
+                if len(current_instances) > 0:
+                    os.mkdir(self.temp_root_dir + 'check_in')
+                    time.sleep(0.5)
+                    checked_in_instances = os.listdir(self.temp_root_dir + 'check_in')
+                    failed_to_check_in = []
+                    for instance_id in current_instances:
+                        if instance_id.replace('\n', '') not in checked_in_instances:
+                            failed_to_check_in.append(instance_id.replace('\n', ''))
+                    for failed_id in failed_to_check_in:
+                        if os.path.isdir(self.temp_root_dir + failed_id):
+                            shutil.rmtree(self.temp_root_dir + failed_id)
+                    current_instances = []
+                    for instance_id in os.listdir(self.temp_root_dir + 'check_in'):
+                        current_instances.append(instance_id + '\n')
+                    shutil.rmtree(self.temp_root_dir + 'check_in')
+                if self.instance_id + '\n' in current_instances:
+                    self.instance_id = valid_instance_id(current_instances)
+                current_instances.append(self.instance_id + '\n')
+                with open(self.temp_root_dir + 'instance', 'w', errors='ignore') as out_file:
+                    out_file.writelines(current_instances)
+            else:
+                shutil.rmtree(self.temp_root_dir)
+                os.mkdir(self.temp_root_dir)
+                with open(self.temp_root_dir + 'instance', 'w', errors='ignore') as out_file:
+                    out_file.writelines(self.instance_id + '\n')
+        else:
+            os.mkdir(self.temp_root_dir)
+            with open(self.temp_root_dir + 'instance', 'w', errors='ignore') as out_file:
+                out_file.writelines(self.instance_id + '\n')
+        os.mkdir(self.temp_dir)
         # Initialize main program
         self.root = TkinterDnD.Tk()
         self.root.bind('<KeyRelease>', self.key_release)
@@ -2045,13 +2078,6 @@ class C4IconSwapper:
         self.version_label.place(relx=1, rely=1.01, anchor='se')
         self.version_label.bind('<Button-1>', self.easter)
         self.easter_counter = 0
-
-        # Create temporary directory
-        if os.path.isdir(self.temp_dir):
-            shutil.rmtree(self.temp_dir)
-        os.mkdir(self.temp_dir)
-        with open(self.temp_dir + 'instance', 'w', errors='ignore') as out_file:
-            out_file.writelines('')
 
         # Class variables
         self.driver_info_win = None
@@ -2106,7 +2132,7 @@ class C4IconSwapper:
                                    '\t\t\t<videosource>False</videosource>\n\t\t\t<linelevel>False</linelevel>'
 
         # Panels; Creating blank image for panels
-        temp_image_file = self.temp_dir + 'blank.gif'
+        temp_image_file = self.temp_root_dir + 'blank.gif'
         with open(temp_image_file, 'wb') as blank_img_file:
             blank_img_file.write(base64.b64decode(blank_img_b64))
         blank_image = Image.open(temp_image_file)
@@ -2149,7 +2175,7 @@ class C4IconSwapper:
         self.show_states_button.place(x=820, y=240, anchor='n')
 
         # Creating window icon
-        temp_icon_file = self.temp_dir + 'icon.ico'
+        temp_icon_file = self.temp_root_dir + 'icon.ico'
         with open(temp_icon_file, 'wb') as icon_file:
             icon_file.write(base64.b64decode(win_icon))
         self.root.wm_iconbitmap(temp_icon_file)
@@ -2157,9 +2183,35 @@ class C4IconSwapper:
 
         # Main Loop
         self.root.after(2000, self.restore_entry_text)
-        self.root.after(50, self.instance_comm)
+        self.root.after(50, self.instance_check)
         self.root.mainloop()
-        shutil.rmtree(self.temp_dir)
+        # On program close
+        with open(self.temp_root_dir + 'instance', 'r', errors='ignore') as instance_file:
+            current_instances = instance_file.readlines()
+        if len(current_instances) > 1:
+            os.mkdir(self.temp_root_dir + 'check_in')
+            time.sleep(0.5)
+            failed_to_check_in = []
+            for instance_id in current_instances:
+                if instance_id == self.instance_id + '\n':
+                    continue
+                if instance_id.replace('\n', '') not in os.listdir(self.temp_root_dir + 'check_in'):
+                    failed_to_check_in.append(instance_id.replace('\n', ''))
+            for failed_id in failed_to_check_in:
+                if os.path.isdir(self.temp_root_dir + failed_id):
+                    shutil.rmtree(self.temp_root_dir + failed_id)
+            current_instances = []
+            for instance_id in os.listdir(self.temp_root_dir + 'check_in'):
+                current_instances.append(instance_id + '\n')
+            shutil.rmtree(self.temp_root_dir + 'check_in')
+            if len(current_instances) > 0:
+                with open(self.temp_root_dir + 'instance', 'w', errors='ignore') as out_file:
+                    out_file.writelines(current_instances)
+                shutil.rmtree(self.temp_dir)
+            else:
+                shutil.rmtree(self.temp_root_dir)
+        else:
+            shutil.rmtree(self.temp_root_dir)
 
     def toggle_connections_panel(self):
         if not self.states_shown:
@@ -2319,43 +2371,15 @@ class C4IconSwapper:
                 self.export_panel.driver_name_entry['background'] = 'pink'
             self.root.after(150, self.blink_driver_name_entry)
 
-    def instance_comm(self, wait=False):
-        if not wait:
-            if os.path.isfile(self.temp_dir + 'instance'):
-                with open(self.temp_dir + 'instance', 'r', errors='ignore') as instance_file:
-                    instance_lines = instance_file.readlines()
-                if len(instance_lines) == 1:
-                    try:
-                        if float(instance_lines[0]) - float(self.instance) > 0:
-                            instance_lines.append(self.instance + '\n')
-                            with open(self.temp_dir + 'instance', 'w', errors='ignore') as instance_file:
-                                instance_file.writelines(instance_lines)
-                    except ValueError:
-                        pass
-            self.root.after(50, self.instance_comm)
-        while wait:
-            if self.instance_count >= 4269:
-                print('Waited Out')
-                with open(self.temp_dir + 'instance', 'w', errors='ignore') as instance_file:
-                    instance_file.writelines('')
-                self.instance_count = 0
-                break
-            self.instance_count += 1
-            with open(self.temp_dir + 'instance', 'r', errors='ignore') as instance_file:
-                instance_lines = instance_file.readlines()
-            if len(instance_lines) >= 2:
-                for line in instance_lines:
-                    if line != self.instance:
-                        try:
-                            if float(line) - float(self.instance) > 0:
-                                print('Older')
-                            else:
-                                with open(self.temp_dir + 'instance', 'w', errors='ignore') as instance_file:
-                                    instance_file.writelines('')
-                                self.instance_abort = True
-                                return
-                        except ValueError:
-                            print('Value Error: Instance Comm')
+    def instance_check(self):
+        if self.checked_in and not os.path.isdir(self.temp_root_dir + 'check_in'):
+            self.checked_in = False
+        elif not self.checked_in and os.path.isdir(self.temp_root_dir + 'check_in'):
+            with open(self.temp_root_dir + 'check_in/' + self.instance_id, 'w', errors='ignore') as check_in_file:
+                check_in_file.writelines('')
+            self.checked_in = True
+
+        self.root.after(50, self.instance_check)
 
     def easter(self, *args):
         if args:  # For IDE unused argument warning
