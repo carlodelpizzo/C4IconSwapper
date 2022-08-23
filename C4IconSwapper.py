@@ -1643,6 +1643,9 @@ class C4IconSwapper:
                 self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_var.get()) + 1))
 
             # Labels
+            instance_id_label = tk.Label(self.uc.driver_info_win, text='instance id: ' + self.uc.instance_id)
+            instance_id_label.place(x=127, y=220, anchor='n')
+
             man_y = 20
             man_arrow = tk.Label(self.uc.driver_info_win, text='\u2192', font=('', 15))
             man_arrow.place(x=115, y=man_y, anchor='nw')
