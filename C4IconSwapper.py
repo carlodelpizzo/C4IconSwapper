@@ -16,7 +16,7 @@ from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
 
-version = '5.9.2b'
+version = '5.9.3b'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -1205,6 +1205,7 @@ class C4IconSwapper:
 
             # Checkboxes
             self.inc_driver_version = IntVar(value=1)
+            self.inc_driver_version.trace('w', self.update_driver_version)
             self.inc_driver_check = Checkbutton(self.uc.root, text='increment driver version',
                                                 variable=self.inc_driver_version, takefocus=0)
             self.inc_driver_check.place(x=63 + self.x, y=150 + self.y, anchor='w')
@@ -1600,10 +1601,16 @@ class C4IconSwapper:
                     pass
                 version_str = self.uc.driver_version_new_var.get()
                 temp_str = ''
+                cursor_pos = driver_ver_new_entry.index(INSERT)
                 for char in version_str:
                     if char not in numbers:
                         continue
+                    if temp_str == '' and char == '0':
+                        continue
                     temp_str += char
+                str_diff = len(version_str) - len(temp_str)
+                if str_diff > 0:
+                    driver_ver_new_entry.icursor(cursor_pos - str_diff)
                 self.uc.driver_version_new_var.set(temp_str)
 
             def validate_name(*args):
@@ -1692,10 +1699,24 @@ class C4IconSwapper:
             driver_ver_new_entry = tk.Entry(self.uc.driver_info_win, width=17,
                                             textvariable=self.uc.driver_version_new_var)
             driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
+            driver_ver_new_entry.bind('<FocusOut>', self.update_driver_version)
             self.uc.driver_version_new_var.trace('w', validate_version)
             driver_ver_orig_entry = tk.Entry(self.uc.driver_info_win, width=6, textvariable=self.uc.driver_ver_orig)
             driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
             driver_ver_orig_entry['state'] = DISABLED
+
+        def update_driver_version(self, *args):
+            if args:  # For IDE unused argument warning
+                pass
+
+            # Update driver version if 'increment driver' is selected and new version value is <= last version value
+            if self.inc_driver_version.get() == 0:
+                return
+            if self.uc.driver_version_new_var.get() == '' or self.uc.driver_version_var.get() == '':
+                return
+
+            if int(self.uc.driver_version_var.get()) >= int(self.uc.driver_version_new_var.get()):
+                self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_var.get()) + 1))
 
     class ConnectionsPanel:
         class Connection:
