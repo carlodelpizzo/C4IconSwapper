@@ -161,9 +161,8 @@ class C4IconSwapper:
             self.icon_name_label = tk.Label(self.uc.root, text='icon name')
             self.icon_name_label.place(x=108 + self.x, y=193 + self.y, anchor='n')
 
+        # noinspection PyUnusedLocal
         def toggle_extra_icons(self, *args):
-            if args:  # For IDE unused argument warning
-                pass
             if not self.uc.driver_selected:
                 return
             if self.show_extra_icons.get() == 0 and self.uc.c4z_panel.icons[self.uc.c4z_panel.current_icon].extra:
@@ -1572,10 +1571,8 @@ class C4IconSwapper:
                     shutil.copy(bak_files_dict[file], file)
                 shutil.rmtree(bak_folder)
 
+        # noinspection PyUnusedLocal
         def validate_driver_name(self, *args):
-            if args:  # For IDE unused argument warning
-                pass
-
             driver_name = ''
             for char in self.driver_name_var.get():
                 if char in valid_chars:
@@ -1596,9 +1593,8 @@ class C4IconSwapper:
                 self.uc.driver_info_win.destroy()
                 self.uc.driver_info_win = None
 
+            # noinspection PyUnusedLocal
             def validate_version(*args):
-                if args:  # For IDE unused argument warning
-                    pass
                 version_str = self.uc.driver_version_new_var.get()
                 temp_str = ''
                 cursor_pos = driver_ver_new_entry.index(INSERT)
@@ -1613,9 +1609,8 @@ class C4IconSwapper:
                     driver_ver_new_entry.icursor(cursor_pos - str_diff)
                 self.uc.driver_version_new_var.set(temp_str)
 
+            # noinspection PyUnusedLocal
             def validate_name(*args):
-                if args:  # For IDE unused argument warning
-                    pass
                 # Check manufacturer variable
                 name = ''
                 for char in self.uc.driver_manufac_new_var.get():
@@ -1705,10 +1700,8 @@ class C4IconSwapper:
             driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
             driver_ver_orig_entry['state'] = DISABLED
 
+        # noinspection PyUnusedLocal
         def update_driver_version(self, *args):
-            if args:  # For IDE unused argument warning
-                pass
-
             # Update driver version if 'increment driver' is selected and new version value is <= last version value
             if self.inc_driver_version.get() == 0:
                 return
@@ -1934,9 +1927,8 @@ class C4IconSwapper:
                 self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
                 self.name_entry['state'] = DISABLED
 
+            # noinspection PyUnusedLocal
             def validate_state(self, *args):
-                if args:  # For IDE unused argument warning
-                    pass
                 self.format_state_name()
                 if self.name_var.get() == '':
                     self.name_entry['background'] = 'pink'
@@ -2430,9 +2422,8 @@ class C4IconSwapper:
 
         self.root.after(150, self.instance_check)
 
+    # noinspection PyUnusedLocal
     def easter(self, *args):
-        if args:  # For IDE unused argument warning
-            pass
         self.easter_counter += 1
 
 

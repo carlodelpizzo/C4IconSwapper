@@ -16,6 +16,7 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
+# noinspection PyUnresolvedReferences
 from AppKit import NSBundle
 
 version = '5.9.3b'
@@ -159,9 +160,8 @@ class C4IconSwapperMac:
             self.icon_name_label = tk.Label(self.uc.root, text='icon name')
             self.icon_name_label.place(x=108 + self.x, y=193 + self.y, anchor='n')
 
+        # noinspection PyUnusedLocal
         def toggle_extra_icons(self, *args):
-            if args:  # For IDE unused argument warning
-                pass
             if not self.uc.driver_selected:
                 return
             if self.show_extra_icons.get() == 0 and self.uc.c4z_panel.icons[self.uc.c4z_panel.current_icon].extra:
@@ -1489,10 +1489,8 @@ class C4IconSwapperMac:
             os.remove(self.uc.temp_dir + '/driver/driver.xml')
             os.rename(self.uc.temp_dir + '/driver/driver.xml.bak', self.uc.temp_dir + '/driver/driver.xml')
 
+        # noinspection PyUnusedLocal
         def validate_driver_name(self, *args):
-            if args:  # For IDE unused argument warning
-                pass
-
             if no_dark_mode or not is_dark_mode():
                 self.driver_name_entry['background'] = 'white'
             else:
@@ -1518,9 +1516,8 @@ class C4IconSwapperMac:
                 self.uc.driver_info_win.destroy()
                 self.uc.driver_info_win = None
 
+            # noinspection PyUnusedLocal
             def validate_version(*args):
-                if args:  # For IDE unused argument warning
-                    pass
                 version_str = self.uc.driver_version_new_var.get()
                 temp_str = ''
                 cursor_pos = driver_ver_new_entry.index(INSERT)
@@ -1535,9 +1532,8 @@ class C4IconSwapperMac:
                     driver_ver_new_entry.icursor(cursor_pos - str_diff)
                 self.uc.driver_version_new_var.set(temp_str)
 
+            # noinspection PyUnusedLocal
             def validate_name(*args):
-                if args:  # For IDE unused argument warning
-                    pass
                 # Check manufacturer variable
                 name = ''
                 for char in self.uc.driver_manufac_new_var.get():
@@ -1627,10 +1623,8 @@ class C4IconSwapperMac:
             driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
             driver_ver_orig_entry['state'] = DISABLED
 
+        # noinspection PyUnusedLocal
         def update_driver_version(self, *args):
-            if args:  # For IDE unused argument warning
-                pass
-
             # Update driver version if 'increment driver' is selected and new version value is <= last version value
             if self.inc_driver_version.get() == 0:
                 return
@@ -1856,12 +1850,11 @@ class C4IconSwapperMac:
                 self.name_entry.place(x=self.x + 36, y=self.y, anchor='w')
                 self.name_entry['state'] = DISABLED
 
+            # noinspection PyUnusedLocal
             def validate_state(self, *args):
                 background_color = 'white'
                 if is_dark_mode():
                     background_color = 'black'
-                if args:  # For IDE unused argument warning
-                    pass
                 self.format_state_name()
                 if self.name_var.get() == '':
                     self.name_entry['background'] = 'pink'
@@ -2354,16 +2347,16 @@ class C4IconSwapperMac:
         if self.checked_in and not os.path.isdir(self.temp_root_dir + 'check_in'):
             self.checked_in = False
         elif not self.checked_in and os.path.isdir(self.temp_root_dir + 'check_in'):
-            with open(get_path(self.temp_root_dir + 'check_in/' + self.instance_id), 'w', errors='ignore') as check_in_file:
+            with open(get_path(self.temp_root_dir + 'check_in/' + self.instance_id), 'w', errors='ignore') as \
+                    check_in_file:
                 check_in_file.writelines('')
             self.checked_in = True
             self.root.title('C4 Icon Swapper (' + self.instance_id + ')')
 
         self.root.after(150, self.instance_check)
 
+    # noinspection PyUnusedLocal
     def easter(self, *args):
-        if args:  # For IDE unused argument warning
-            pass
         self.easter_counter += 1
 
 
