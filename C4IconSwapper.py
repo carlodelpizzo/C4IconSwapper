@@ -188,10 +188,10 @@ class C4IconSwapper:
             sizes = [(70, 70), (90, 90), (300, 300), (512, 512)]
             pictures = os.listdir(self.uc.device_icon_dir)
             for picture in pictures:
-                resized_icon = Image.open(self.uc.device_icon_dir + '/' + picture)
+                resized_icon = Image.open(self.uc.device_icon_dir + picture)
                 for size in sizes:
                     new_icon = resized_icon.resize(size)
-                    new_icon.save(self.uc.device_icon_dir + '/' + picture.replace(str(1024), str(size[0])))
+                    new_icon.save(self.uc.device_icon_dir + picture.replace(str(1024), str(size[0])))
 
             shutil.make_archive(temp_gen_driver.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
             os.rename(temp_gen_driver.replace('.c4z', '.zip'), temp_gen_driver)
@@ -232,10 +232,10 @@ class C4IconSwapper:
             sizes = [(90, 90), (300, 300), (512, 512), (1024, 1024)]
             pictures = os.listdir(self.uc.device_icon_dir)
             for picture in pictures:
-                resized_icon = Image.open(self.uc.device_icon_dir + '/' + picture)
+                resized_icon = Image.open(self.uc.device_icon_dir + picture)
                 for size in sizes:
                     new_icon = resized_icon.resize(size)
-                    new_icon.save(self.uc.device_icon_dir + '/' + picture.replace(str(70), str(size[0])))
+                    new_icon.save(self.uc.device_icon_dir + picture.replace(str(70), str(size[0])))
 
             shutil.make_archive(temp_gen_driver.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
             os.rename(temp_gen_driver.replace('.c4z', '.zip'), temp_gen_driver)
@@ -586,7 +586,7 @@ class C4IconSwapper:
                 self.uc.disable_states()
 
             # Update button statuses
-            if not self.file_entry_field.get().endswith('generic.c4z') and not\
+            if not self.file_entry_field.get().endswith('generic.c4z') and not \
                     self.file_entry_field.get() == 'Invalid driver selected...':
                 # Update generic driver buttons
                 self.gen_driver_button['state'] = NORMAL
@@ -1560,7 +1560,7 @@ class C4IconSwapper:
                             os.remove(directory + '/' + file)
 
             # Create .c4z file
-            shutil.make_archive(self.uc.temp_dir + driver_name, 'zip', self.uc.temp_dir + '/driver')
+            shutil.make_archive(self.uc.temp_dir + driver_name, 'zip', self.uc.temp_dir + 'driver')
             base = os.path.splitext(self.uc.temp_dir + driver_name + '.zip')[0]
             os.rename(self.uc.temp_dir + driver_name + '.zip', base + '.c4z')
             shutil.copy(self.uc.temp_dir + driver_name + '.c4z', path)
@@ -2131,9 +2131,9 @@ class C4IconSwapper:
         self.states_orig_names = []
         self.driver_xml = None
         self.states_shown = False
-        self.device_icon_dir = self.temp_dir + 'driver/www/icons/device'
-        self.icon_dir = self.temp_dir + 'driver/www/icons'
-        self.images_dir = self.temp_dir + 'driver/www/images'
+        self.device_icon_dir = self.temp_dir + 'driver/www/icons/device/'
+        self.icon_dir = self.temp_dir + 'driver/www/icons/'
+        self.images_dir = self.temp_dir + 'driver/www/images/'
         self.replacement_image_path = self.temp_dir + 'replacement_icon.png'
         self.orig_file_dir = ''
         self.orig_file_path = ''
