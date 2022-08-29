@@ -2526,6 +2526,7 @@ class C4IconSwapper:
         self.instance_id = str(random.randint(111111, 999999))
         if on_mac:
             self.cur_dir = get_path('/tmp')
+            self.cur_dir += '/'
         else:
             self.cur_dir = os.getcwd() + '/'
         self.temp_root_dir = self.cur_dir + 'C4IconSwapperTemp/'
