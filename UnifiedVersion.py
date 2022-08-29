@@ -48,7 +48,7 @@ if on_mac:
 label_font = 'Arial'
 
 
-class C4IconSwapperUni:
+class C4IconSwapper:
     class C4zPanel:
         class SubIcon:
             def __init__(self, root_path: str, path: str, name: str, size: int):
@@ -3056,6 +3056,3 @@ if on_mac:
 
 def natural_key(string: str):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
-
-
-C4IconSwapperUni()
