@@ -149,15 +149,16 @@ class C4IconSwapper:
                 self.multi_driver_button.place(x=5 + self.x, y=219 + self.y, anchor='nw')
 
             # Entry
-            self.file_entry_field = tk.Entry(self.uc.root, width=22, takefocus=0)
-            self.file_entry_field.insert(0, 'Select .c4z file...')
-            self.file_entry_field['state'] = DISABLED
             if on_mac:
+                self.file_entry_field = tk.Entry(self.uc.root, width=22, takefocus=0)
                 self.file_entry_field.place(x=101 + self.x, y=15 + self.y, anchor='n')
             else:
+                self.file_entry_field = tk.Entry(self.uc.root, width=25, takefocus=0)
                 self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
                 self.file_entry_field.drop_target_register(DND_FILES)
                 self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_c4z)
+            self.file_entry_field.insert(0, 'Select .c4z file...')
+            self.file_entry_field['state'] = DISABLED
 
             # Checkbox
             self.show_extra_icons = IntVar(value=0)
