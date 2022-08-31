@@ -1797,7 +1797,7 @@ class C4IconSwapper:
                 if no_dark_mode or not is_dark_mode():
                     self.driver_name_entry['background'] = 'white'
                 else:
-                    self.driver_name_entry['background'] = 'black'
+                    self.driver_name_entry['background'] = '#444446'
 
             driver_name = ''
             for char in self.driver_name_var.get():
@@ -2188,7 +2188,7 @@ class C4IconSwapper:
             def validate_state(self, *args):
                 background_color = 'white'
                 if on_mac and is_dark_mode():
-                    background_color = 'black'
+                    background_color = '#444446'
                 self.format_state_name()
                 if self.name_var.get() == '':
                     self.name_entry['background'] = 'pink'
@@ -2740,8 +2740,8 @@ class C4IconSwapper:
         if self.counter > 0:
             self.counter -= 1
             if on_mac and not no_dark_mode and is_dark_mode():
-                if self.export_panel.driver_name_entry['background'] != 'black':
-                    self.export_panel.driver_name_entry['background'] = 'black'
+                if self.export_panel.driver_name_entry['background'] != '#444446':
+                    self.export_panel.driver_name_entry['background'] = '#444446'
                 else:
                     self.export_panel.driver_name_entry['background'] = 'pink'
             else:
