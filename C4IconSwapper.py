@@ -25,6 +25,8 @@ else:
     on_mac = False
 
 version = '5.10b'  # Need to fix dark mode handling and driver info layout on Mac
+light_entry_bg = '#FFFFFF'
+dark_entry_bg = '#444446'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -1795,9 +1797,9 @@ class C4IconSwapper:
         def validate_driver_name(self, *args):
             if on_mac:
                 if no_dark_mode or not is_dark_mode():
-                    self.driver_name_entry['background'] = 'white'
+                    self.driver_name_entry['background'] = light_entry_bg
                 else:
-                    self.driver_name_entry['background'] = '#444446'
+                    self.driver_name_entry['background'] = dark_entry_bg
 
             driver_name = ''
             for char in self.driver_name_var.get():
@@ -2186,9 +2188,9 @@ class C4IconSwapper:
 
             # noinspection PyUnusedLocal
             def validate_state(self, *args):
-                background_color = 'white'
+                background_color = light_entry_bg
                 if on_mac and is_dark_mode():
-                    background_color = '#444446'
+                    background_color = dark_entry_bg
                 self.format_state_name()
                 if self.name_var.get() == '':
                     self.name_entry['background'] = 'pink'
@@ -2745,8 +2747,8 @@ class C4IconSwapper:
                 else:
                     self.export_panel.driver_name_entry['background'] = 'pink'
             else:
-                if self.export_panel.driver_name_entry['background'] != 'white':
-                    self.export_panel.driver_name_entry['background'] = 'white'
+                if self.export_panel.driver_name_entry['background'] != light_entry_bg:
+                    self.export_panel.driver_name_entry['background'] = light_entry_bg
                 else:
                     self.export_panel.driver_name_entry['background'] = 'pink'
             self.root.after(150, self.blink_driver_name_entry)
