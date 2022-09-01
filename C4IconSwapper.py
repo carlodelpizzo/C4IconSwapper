@@ -26,7 +26,7 @@ else:
 
 version = '5.10b'  # Need to fix dark mode handling and driver info layout on Mac
 light_entry_bg = '#FFFFFF'
-dark_entry_bg = '#444446'
+dark_entry_bg = '#282830'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -2756,6 +2756,9 @@ class C4IconSwapper:
                 self.root.title('C4 Icon Swapper (' + self.instance_id + ')')
 
             self.root.after(150, self.instance_check)
+    else:
+        def dark_mode_check(self):
+            pass
 
     # noinspection PyUnusedLocal
     def easter(self, *args, decay=False):
