@@ -2516,6 +2516,10 @@ class C4IconSwapper:
         # Main Loop
         if not on_mac:
             self.root.after(150, self.instance_check)
+        else:
+            self.dark_mode = is_dark_mode()
+            if not no_dark_mode:
+                self.root.after(150, self.dark_mode_check)
         self.root.mainloop()
         # On program close
         if on_mac:
@@ -2758,7 +2762,18 @@ class C4IconSwapper:
             self.root.after(150, self.instance_check)
     else:
         def dark_mode_check(self):
-            pass
+            dark_mode_status = is_dark_mode()
+            if self.dark_mode != dark_mode_status:
+                if dark_mode_status:
+                    background = light_entry_bg
+                else:
+                    background = dark_entry_bg
+                for connection in self.connections_panel.connections:
+                    connection.name_entry['background'] = background
+                self.export_panel.driver_name_entry['background'] = background
+                for state in self.state_panel.states:
+                    state.name_entry['background'] = background
+            self.root.after(150, self.dark_mode_check)
 
     # noinspection PyUnusedLocal
     def easter(self, *args, decay=False):
