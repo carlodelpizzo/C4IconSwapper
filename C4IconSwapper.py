@@ -510,6 +510,7 @@ class C4IconSwapper:
                             shutil.rmtree(self.uc.temp_dir + 'driver/')
                         shutil.copytree(self.uc.temp_dir + temp_bak, self.uc.temp_dir + 'driver/')
                         shutil.rmtree(self.uc.temp_dir + temp_bak)
+                    self.uc.root.after(3000, self.uc.restore_entry_text)
                     self.uc.schedule_entry_restore = True
                     self.uc.restore_entry_string = self.file_entry_field.get()
                     self.uc.driver_selected = True
@@ -2424,7 +2425,6 @@ class C4IconSwapper:
         self.replacement_selected = False
         self.schedule_entry_restore = False
         self.restore_entry_string = ''
-        self.time_var = 0
         self.conn_dict = {}
         for key in ['HDMI IN', 'COMPOSITE IN', 'VGA IN', 'COMPONENT IN', 'DVI IN']:
             self.conn_dict[key] = '\t\t\t<type>5</type>\n\t\t\t' \
@@ -2514,7 +2514,6 @@ class C4IconSwapper:
             os.remove(temp_icon_file)
 
         # Main Loop
-        self.root.after(2000, self.restore_entry_text)
         if not on_mac:
             self.root.after(150, self.instance_check)
         self.root.mainloop()
@@ -2643,23 +2642,16 @@ class C4IconSwapper:
         self.show_states_button['text'] = 'Show States'
 
     def restore_entry_text(self):
-        # Easter counter decay
-        if self.easter_counter > 0:
-            self.easter_counter -= 1
-
-        if self.schedule_entry_restore:
-            self.time_var = int(round(time.time() * 100))
+        if self.schedule_entry_restore and self.restore_entry_string != '':
+            self.c4z_panel.file_entry_field['state'] = NORMAL
+            self.c4z_panel.file_entry_field.delete(0, 'end')
+            self.c4z_panel.file_entry_field.insert(0, self.restore_entry_string)
+            self.c4z_panel.file_entry_field['state'] = 'readonly'
+            self.restore_entry_string = ''
             self.schedule_entry_restore = False
-        elif self.time_var != 0:
-            if int(round(time.time() * 100)) - self.time_var > 3:
-                self.c4z_panel.file_entry_field['state'] = NORMAL
-                self.c4z_panel.file_entry_field.delete(0, 'end')
-                self.c4z_panel.file_entry_field.insert(0, self.restore_entry_string)
-                self.c4z_panel.file_entry_field['state'] = 'readonly'
-                self.restore_entry_string = ''
-                self.time_var = 0
-
-        self.root.after(2000, self.restore_entry_text)
+            return
+        elif self.schedule_entry_restore and self.restore_entry_string == '':
+            self.schedule_entry_restore = False
 
     def key_release(self, event):
         if event.keysym == 'Right':
@@ -2742,8 +2734,8 @@ class C4IconSwapper:
         if self.counter > 0:
             self.counter -= 1
             if on_mac and not no_dark_mode and is_dark_mode():
-                if self.export_panel.driver_name_entry['background'] != '#444446':
-                    self.export_panel.driver_name_entry['background'] = '#444446'
+                if self.export_panel.driver_name_entry['background'] != dark_entry_bg:
+                    self.export_panel.driver_name_entry['background'] = dark_entry_bg
                 else:
                     self.export_panel.driver_name_entry['background'] = 'pink'
             else:
@@ -2766,8 +2758,21 @@ class C4IconSwapper:
             self.root.after(150, self.instance_check)
 
     # noinspection PyUnusedLocal
-    def easter(self, *args):
+    def easter(self, *args, decay=False):
+        if decay:
+            if self.easter_counter > 0:
+                self.easter_counter -= 1
+            else:
+                self.easter_counter = 0
+                return
+            self.root.after(2000, self.easter_decay)
+            return
+        if self.easter_counter == 0:
+            self.root.after(2000, self.easter_decay)
         self.easter_counter += 1
+
+    def easter_decay(self):
+        self.easter(decay=True)
 
 
 def list_all_sub_directories(directory: str, include_root_dir=False):
