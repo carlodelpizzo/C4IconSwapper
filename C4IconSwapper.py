@@ -2770,9 +2770,9 @@ class C4IconSwapper:
                 self.wait_to_check = True
                 self.dark_mode = dark_mode_status
                 if dark_mode_status:
-                    background = light_entry_bg
-                else:
                     background = dark_entry_bg
+                else:
+                    background = light_entry_bg
                 for connection in self.connections_panel.connections:
                     connection.name_entry['background'] = background
                 self.export_panel.driver_name_entry['background'] = background
