@@ -1906,7 +1906,6 @@ class C4IconSwapper:
             driver_ver_label = tk.Label(self.uc.driver_info_win, text='Driver Version',
                                         font=(label_font, font_size))
 
-
             # Entry
             if not on_mac:
                 entry_width = 17
@@ -1970,7 +1969,6 @@ class C4IconSwapper:
                 driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
                 driver_ver_new_entry.place(x=180, y=version_y + 7, anchor='nw')
                 driver_ver_orig_entry.place(x=140, y=version_y + 35, anchor='nw')
-
 
         # noinspection PyUnusedLocal
         def update_driver_version(self, *args):
