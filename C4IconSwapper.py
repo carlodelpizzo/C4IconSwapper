@@ -1897,21 +1897,28 @@ class C4IconSwapper:
             driver_ver_orig_label = tk.Label(self.uc.driver_info_win, text='Original Version:', font=(label_font, 8))
 
             # Entry
+            if not on_mac:
+                entry_width = 17
+            else:
+                entry_width = 14
             self.uc.driver_manufac_new_var.trace('w', validate_name)
-            driver_man_entry = tk.Entry(self.uc.driver_info_win, width=17, textvariable=self.uc.driver_manufac_var)
+            driver_man_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
+                                        textvariable=self.uc.driver_manufac_var)
             driver_man_entry['state'] = DISABLED
-            driver_man_new_entry = tk.Entry(self.uc.driver_info_win, width=17,
+            driver_man_new_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
                                             textvariable=self.uc.driver_manufac_new_var)
 
             self.uc.driver_creator_new_var.trace('w', validate_name)
-            driver_creator_entry = tk.Entry(self.uc.driver_info_win, width=17, textvariable=self.uc.driver_creator_var)
+            driver_creator_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
+                                            textvariable=self.uc.driver_creator_var)
             driver_creator_entry['state'] = DISABLED
-            driver_creator_new_entry = tk.Entry(self.uc.driver_info_win, width=17,
+            driver_creator_new_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
                                                 textvariable=self.uc.driver_creator_new_var)
 
-            driver_ver_entry = tk.Entry(self.uc.driver_info_win, width=17, textvariable=self.uc.driver_version_var)
+            driver_ver_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
+                                        textvariable=self.uc.driver_version_var)
             driver_ver_entry['state'] = DISABLED
-            driver_ver_new_entry = tk.Entry(self.uc.driver_info_win, width=17,
+            driver_ver_new_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
                                             textvariable=self.uc.driver_version_new_var)
             driver_ver_new_entry.bind('<FocusOut>', self.update_driver_version)
             self.uc.driver_version_new_var.trace('w', validate_version)
