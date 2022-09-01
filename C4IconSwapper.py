@@ -24,7 +24,7 @@ else:
     from tkinterdnd2 import DND_FILES, TkinterDnD
     on_mac = False
 
-version = '5.10b'  # Need to fix dark mode handling and driver info layout on Mac
+version = '5.10b'  # Need to fix driver info layout on Mac
 light_entry_bg = '#FFFFFF'
 dark_entry_bg = '#282830'
 
@@ -1864,7 +1864,10 @@ class C4IconSwapper:
             self.uc.driver_info_win.focus()
             self.uc.driver_info_win.protocol("WM_DELETE_WINDOW", on_win_close)
             self.uc.driver_info_win.title('Edit Driver Info')
-            self.uc.driver_info_win.geometry('255x240')
+            if not on_mac:
+                self.uc.driver_info_win.geometry('255x240')
+            else:
+                self.uc.driver_info_win.geometry('333x240')
             self.uc.driver_info_win.geometry(f'+{win_x}+{win_y}')
             self.uc.driver_info_win.resizable(False, False)
 
@@ -1879,55 +1882,74 @@ class C4IconSwapper:
 
             man_y = 20
             man_arrow = tk.Label(self.uc.driver_info_win, text='\u2192', font=('', 15))
-            man_arrow.place(x=115, y=man_y, anchor='nw')
 
             creator_y = man_y + 55
             creator_arrow = tk.Label(self.uc.driver_info_win, text='\u2192', font=('', 15))
-            creator_arrow.place(x=115, y=creator_y, anchor='nw')
 
             version_y = creator_y + 55
             version_arrow = tk.Label(self.uc.driver_info_win, text='\u2192', font=('', 15))
-            version_arrow.place(x=115, y=version_y, anchor='nw')
 
             driver_man_label = tk.Label(self.uc.driver_info_win, text='Driver Manufacturer', font=(label_font, 10))
-            driver_man_label.place(x=127, y=man_y - 15, anchor='n')
 
             driver_creator_label = tk.Label(self.uc.driver_info_win, text='Driver Creator', font=(label_font, 10))
-            driver_creator_label.place(x=127, y=creator_y - 15, anchor='n')
 
             driver_ver_label = tk.Label(self.uc.driver_info_win, text='Driver Version', font=(label_font, 10))
-            driver_ver_label.place(x=127, y=version_y - 15, anchor='n')
             driver_ver_orig_label = tk.Label(self.uc.driver_info_win, text='Original Version:', font=(label_font, 8))
-            driver_ver_orig_label.place(x=110, y=version_y + 30, anchor='ne')
 
             # Entry
             self.uc.driver_manufac_new_var.trace('w', validate_name)
             driver_man_entry = tk.Entry(self.uc.driver_info_win, width=17, textvariable=self.uc.driver_manufac_var)
-            driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
             driver_man_entry['state'] = DISABLED
             driver_man_new_entry = tk.Entry(self.uc.driver_info_win, width=17,
                                             textvariable=self.uc.driver_manufac_new_var)
-            driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
 
             self.uc.driver_creator_new_var.trace('w', validate_name)
             driver_creator_entry = tk.Entry(self.uc.driver_info_win, width=17, textvariable=self.uc.driver_creator_var)
-            driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
             driver_creator_entry['state'] = DISABLED
             driver_creator_new_entry = tk.Entry(self.uc.driver_info_win, width=17,
                                                 textvariable=self.uc.driver_creator_new_var)
-            driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
 
             driver_ver_entry = tk.Entry(self.uc.driver_info_win, width=17, textvariable=self.uc.driver_version_var)
-            driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
             driver_ver_entry['state'] = DISABLED
             driver_ver_new_entry = tk.Entry(self.uc.driver_info_win, width=17,
                                             textvariable=self.uc.driver_version_new_var)
-            driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
             driver_ver_new_entry.bind('<FocusOut>', self.update_driver_version)
             self.uc.driver_version_new_var.trace('w', validate_version)
             driver_ver_orig_entry = tk.Entry(self.uc.driver_info_win, width=6, textvariable=self.uc.driver_ver_orig)
-            driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
             driver_ver_orig_entry['state'] = DISABLED
+            if not on_mac:
+                man_arrow.place(x=115, y=man_y, anchor='nw')
+                creator_arrow.place(x=115, y=creator_y, anchor='nw')
+                version_arrow.place(x=115, y=version_y, anchor='nw')
+                driver_man_label.place(x=127, y=man_y - 15, anchor='n')
+                driver_creator_label.place(x=127, y=creator_y - 15, anchor='n')
+                driver_ver_label.place(x=127, y=version_y - 15, anchor='n')
+                driver_ver_orig_label.place(x=110, y=version_y + 30, anchor='ne')
+                driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
+                driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
+                driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
+                driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
+                driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
+                driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
+                driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
+            else:
+                man_arrow.place(x=175, y=man_y, anchor='nw')
+                creator_arrow.place(x=175, y=creator_y, anchor='nw')
+                version_arrow.place(x=175, y=version_y, anchor='nw')
+
+                driver_man_label.place(x=166, y=man_y - 15, anchor='n')
+                driver_creator_label.place(x=166, y=creator_y - 15, anchor='n')
+                driver_ver_label.place(x=166, y=version_y - 15, anchor='n')
+                driver_ver_orig_label.place(x=110, y=version_y + 30, anchor='ne')
+
+                driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
+                driver_man_new_entry.place(x=180, y=man_y + 7, anchor='nw')
+                driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
+                driver_creator_new_entry.place(x=180, y=creator_y + 7, anchor='nw')
+                driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
+                driver_ver_new_entry.place(x=180, y=version_y + 7, anchor='nw')
+                driver_ver_orig_entry.place(x=130, y=version_y + 30, anchor='nw')
+
 
         # noinspection PyUnusedLocal
         def update_driver_version(self, *args):
