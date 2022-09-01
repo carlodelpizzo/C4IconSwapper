@@ -2518,6 +2518,7 @@ class C4IconSwapper:
             self.root.after(150, self.instance_check)
         else:
             self.dark_mode = is_dark_mode()
+            self.wait_to_check = False
             if not no_dark_mode:
                 self.root.after(150, self.dark_mode_check)
         self.root.mainloop()
@@ -2762,8 +2763,12 @@ class C4IconSwapper:
             self.root.after(150, self.instance_check)
     else:
         def dark_mode_check(self):
+            if self.wait_to_check:
+                return
             dark_mode_status = is_dark_mode()
             if self.dark_mode != dark_mode_status:
+                self.wait_to_check = True
+                self.dark_mode = dark_mode_status
                 if dark_mode_status:
                     background = light_entry_bg
                 else:
@@ -2773,6 +2778,7 @@ class C4IconSwapper:
                 self.export_panel.driver_name_entry['background'] = background
                 for state in self.state_panel.states:
                     state.name_entry['background'] = background
+                self.wait_to_check = False
             self.root.after(150, self.dark_mode_check)
 
     # noinspection PyUnusedLocal
