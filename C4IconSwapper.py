@@ -24,7 +24,7 @@ else:
     from tkinterdnd2 import DND_FILES, TkinterDnD
     on_mac = False
 
-version = '5.10b'  # Need to fix driver info layout on Mac
+version = '5.10b'
 light_entry_bg = '#FFFFFF'
 dark_entry_bg = '#282830'
 
@@ -1867,7 +1867,7 @@ class C4IconSwapper:
             if not on_mac:
                 self.uc.driver_info_win.geometry('255x240')
             else:
-                self.uc.driver_info_win.geometry('333x240')
+                self.uc.driver_info_win.geometry('347x240')
             self.uc.driver_info_win.geometry(f'+{win_x}+{win_y}')
             self.uc.driver_info_win.resizable(False, False)
 
@@ -1878,7 +1878,6 @@ class C4IconSwapper:
 
             # Labels
             instance_id_label = tk.Label(self.uc.driver_info_win, text='instance id: ' + self.uc.instance_id)
-            instance_id_label.place(x=127, y=220, anchor='n')
 
             man_y = 20
             man_arrow = tk.Label(self.uc.driver_info_win, text='\u2192', font=('', 15))
@@ -1889,18 +1888,30 @@ class C4IconSwapper:
             version_y = creator_y + 55
             version_arrow = tk.Label(self.uc.driver_info_win, text='\u2192', font=('', 15))
 
-            driver_man_label = tk.Label(self.uc.driver_info_win, text='Driver Manufacturer', font=(label_font, 10))
+            if not on_mac:
+                font_size = 10
+                driver_ver_orig_label = tk.Label(self.uc.driver_info_win, text='Original Version:',
+                                                 font=(label_font, 8))
+            else:
+                font_size = 13
+                driver_ver_orig_label = tk.Label(self.uc.driver_info_win, text='Original Version:',
+                                                 font=(label_font, 11))
 
-            driver_creator_label = tk.Label(self.uc.driver_info_win, text='Driver Creator', font=(label_font, 10))
+            driver_man_label = tk.Label(self.uc.driver_info_win, text='Driver Manufacturer',
+                                        font=(label_font, font_size))
 
-            driver_ver_label = tk.Label(self.uc.driver_info_win, text='Driver Version', font=(label_font, 10))
-            driver_ver_orig_label = tk.Label(self.uc.driver_info_win, text='Original Version:', font=(label_font, 8))
+            driver_creator_label = tk.Label(self.uc.driver_info_win, text='Driver Creator',
+                                            font=(label_font, font_size))
+
+            driver_ver_label = tk.Label(self.uc.driver_info_win, text='Driver Version',
+                                        font=(label_font, font_size))
+
 
             # Entry
             if not on_mac:
                 entry_width = 17
             else:
-                entry_width = 14
+                entry_width = 16
             self.uc.driver_manufac_new_var.trace('w', validate_name)
             driver_man_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
                                         textvariable=self.uc.driver_manufac_var)
@@ -1925,6 +1936,7 @@ class C4IconSwapper:
             driver_ver_orig_entry = tk.Entry(self.uc.driver_info_win, width=6, textvariable=self.uc.driver_ver_orig)
             driver_ver_orig_entry['state'] = DISABLED
             if not on_mac:
+                instance_id_label.place(x=127, y=220, anchor='n')
                 man_arrow.place(x=115, y=man_y, anchor='nw')
                 creator_arrow.place(x=115, y=creator_y, anchor='nw')
                 version_arrow.place(x=115, y=version_y, anchor='nw')
@@ -1940,14 +1952,16 @@ class C4IconSwapper:
                 driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
                 driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
             else:
-                man_arrow.place(x=175, y=man_y, anchor='nw')
-                creator_arrow.place(x=175, y=creator_y, anchor='nw')
-                version_arrow.place(x=175, y=version_y, anchor='nw')
+                instance_id_label.place(x=173, y=220, anchor='n')
 
-                driver_man_label.place(x=166, y=man_y - 15, anchor='n')
-                driver_creator_label.place(x=166, y=creator_y - 15, anchor='n')
-                driver_ver_label.place(x=166, y=version_y - 15, anchor='n')
-                driver_ver_orig_label.place(x=110, y=version_y + 30, anchor='ne')
+                man_arrow.place(x=163, y=man_y + 7, anchor='nw')
+                creator_arrow.place(x=163, y=creator_y + 7, anchor='nw')
+                version_arrow.place(x=163, y=version_y + 7, anchor='nw')
+
+                driver_man_label.place(x=173, y=man_y - 15, anchor='n')
+                driver_creator_label.place(x=173, y=creator_y - 15, anchor='n')
+                driver_ver_label.place(x=173, y=version_y - 15, anchor='n')
+                driver_ver_orig_label.place(x=140, y=version_y + 35, anchor='ne')
 
                 driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
                 driver_man_new_entry.place(x=180, y=man_y + 7, anchor='nw')
@@ -1955,7 +1969,7 @@ class C4IconSwapper:
                 driver_creator_new_entry.place(x=180, y=creator_y + 7, anchor='nw')
                 driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
                 driver_ver_new_entry.place(x=180, y=version_y + 7, anchor='nw')
-                driver_ver_orig_entry.place(x=130, y=version_y + 30, anchor='nw')
+                driver_ver_orig_entry.place(x=140, y=version_y + 35, anchor='nw')
 
 
         # noinspection PyUnusedLocal
