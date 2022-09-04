@@ -24,7 +24,7 @@ else:
     from tkinterdnd2 import DND_FILES, TkinterDnD
     on_mac = False
 
-version = '5.10b'
+version = '5.11b'
 light_entry_bg = '#FFFFFF'
 dark_entry_bg = '#282830'
 
@@ -306,7 +306,7 @@ class C4IconSwapper:
                 self.icon_label.config(text='icon: ' + str(self.current_icon + 1) + ' of ' + str(len(self.icons)))
             self.icon_name_label.config(text='name: ' + self.icons[self.current_icon].name)
 
-        def upload_c4z(self, given_path=None):
+        def upload_c4z(self, given_path=None, recovery=False):
             def get_icons(directory):
                 if not os.path.isdir(directory):
                     return
@@ -411,23 +411,26 @@ class C4IconSwapper:
                     shutil.copytree(self.uc.temp_dir + 'driver', self.uc.temp_dir + temp_bak)
 
             # File select dialog
-            if given_path is None:
+            if given_path is None and not recovery:
                 filename = filedialog.askopenfilename(filetypes=[("Control4 Drivers", "*.c4z")])
                 # If no file selected
                 if not filename:
                     if os.path.isdir(self.uc.temp_dir + temp_bak):
                         shutil.rmtree(self.uc.temp_dir + temp_bak)
                     return
+            elif recovery:
+                filename = 'Recovered Driver'
             else:
                 filename = given_path
 
             # Delete existing driver
             self.uc.driver_selected = False
-            if os.path.isdir(self.uc.temp_dir + 'driver/'):
+            if os.path.isdir(self.uc.temp_dir + 'driver/') and not recovery:
                 shutil.rmtree(self.uc.temp_dir + 'driver/')
 
             # Unpack selected driver
-            shutil.unpack_archive(filename, self.uc.temp_dir + 'driver', 'zip')
+            if not recovery:
+                shutil.unpack_archive(filename, self.uc.temp_dir + 'driver', 'zip')
 
             # Get all individual icons from driver
             icon_objects = []
@@ -560,7 +563,7 @@ class C4IconSwapper:
             # Update entry with driver file path
             self.file_entry_field['state'] = NORMAL
             self.file_entry_field.delete(0, 'end')
-            self.file_entry_field.insert(0, filename)
+            self.file_entry_field.insert(0, filename.replace('\\', '/'))
             self.file_entry_field['state'] = 'readonly'
             orig_file_path = filename
             orig_driver_name = ''
@@ -576,6 +579,8 @@ class C4IconSwapper:
             if orig_driver_name != 'generic' and orig_driver_name != 'multi generic':
                 self.uc.export_panel.driver_name_entry.delete(0, 'end')
                 self.uc.export_panel.driver_name_entry.insert(0, orig_driver_name)
+            if self.uc.export_panel.driver_name_entry.get() == '':
+                self.uc.export_panel.driver_name_entry.insert(0, 'New Driver')
             self.uc.driver_selected = True
             self.current_icon = 0
             self.update_icon()
@@ -863,15 +868,29 @@ class C4IconSwapper:
         if not on_mac:
             def drop_in_c4z(self, event):
                 dropped_path = event.data.replace('{', '').replace('}', '')
+                multi_file_drop = []
+                running_str = ''
+                for char in dropped_path:
+                    if char == ' ' and is_valid_image(running_str):
+                        multi_file_drop.append(running_str)
+                        running_str = ''
+                        continue
+                    running_str += char
+                if is_valid_image(running_str):
+                    multi_file_drop.append(running_str)
+                if multi_file_drop:
+                    for file in multi_file_drop:
+                        self.uc.replacement_panel.upload_replacement(given_path=file)
+                    return
+
                 if dropped_path.endswith('.c4z'):
                     self.upload_c4z(given_path=dropped_path)
-                elif dropped_path.endswith('.png') or dropped_path.endswith('.jpg') or \
-                        dropped_path.endswith('.gif') or dropped_path.endswith('.jpeg'):
+                elif is_valid_image(dropped_path):
                     self.uc.replacement_panel.upload_replacement(given_path=dropped_path)
                 elif '.' not in dropped_path:
                     image_paths = os.listdir(dropped_path)
                     for new_img_path in image_paths:
-                        self.uc.replacement_panel.upload_replacement(dropped_path + '/' + new_img_path)
+                        self.uc.replacement_panel.upload_replacement(given_path=dropped_path + '/' + new_img_path)
 
     class ReplacementPanel:
         def __init__(self, upper_class):
@@ -992,10 +1011,7 @@ class C4IconSwapper:
             else:
                 filename = given_path
 
-            if not filename:
-                return
-            if not filename.endswith('.png') and not filename.endswith('.jpg') and not filename.endswith('.gif') and \
-                    not filename.endswith('.jpeg'):
+            if not filename or not is_valid_image(filename):
                 return
 
             if self.uc.replacement_selected:
@@ -1004,7 +1020,7 @@ class C4IconSwapper:
 
             self.file_entry_field['state'] = NORMAL
             self.file_entry_field.delete(0, 'end')
-            self.file_entry_field.insert(0, filename)
+            self.file_entry_field.insert(0, filename.replace('\\', '/'))
             self.file_entry_field['state'] = 'readonly'
 
             if self.uc.driver_selected:
@@ -1024,10 +1040,7 @@ class C4IconSwapper:
             self.blank_image_label.image = icon
 
         def add_to_img_stack(self, img_path: str, index=None):
-            if not os.path.isfile(img_path):
-                return
-            if not img_path.endswith('.png') and not img_path.endswith('.jpg') and not img_path.endswith('.gif') and \
-                    not img_path.endswith('.jpeg'):
+            if not os.path.isfile(img_path) or not is_valid_image(img_path):
                 return
             for img in self.img_stack:
                 if filecmp.cmp(img, img_path):
@@ -1128,18 +1141,6 @@ class C4IconSwapper:
                 if self.uc.c4z_panel.show_extra_icons.get() == 0 and self.uc.c4z_panel.icons[i].extra:
                     continue
                 self.replace_icon(index=i)
-
-        def drop_in_replacement(self, event):
-            img_path = event.data.replace('{', '').replace('}', '')
-            if '.' not in img_path:
-                image_paths = os.listdir(img_path)
-                for new_img_path in image_paths:
-                    self.upload_replacement(img_path + '/' + new_img_path)
-                return
-            if not img_path.endswith('.png') and not img_path.endswith('.jpg') and not img_path.endswith('.gif') and \
-                    not img_path.endswith('.jpeg'):
-                return
-            self.upload_replacement(given_path=img_path)
 
         def select_stack0(self, event):
             if len(self.img_stack) == 0:
@@ -1288,6 +1289,31 @@ class C4IconSwapper:
                     return
                 self.upload_replacement(given_path=self.img_stack[4])
         else:
+            def drop_in_replacement(self, event):
+                img_path = event.data.replace('{', '').replace('}', '')
+                multi_file_drop = []
+                running_str = ''
+                for char in img_path:
+                    if char == ' ' and is_valid_image(running_str):
+                        multi_file_drop.append(running_str)
+                        running_str = ''
+                        continue
+                    running_str += char
+                if is_valid_image(running_str):
+                    multi_file_drop.append(running_str)
+                if multi_file_drop:
+                    for file in multi_file_drop:
+                        self.upload_replacement(given_path=file)
+                    return
+                if '.' not in img_path:
+                    image_paths = os.listdir(img_path)
+                    for new_img_path in image_paths:
+                        self.upload_replacement(given_path=img_path + '/' + new_img_path)
+                    return
+                if not is_valid_image(img_path):
+                    return
+                self.upload_replacement(given_path=img_path)
+
             def drop_stack0(self, event):
                 dropped_path = event.data.replace('{', '').replace('}', '')
                 self.add_to_img_stack(dropped_path, index=0)
@@ -2359,6 +2385,8 @@ class C4IconSwapper:
         self.temp_dir = self.temp_root_dir + self.instance_id + '/'
         self.instance = str(time.mktime(datetime.now().timetuple()))
         self.checked_in = False
+        self.recovery_wait = False
+        self.recover_instance = ''
         checked_in_instances = []
         if os.path.isdir(self.temp_root_dir):
             if os.path.isfile(self.temp_root_dir + 'instance'):
@@ -2383,7 +2411,41 @@ class C4IconSwapper:
                     for instance_id in current_instances:
                         if instance_id.replace('\n', '') not in checked_in_instances:
                             failed_to_check_in.append(instance_id.replace('\n', ''))
+
+                    # Offer project recovery if applicable
+                    if len(checked_in_instances) == 0 and len(failed_to_check_in) == 1 and \
+                            len(os.listdir(self.temp_root_dir + failed_to_check_in[0])) != 0:
+                        def win_close():
+                            self.recovery_wait = False
+                            recovery_win.destroy()
+
+                        def flag_recovery():
+                            self.recover_instance = failed_to_check_in[0]
+                            win_close()
+
+                        self.recovery_wait = True
+                        recovery_win = TkinterDnD.Tk()
+                        recovery_win.focus()
+                        recovery_win.protocol("WM_DELETE_WINDOW", win_close)
+                        recovery_win.title('Driver Recovery')
+                        recovery_win.geometry('300x100')
+                        recovery_win.resizable(False, False)
+                        label_text = 'Existing driver found.'
+                        recovery_label = tk.Label(recovery_win, text=label_text)
+                        recovery_label.pack()
+                        label_text = 'Would you like to recover previous driver?'
+                        recovery_label2 = tk.Label(recovery_win, text=label_text)
+                        recovery_label2.pack()
+                        recovery_button = tk.Button(recovery_win, text='Recover Driver', command=flag_recovery)
+                        recovery_button.pack()
+                        recovery_win.mainloop()
+
+                    while self.recovery_wait:
+                        pass
+
                     for failed_id in failed_to_check_in:
+                        if failed_id == self.recover_instance:
+                            continue
                         if os.path.isdir(self.temp_root_dir + failed_id):
                             shutil.rmtree(self.temp_root_dir + failed_id)
                     current_instances = []
@@ -2399,6 +2461,9 @@ class C4IconSwapper:
                 else:
                     with open(self.temp_root_dir + 'instance', 'w', errors='ignore') as out_file:
                         out_file.writelines(current_instances)
+                    if self.recover_instance != '':
+                        if os.path.isdir(self.temp_root_dir + self.recover_instance):
+                            os.rename(self.temp_root_dir + self.recover_instance, self.temp_dir)
             else:
                 shutil.rmtree(self.temp_root_dir)
                 os.mkdir(self.temp_root_dir)
@@ -2416,7 +2481,8 @@ class C4IconSwapper:
             else:
                 with open(self.temp_root_dir + 'instance', 'w', errors='ignore') as out_file:
                     out_file.writelines(self.instance_id + '\n')
-        os.mkdir(self.temp_dir)
+        if self.recover_instance == '':
+            os.mkdir(self.temp_dir)
         # Initialize main program
         if on_mac:
             self.root = tk.Tk()
@@ -2556,6 +2622,26 @@ class C4IconSwapper:
 
         # Main Loop
         if not on_mac:
+            if self.recover_instance != '':
+                # Recover Driver
+                self.c4z_panel.upload_c4z(recovery=True)
+                # Recover replacement images; Need to make this more efficient
+                first_time = True
+                for file in os.listdir(self.temp_dir):
+                    if is_valid_image(file):
+                        if first_time:
+                            os.mkdir(self.temp_dir + 'img_recovery')
+                            first_time = False
+                        shutil.copy(self.temp_dir + file, self.temp_dir + 'img_recovery/' + file)
+                        os.remove(self.temp_dir + file)
+                if not first_time:
+                    for file in os.listdir(self.temp_dir + 'img_recovery'):
+                        self.replacement_panel.upload_replacement(given_path=self.temp_dir + 'img_recovery/' + file)
+                    shutil.rmtree(self.temp_dir + 'img_recovery')
+                    self.replacement_panel.file_entry_field['state'] = NORMAL
+                    self.replacement_panel.file_entry_field.delete(0, END)
+                    self.replacement_panel.file_entry_field.insert(0, 'Recovered Image')
+                    self.replacement_panel.file_entry_field['state'] = 'readonly'
             self.root.after(150, self.instance_check)
         else:
             self.dark_mode = is_dark_mode()
@@ -2868,6 +2954,13 @@ def find_valid_id(id_seed: int, list_of_ids: list, inc_up=True, inc_count=0):
         id_seed -= 1
     inc_count += 1
     return find_valid_id(id_seed, list_of_ids, inc_count=inc_count)
+
+
+def is_valid_image(file_path: str):
+    if file_path.endswith('.png') or file_path.endswith('.jpg') or file_path.endswith('.gif') or \
+            file_path.endswith('.jpeg'):
+        return True
+    return False
 
 
 if on_mac:
