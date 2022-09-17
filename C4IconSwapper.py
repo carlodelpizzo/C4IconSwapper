@@ -24,7 +24,7 @@ else:
     from tkinterdnd2 import DND_FILES, TkinterDnD
     on_mac = False
 
-version = '5.11b'
+version = '5.11.1b'
 light_entry_bg = '#FFFFFF'
 dark_entry_bg = '#282830'
 
@@ -1008,8 +1008,14 @@ class C4IconSwapper:
 
         def upload_replacement(self, given_path=''):
             if given_path == '':
-                filename = filedialog.askopenfilename(filetypes=[("Image", "*.png"), ("Image", "*.jpg"),
-                                                                 ("Image", "*.gif"), ("Image", "*.jpeg")])
+                filename = filedialog.askopenfilenames(filetypes=[("Image", "*.png"), ("Image", "*.jpg"),
+                                                                  ("Image", "*.gif"), ("Image", "*.jpeg")])
+                if len(filename) == 1:
+                    filename = filename[0]
+                else:
+                    for file in filename:
+                        self.upload_replacement(given_path=file)
+                    return
             else:
                 filename = given_path
 
@@ -2501,7 +2507,7 @@ class C4IconSwapper:
 
         # Version Label
         self.version_label = Label(self.root, text=version)
-        self.version_label.place(relx=1, rely=1.01, anchor='se')
+        self.version_label.place(relx=1.0028, rely=1.01, anchor='se')
         self.version_label.bind('<Button-1>', self.easter)
         self.easter_counter = 0
 
