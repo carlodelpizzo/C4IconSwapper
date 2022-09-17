@@ -41,10 +41,12 @@ for item in capital_letters:
 for item in numbers:
     valid_chars.append(item)
 
-conn_template = ['connection', '', [], [['id', '0', [], []], ['type', '0', [], []],
-                                        ['connectionname', 'REPLACE', [], []],
-                                        ['consumer', 'False', [], []], ['linelevel', 'True', [], []],
-                                        ['classes', '', [], [['class', '', [], [['classname', 'REPLACE', [], []]]]]]]]
+# For some reason I previously had the 3rd list item as an empty list instead of empty string...
+# I don't know how it was even working before and why it stopped working now
+conn_template = ['connection', '', '', [['id', '0', '[]', []], ['type', '0', '', []],
+                                        ['connectionname', 'REPLACE', '', []],
+                                        ['consumer', 'False', '', []], ['linelevel', 'True', '', []],
+                                        ['classes', '', '', [['class', '', '', [['classname', 'REPLACE', '', []]]]]]]]
 if on_mac:
     no_dark_mode = None
 label_font = 'Arial'
