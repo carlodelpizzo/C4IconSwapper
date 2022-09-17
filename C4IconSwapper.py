@@ -2426,7 +2426,7 @@ class C4IconSwapper:
                             win_close()
 
                         self.recovery_wait = True
-                        recovery_win = TkinterDnD.Tk()
+                        recovery_win = tk.Tk()
                         recovery_win.focus()
                         recovery_win.protocol("WM_DELETE_WINDOW", win_close)
                         recovery_win.title('Driver Recovery')
