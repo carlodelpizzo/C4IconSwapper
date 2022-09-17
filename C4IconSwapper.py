@@ -1052,9 +1052,6 @@ class C4IconSwapper:
                 stack_length = 5
             else:
                 stack_length = 4
-            if len(self.img_stack) >= stack_length:
-                self.prev_icon_button['state'] = NORMAL
-                self.next_icon_button['state'] = NORMAL
 
             new_img_path = self.uc.temp_dir + 'stack' + str(len(self.img_stack)) + '.png'
             if 'replacement_icon.png' in img_path:
@@ -1064,16 +1061,18 @@ class C4IconSwapper:
             if index is None:
                 self.img_stack.insert(0, new_img_path)
                 self.refresh_img_stack()
-                return
-            if not -len(self.img_stack) < index < len(self.img_stack):
+            elif not -len(self.img_stack) < index < len(self.img_stack):
                 self.img_stack.append(new_img_path)
                 self.refresh_img_stack()
-                return
-            temp = self.img_stack[index]
-            self.img_stack.pop(index)
-            self.img_stack.insert(index, new_img_path)
-            self.img_stack.append(temp)
-            self.refresh_img_stack()
+            else:
+                temp = self.img_stack[index]
+                self.img_stack.pop(index)
+                self.img_stack.insert(index, new_img_path)
+                self.img_stack.append(temp)
+                self.refresh_img_stack()
+            if len(self.img_stack) > stack_length:
+                self.prev_icon_button['state'] = NORMAL
+                self.next_icon_button['state'] = NORMAL
 
         def refresh_img_stack(self):
             if len(self.img_stack) == 0:
@@ -2635,13 +2634,26 @@ class C4IconSwapper:
                     shutil.copy(self.temp_dir + file, self.temp_dir + 'img_recovery/' + file)
                     os.remove(self.temp_dir + file)
             if not first_time:
+                multi_images = False
+                multi_check = 0
+                if on_mac:
+                    stack_size = 5
+                else:
+                    stack_size = 4
                 for file in os.listdir(self.temp_dir + 'img_recovery'):
                     self.replacement_panel.upload_replacement(given_path=self.temp_dir + 'img_recovery/' + file)
+                    if multi_check > stack_size + 1:
+                        multi_images = True
+                        continue
+                    multi_check += 1
                 shutil.rmtree(self.temp_dir + 'img_recovery')
                 self.replacement_panel.file_entry_field['state'] = NORMAL
                 self.replacement_panel.file_entry_field.delete(0, END)
                 self.replacement_panel.file_entry_field.insert(0, 'Recovered Image')
                 self.replacement_panel.file_entry_field['state'] = 'readonly'
+                if multi_images:
+                    self.replacement_panel.next_icon_button['state'] = NORMAL
+                    self.replacement_panel.prev_icon_button['state'] = NORMAL
 
         # Main Loop
         if not on_mac:
