@@ -2399,7 +2399,8 @@ class C4IconSwapper:
                     with open(self.temp_root_dir + 'instance', 'r', errors='ignore') as instance_file:
                         current_instances = instance_file.readlines()
                 if len(current_instances) > 0:
-                    os.mkdir(self.temp_root_dir + 'check_in')
+                    if not os.path.isdir(self.temp_root_dir + 'check_in'):
+                        os.mkdir(self.temp_root_dir + 'check_in')
                     waiting = True
                     # I'm sure there is a better way to format this timestamp lol
                     begin_time = float(time.mktime(datetime.now().timetuple()))
