@@ -2385,7 +2385,6 @@ class C4IconSwapper:
             self.cur_dir = os.getcwd() + '/'
         self.temp_root_dir = self.cur_dir + 'C4IconSwapperTemp/'
         self.temp_dir = self.temp_root_dir + self.instance_id + '/'
-        self.instance = str(time.mktime(datetime.now().timetuple()))
         self.checked_in = False
         self.recovery_wait = False
         self.recover_instance = ''
@@ -2622,28 +2621,30 @@ class C4IconSwapper:
             self.root.wm_iconbitmap(temp_icon_file)
             os.remove(temp_icon_file)
 
+        # Do recovery if necessary
+        if self.recover_instance != '':
+            # Recover Driver
+            self.c4z_panel.upload_c4z(recovery=True)
+            # Recover replacement images; Need to make this more efficient
+            first_time = True
+            for file in os.listdir(self.temp_dir):
+                if is_valid_image(file):
+                    if first_time:
+                        os.mkdir(self.temp_dir + 'img_recovery')
+                        first_time = False
+                    shutil.copy(self.temp_dir + file, self.temp_dir + 'img_recovery/' + file)
+                    os.remove(self.temp_dir + file)
+            if not first_time:
+                for file in os.listdir(self.temp_dir + 'img_recovery'):
+                    self.replacement_panel.upload_replacement(given_path=self.temp_dir + 'img_recovery/' + file)
+                shutil.rmtree(self.temp_dir + 'img_recovery')
+                self.replacement_panel.file_entry_field['state'] = NORMAL
+                self.replacement_panel.file_entry_field.delete(0, END)
+                self.replacement_panel.file_entry_field.insert(0, 'Recovered Image')
+                self.replacement_panel.file_entry_field['state'] = 'readonly'
+
         # Main Loop
         if not on_mac:
-            if self.recover_instance != '':
-                # Recover Driver
-                self.c4z_panel.upload_c4z(recovery=True)
-                # Recover replacement images; Need to make this more efficient
-                first_time = True
-                for file in os.listdir(self.temp_dir):
-                    if is_valid_image(file):
-                        if first_time:
-                            os.mkdir(self.temp_dir + 'img_recovery')
-                            first_time = False
-                        shutil.copy(self.temp_dir + file, self.temp_dir + 'img_recovery/' + file)
-                        os.remove(self.temp_dir + file)
-                if not first_time:
-                    for file in os.listdir(self.temp_dir + 'img_recovery'):
-                        self.replacement_panel.upload_replacement(given_path=self.temp_dir + 'img_recovery/' + file)
-                    shutil.rmtree(self.temp_dir + 'img_recovery')
-                    self.replacement_panel.file_entry_field['state'] = NORMAL
-                    self.replacement_panel.file_entry_field.delete(0, END)
-                    self.replacement_panel.file_entry_field.insert(0, 'Recovered Image')
-                    self.replacement_panel.file_entry_field['state'] = 'readonly'
             self.root.after(150, self.instance_check)
         else:
             self.dark_mode = is_dark_mode()
