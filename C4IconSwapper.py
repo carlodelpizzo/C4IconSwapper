@@ -2462,8 +2462,8 @@ class C4IconSwapper:
                 else:
                     with open(self.temp_root_dir + 'instance', 'w', errors='ignore') as out_file:
                         out_file.writelines(current_instances)
-                    if self.recover_instance != '' and os.path.isdir(self.temp_root_dir + self.recover_instance):
-                        os.rename(self.temp_root_dir + self.recover_instance, self.temp_dir)
+                if self.recover_instance != '' and os.path.isdir(self.temp_root_dir + self.recover_instance):
+                    os.rename(self.temp_root_dir + self.recover_instance, self.temp_dir)
             else:
                 shutil.rmtree(self.temp_root_dir)
                 os.mkdir(self.temp_root_dir)
