@@ -6,9 +6,8 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
         xml_string = xml_string.replace('\t', '')
         tag_indexes = [i for i in range(len(xml_string)) if xml_string[i] == '<' or xml_string[i] == '>']
 
-    name, value, parameters, children = '', '', '', []
-    children_indexes = []
-    output = []
+    name, value, parameters, children, children_indexes, output = '', '', '', [], [], []
+    duplicate_name_counter = 0
     for i in range(len(tag_indexes)):
         if i % 2 != 0:
             continue
@@ -17,10 +16,7 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
         if name == '':
             if tag[1] == '?':
                 continue
-            if tag[1] == '!':
-                output.append([tag_name, '', '', []])
-                continue
-            if tag[-2] == '/':
+            if tag[1] == '!' or tag[-2] == '/':
                 output.append([tag_name, '', '', []])
                 continue
             name = tag_name
@@ -30,7 +26,16 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
         elif name != tag_name and '/' + name != tag_name:
             children_indexes.append(tag_indexes[i])
             children_indexes.append(tag_indexes[i+1])
+        elif name == tag_name:
+            duplicate_name_counter += 1
+            children_indexes.append(tag_indexes[i])
+            children_indexes.append(tag_indexes[i + 1])
         elif '/' + name == tag_name:
+            if duplicate_name_counter > 0:
+                duplicate_name_counter -= 1
+                children_indexes.append(tag_indexes[i])
+                children_indexes.append(tag_indexes[i + 1])
+                continue
             if len(children_indexes) == 0:
                 value = xml_string[tag_indexes[i - 1] + 1:tag_indexes[i]]
             else:
@@ -38,6 +43,8 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
             output.append([name, value, parameters, children])
             name, value, parameters, children = '', '', '', []
             children_indexes = []
+        else:
+            print(''.join(['skipped: ', tag]), name, tag_name)
 
     return output
 
@@ -51,76 +58,71 @@ class XMLObject:
         self.children = []
         self.name = ''
         self.value = ''
-        if len(xml_data) == 4 and type(xml_data[0]) is str and type(xml_data[1]) is str and type(xml_data[2]) is str\
-                and type(xml_data[3]) is list:
-            self.name = xml_data[0]
-            self.value = xml_data[1]
-        elif len(xml_data) > 1:
-            self.top_level = True
-            for tag in xml_data:
-                self.children.append(XMLObject(xml_data=tag))
-        elif len(xml_data) == 1 and type(xml_data) is list:
-            xml_data = xml_data[0]
-            self.name = xml_data[0]
-            self.value = xml_data[1]
+        if type(xml_data) is list:
+            if len(xml_data) == 4 and type(xml_data[0]) is str and type(xml_data[1]) is str and \
+                    type(xml_data[2]) is str and type(xml_data[3]) is list:
+                self.name = xml_data[0]
+                self.value = xml_data[1]
+            elif len(xml_data) > 1:
+                self.top_level = True
+                for tag in xml_data:
+                    self.children.append(XMLObject(xml_data=tag))
+            elif len(xml_data) == 1 and type(xml_data[0]) is list:
+                xml_data = xml_data[0]
+                self.name = xml_data[0]
+                self.value = xml_data[1]
+        else:
+            print('Error: Invalid xml data type')
+            return
         while self.value.endswith('\n'):
             self.value = self.value[:-2]
         self.parents = []
-        new_parents = []
+        parents_for_children = []
         if parents:
-            self.parents = parents
-            for parent in parents:
-                new_parents.append(parent)
-        new_parents.append(self)
+            self.parents, parents_for_children = parents, parents
+        parents_for_children.append(self)
         self.parameters = []  # [[param_name, param_value], ...]
-        self.self_closed = False
-        self.comment = False
-        self.delete = False
-        self.restore_data = []  # [name, value, parameters, parents, children, self_closed, delete]
+        self.restore_data = []  # [name, value, parameters, parents, children, self_closed, top_level, delete]
+        self.self_closed, self.comment, self.delete = False, False, False
         if self.top_level:
             return
         if self.name != '' and self.name[0] == '!':
             self.comment = True
             return
-        if '/' in self.name:
+        if self.name.endswith('/'):
             self.name = self.name[:-1]
             self.self_closed = True
 
-        param_name = ''
-        param_value = ''
-        get_name = False
-        get_value = False
         # Parse parameters (attributes)
-        for char in xml_data[2]:
-            if char == ' ':
-                continue
-            if get_value:
-                if char == '"' or char == "'":
-                    if param_value == '':
+        if type(xml_data[2]) is str and xml_data[2] != '':
+            if xml_data[2].endswith('/'):
+                self.self_closed = True
+            param_name, param_value, get_name, get_value = '', '', False, False
+            for char in xml_data[2]:
+                if char == ' ':
+                    continue
+                if get_value:
+                    if char == '"' or char == "'":
+                        if param_value == '':
+                            continue
+                        self.parameters.append([param_name, param_value])
+                        param_name, param_value, get_value = '', '', False
                         continue
-                    get_value = False
-                    self.parameters.append([param_name, param_value])
-                    param_name = ''
-                    param_value = ''
+                    param_value += char
                     continue
-                param_value += char
-                continue
-            if get_name:
-                if char == '=':
-                    get_value = True
-                    get_name = False
+                if get_name:
+                    if char == '=':
+                        get_value, get_name = True, False
+                        continue
+                    param_name += char
                     continue
-                param_name += char
-                continue
-            if char != ' ':
-                get_name = True
-                param_name += char
-        if len(xml_data[2]) != 0 and xml_data[2][-1] == '/':
-            self.self_closed = True
+                if char != ' ':
+                    get_name = True
+                    param_name += char
 
         # Make children
         for child in xml_data[3]:
-            self.children.append(XMLObject(xml_data=child, parents=new_parents))
+            self.children.append(XMLObject(xml_data=child, parents=parents_for_children))
 
     def get_lines(self, layer=0):
         if self.delete:
@@ -128,9 +130,7 @@ class XMLObject:
         lines = []
         if self.top_level:
             for child in self.children:
-                child_lines = child.get_lines()
-                for line in child_lines:
-                    lines.append(line)
+                lines.extend(child.get_lines())
             return lines
         tabs = ''
         for _ in range(layer):
@@ -167,9 +167,7 @@ class XMLObject:
         lines.append(line)
 
         for child in self.children:
-            child_lines = child.get_lines(layer=layer+1)
-            for line in child_lines:
-                lines.append(line)
+            lines.extend(child.get_lines(layer=layer+1))
 
         if not self.self_closed:
             lines.append(tabs + '</' + self.name + '>\n')
@@ -184,8 +182,7 @@ class XMLObject:
             child_tags = child.get_tag(tag_name)
             if child_tags is None:
                 continue
-            for child_tag in child_tags:
-                matching_tags.append(child_tag)
+            matching_tags.extend(child_tags)
         if not matching_tags:
             return None
         return matching_tags
@@ -199,15 +196,14 @@ class XMLObject:
             child_tags = child.get_tag_by_value(value)
             if child_tags is None:
                 continue
-            for child_tag in child_tags:
-                matching_tags.append(child_tag)
+            matching_tags.extend(child_tags)
         if not matching_tags:
             return None
         return matching_tags
 
     def set_restore_point(self):
         self.restore_data = [self.name, self.value, self.parameters, self.parents,
-                             self.children, self.self_closed, self.delete]
+                             self.children, self.self_closed, self.top_level, self.delete]
         for child in self.children:
             child.set_restore_point()
 
@@ -220,7 +216,8 @@ class XMLObject:
         self.parents = self.restore_data[3]
         self.children = self.restore_data[4]
         self.self_closed = self.restore_data[5]
-        self.delete = self.restore_data[6]
+        self.top_level = self.restore_data[6]
+        self.delete = self.restore_data[7]
         self.restore_data = []
         for child in self.children:
             child.restore()
