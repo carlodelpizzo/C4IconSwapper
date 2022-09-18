@@ -3,7 +3,7 @@ This program can be used to replace icons of (most) Control4 drivers with custom
 
 In addition to swapping icons, the program modifies the driver xml (driver manufacturer, creator, and version are customizable).
 There is no option to prevent xml modification,
-but the exported driver will have a .bak file of the old driver.xml if you want to restore it manually (must have 'include backup files' selected).
+but the exported driver will have a .bak file of the original driver.xml if you want to restore it manually (must have 'include backup files' selected).
 
 It can add/remove driver connections (such as HDMI IN/OUT),
 and has drag-and-drop support for .c4z files and image files/folders (Windows version only).
