@@ -1498,8 +1498,8 @@ class C4IconSwapper:
             driver_name = self.driver_name_var.get()
             temp = []
             for letter in driver_name:
-                if str(letter).isalnum() or str(letter) == '_' or str(letter) == '-' or str(letter) == ' ':
-                    temp.append(str(letter))
+                if letter in valid_chars:
+                    temp.append(letter)
             driver_name = ''.join(temp)
             self.driver_name_entry.delete(0, 'end')
             self.driver_name_entry.insert(0, driver_name)
