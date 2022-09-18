@@ -38,9 +38,9 @@ valid_chars.extend(letters)
 valid_chars.extend(capital_letters)
 valid_chars.extend(numbers)
 
-# For some reason I previously had the 3rd list item as an empty list instead of empty string...
+# For some reason I previously had the 3rd list element as an empty list instead of empty string...
 # I don't know how it was even working before and why it stopped working now
-conn_template = ['connection', '', '', [['id', '0', '[]', []], ['type', '0', '', []],
+conn_template = ['connection', '', '', [['id', '0', '', []], ['type', '0', '', []],
                                         ['connectionname', 'REPLACE', '', []],
                                         ['consumer', 'False', '', []], ['linelevel', 'True', '', []],
                                         ['classes', '', '', [['class', '', '', [['classname', 'REPLACE', '', []]]]]]]]
