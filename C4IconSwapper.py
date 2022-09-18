@@ -24,7 +24,7 @@ else:
     from tkinterdnd2 import DND_FILES, TkinterDnD
     on_mac = False
 
-version = '5.11.1b'
+version = '5.11.2b'
 light_entry_bg = '#FFFFFF'
 dark_entry_bg = '#282830'
 
@@ -34,12 +34,9 @@ capital_letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', '
                    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
 numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
 valid_chars = ['_', '-', ' ']
-for item in letters:
-    valid_chars.append(item)
-for item in capital_letters:
-    valid_chars.append(item)
-for item in numbers:
-    valid_chars.append(item)
+valid_chars.extend(letters)
+valid_chars.extend(capital_letters)
+valid_chars.extend(numbers)
 
 # For some reason I previously had the 3rd list item as an empty list instead of empty string...
 # I don't know how it was even working before and why it stopped working now
@@ -301,11 +298,12 @@ class C4IconSwapper:
             self.blank_image_label.image = icon
 
             if self.show_extra_icons.get() == 0 and self.extra_icons != 0:
-                self.icon_label.config(text='icon: ' + str(self.current_icon + 1) + ' of ' +
-                                            str(len(self.icons) - self.extra_icons) +
-                                            ' (' + str(len(self.icons)) + ')')
+                self.icon_label.config(text=''.join(['icon: ', str(self.current_icon + 1), ' of ',
+                                                     str(len(self.icons) - self.extra_icons), ' (',
+                                                     str(len(self.icons)), ')']))
             else:
-                self.icon_label.config(text='icon: ' + str(self.current_icon + 1) + ' of ' + str(len(self.icons)))
+                self.icon_label.config(text=''.join(['icon: ', str(self.current_icon + 1), ' of ',
+                                                     str(len(self.icons))]))
             self.icon_name_label.config(text='name: ' + self.icons[self.current_icon].name)
 
         def upload_c4z(self, given_path=None, recovery=False):
@@ -323,10 +321,10 @@ class C4IconSwapper:
                         sub_list.append(string)
                         continue
                     if 'device_lg' in string or 'icon_large' in string:
-                        icon_objects.append(self.SubIcon(directory, directory + '/' + string, 'device', 32))
+                        icon_objects.append(self.SubIcon(directory, ''.join([directory, '/', string]), 'device', 32))
                         continue
                     elif 'device_sm' in string or 'icon_small' in string:
-                        icon_objects.append(self.SubIcon(directory, directory + '/' + string, 'device', 16))
+                        icon_objects.append(self.SubIcon(directory, ''.join([directory, '/', string]), 'device', 16))
                         continue
                     temp_name = ''
                     read_size = False
@@ -347,11 +345,12 @@ class C4IconSwapper:
                             continue
                         if read_name:
                             temp_name = character + temp_name
-                    temp_img = PIL.Image.open(directory + '/' + string)
+                    temp_img = PIL.Image.open(''.join([directory, '/', string]))
                     temp_size = str(temp_img.size[0])
                     if temp_img.size[0] != temp_img.size[1]:
                         alt_sized = True
-                    icons_out.append(self.SubIcon(directory, directory + '/' + string, temp_name, int(temp_size)))
+                    icons_out.append(self.SubIcon(directory, ''.join([directory, '/', string]),
+                                                  temp_name, int(temp_size)))
                     if alt_sized:
                         icons_out[-1].size_alt = temp_img.size
                     temp_img.close()
@@ -360,9 +359,7 @@ class C4IconSwapper:
                     return icons_out
                 sub_list.sort()
                 for sub_dir in sub_list:
-                    to_add = get_icons(directory + '/' + sub_dir)
-                    for icon_path in to_add:
-                        icons_out.append(icon_path)
+                    icons_out.extend(get_icons(''.join([directory, '/', sub_dir])))
                 return icons_out
 
             def check_dupe_names(recalled=False):
@@ -384,7 +381,7 @@ class C4IconSwapper:
                             if recalled:
                                 # This code should never run
                                 print('debug testing: recalled dupe name check')
-                                icon_cmp1.name += ' (' + str(icon_cmp1.dupe_number) + ')'
+                                icon_cmp1.name = ''.join([icon_cmp1.name, ' (', str(icon_cmp1.dupe_number), ')'])
                                 continue
                             icon_cmp0.name = icon_cmp0.name_alt
                             icon_cmp1.name = icon_cmp1.name_alt
@@ -437,10 +434,8 @@ class C4IconSwapper:
             # Get all individual icons from driver
             icon_objects = []
             try:
-                for icon in get_icons(self.uc.icon_dir):
-                    icon_objects.append(icon)
-                for icon in get_icons(self.uc.images_dir):
-                    icon_objects.append(icon)
+                icon_objects.extend(get_icons(self.uc.icon_dir))
+                icon_objects.extend(get_icons(self.uc.images_dir))
             except TypeError:
                 pass
 
@@ -1059,7 +1054,7 @@ class C4IconSwapper:
             else:
                 stack_length = 4
 
-            new_img_path = self.uc.temp_dir + 'stack' + str(len(self.img_stack)) + '.png'
+            new_img_path = ''.join([self.uc.temp_dir, 'stack', str(len(self.img_stack)), '.png'])
             if 'replacement_icon.png' in img_path:
                 os.rename(img_path, new_img_path)
             else:
@@ -1315,7 +1310,7 @@ class C4IconSwapper:
                 if '.' not in img_path:
                     image_paths = os.listdir(img_path)
                     for new_img_path in image_paths:
-                        self.upload_replacement(given_path=img_path + '/' + new_img_path)
+                        self.upload_replacement(given_path=''.join([img_path, '/', new_img_path]))
                     return
                 if not is_valid_image(img_path):
                     return
@@ -1400,8 +1395,8 @@ class C4IconSwapper:
 
                 def confirm_overwrite():
                     # Remove old driver
-                    if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z'):
-                        os.remove(self.uc.cur_dir + driver_name + '.c4z')
+                    if os.path.isfile(''.join([self.uc.cur_dir, driver_name, '.c4z'])):
+                        os.remove(''.join([self.uc.cur_dir, driver_name, '.c4z']))
                     self.export_file(driver_name)
                     export_cleanup(as_abort=False)
 
@@ -1441,11 +1436,11 @@ class C4IconSwapper:
                     confirm_label = Label(overwrite_pop_up, text='Would you like to overwrite the existing file?')
                     confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
 
-                    no_button = tk.Button(overwrite_pop_up, text='No', width='10', command=export_cleanup)
-                    no_button.grid(row=2, column=0, sticky='e', padx=5)
-
                     yes_button = tk.Button(overwrite_pop_up, text='Yes', width='10', command=confirm_overwrite)
-                    yes_button.grid(row=2, column=1, sticky='w', padx=5)
+                    yes_button.grid(row=2, column=0, sticky='e', padx=5)
+
+                    no_button = tk.Button(overwrite_pop_up, text='No', width='10', command=export_cleanup)
+                    no_button.grid(row=2, column=1, sticky='w', padx=5)
                     self.abort = True
                     return
                 self.export_file(driver_name)
@@ -1461,7 +1456,7 @@ class C4IconSwapper:
                     get_random_string()
 
                 if path is None:
-                    path = self.uc.cur_dir + driver_name + '.c4z'
+                    path = ''.join([self.uc.cur_dir, driver_name, '.c4z'])
                 bak_files_dict = {}
                 bak_files = []
                 bak_folder = self.uc.temp_dir + 'bak_files/'
@@ -1476,17 +1471,21 @@ class C4IconSwapper:
                         for file in os.listdir(directory):
                             if file.endswith('.bak'):
                                 random_tag = get_random_string()
-                                bak_files.append(directory + '/' + file)
-                                bak_files_dict[directory + '/' + file] = bak_folder + file + random_tag
-                                shutil.copy(directory + '/' + file, bak_folder + file + random_tag)
-                                os.remove(directory + '/' + file)
+                                current_path = ''.join([directory, '/', file])
+                                new_path = ''.join([bak_folder, file, random_tag])
+                                bak_files.append(current_path)
+                                bak_files_dict[current_path] = new_path
+                                shutil.copy(current_path, new_path)
+                                os.remove(current_path)
 
                 # Create .c4z file
+                driver_zip = ''.join([self.uc.temp_dir, driver_name, '.zip'])
+                driver_c4z = ''.join([self.uc.temp_dir, driver_name, '.c4z'])
                 shutil.make_archive(self.uc.temp_dir + driver_name, 'zip', self.uc.temp_dir + 'driver')
-                base = os.path.splitext(self.uc.temp_dir + driver_name + '.zip')[0]
-                os.rename(self.uc.temp_dir + driver_name + '.zip', base + '.c4z')
-                shutil.copy(self.uc.temp_dir + driver_name + '.c4z', path)
-                os.remove(self.uc.temp_dir + driver_name + '.c4z')
+                base = os.path.splitext(driver_zip)[0]
+                os.rename(driver_zip, base + '.c4z')
+                shutil.copy(driver_c4z, path)
+                os.remove(driver_c4z)
 
                 # Restore .bak files
                 if self.include_backups.get() == 0:
@@ -1497,11 +1496,11 @@ class C4IconSwapper:
         def do_export(self, quick_export=False):
             # Format driver name
             driver_name = self.driver_name_var.get()
-            temp = ''
+            temp = []
             for letter in driver_name:
                 if str(letter).isalnum() or str(letter) == '_' or str(letter) == '-' or str(letter) == ' ':
-                    temp += str(letter)
-            driver_name = temp
+                    temp.append(str(letter))
+            driver_name = ''.join(temp)
             self.driver_name_entry.delete(0, 'end')
             self.driver_name_entry.insert(0, driver_name)
             if driver_name == '':
@@ -1765,17 +1764,21 @@ class C4IconSwapper:
                             for file in os.listdir(directory):
                                 if file.endswith('.bak'):
                                     random_tag = get_random_string()
-                                    bak_files.append(directory + '/' + file)
-                                    bak_files_dict[directory + '/' + file] = bak_folder + file + random_tag
-                                    shutil.copy(directory + '/' + file, bak_folder + file + random_tag)
-                                    os.remove(directory + '/' + file)
+                                    current_path = ''.join([directory, '/', file])
+                                    new_path = ''.join([bak_folder, file, random_tag])
+                                    bak_files.append(current_path)
+                                    bak_files_dict[current_path] = new_path
+                                    shutil.copy(current_path, new_path)
+                                    os.remove(current_path)
 
                     # Create .c4z file
+                    driver_zip = ''.join([self.uc.temp_dir, driver_name, '.zip'])
+                    driver_c4z = ''.join([self.uc.temp_dir, driver_name, '.c4z'])
                     shutil.make_archive(self.uc.temp_dir + driver_name, 'zip', self.uc.temp_dir + 'driver')
-                    base = os.path.splitext(self.uc.temp_dir + driver_name + '.zip')[0]
-                    os.rename(self.uc.temp_dir + driver_name + '.zip', base + '.c4z')
-                    shutil.copy(self.uc.temp_dir + driver_name + '.c4z', out_file_path)
-                    os.remove(self.uc.temp_dir + driver_name + '.c4z')
+                    base = os.path.splitext(driver_zip)[0]
+                    os.rename(driver_zip, base + '.c4z')
+                    shutil.copy(driver_c4z, out_file_path)
+                    os.remove(driver_c4z)
 
                     # Restore .bak files
                     if self.include_backups.get() == 0:
@@ -1835,11 +1838,11 @@ class C4IconSwapper:
                 else:
                     self.driver_name_entry['background'] = dark_entry_bg
 
-            driver_name = ''
+            driver_name = []
             for char in self.driver_name_var.get():
                 if char in valid_chars:
-                    driver_name += char
-            self.driver_name_var.set(driver_name)
+                    driver_name.append(char)
+            self.driver_name_var.set(''.join(driver_name))
 
         def edit_driver_info(self):
             def on_win_close():
@@ -1858,34 +1861,34 @@ class C4IconSwapper:
             # noinspection PyUnusedLocal
             def validate_version(*args):
                 version_str = self.uc.driver_version_new_var.get()
-                temp_str = ''
+                version_compare = []
                 cursor_pos = driver_ver_new_entry.index(INSERT)
                 for char in version_str:
                     if char not in numbers:
                         continue
-                    if temp_str == '' and char == '0':
+                    if version_compare == [] and char == '0':
                         continue
-                    temp_str += char
-                str_diff = len(version_str) - len(temp_str)
+                    version_compare.append(char)
+                str_diff = len(version_str) - len(version_compare)
                 if str_diff > 0:
                     driver_ver_new_entry.icursor(cursor_pos - str_diff)
-                self.uc.driver_version_new_var.set(temp_str)
+                self.uc.driver_version_new_var.set(''.join(version_compare))
 
             # noinspection PyUnusedLocal
             def validate_name(*args):
                 # Check manufacturer variable
-                name = ''
+                name = []
                 for char in self.uc.driver_manufac_new_var.get():
                     if char in valid_chars:
-                        name += char
-                self.uc.driver_manufac_new_var.set(name)
+                        name.append(char)
+                self.uc.driver_manufac_new_var.set(''.join(name))
 
                 # Check creator variable
-                name = ''
+                name = []
                 for char in self.uc.driver_creator_new_var.get():
                     if char in valid_chars:
-                        name += char
-                self.uc.driver_creator_new_var.set(name)
+                        name.append(char)
+                self.uc.driver_creator_new_var.set(''.join(name))
 
             if self.uc.driver_info_win:
                 self.uc.driver_info_win.focus()
@@ -2337,15 +2340,16 @@ class C4IconSwapper:
                         break
 
             def format_state_name(self):
-                formatted_name = ''
+                formatted_name = []
                 for character in self.name_entry.get():
                     if character == ' ' or (character not in letters and character not in capital_letters and
                                             character not in numbers):
                         continue
-                    if formatted_name == '' and character in letters:
-                        formatted_name += capital_letters[letters.index(character)]
+                    if formatted_name == [] and character in letters:
+                        formatted_name.append(capital_letters[letters.index(character)])
                         continue
-                    formatted_name += character
+                    formatted_name.append(character)
+                formatted_name = ''.join(formatted_name)
                 if formatted_name == self.name_entry.get():
                     return
                 self.name_entry.delete(0, 'end')
@@ -2368,7 +2372,7 @@ class C4IconSwapper:
                 self.states.append(self.DriverState(self.uc, 'state' + str(i + 1),
                                                     (int(i / 7) * x_spacing) + self.x,
                                                     ((i % 7) * y_spacing) + 20 + self.y,
-                                   state_name='state' + str(i + 1) + ':'))
+                                   state_name=''.join(['state', str(i + 1), ':'])))
 
             # Label
             self.panel_label = tk.Label(self.uc.root, text='Multi-State Labels', font=(label_font, 15))
@@ -2384,12 +2388,11 @@ class C4IconSwapper:
         self.instance_id = str(random.randint(111111, 999999))
         if on_mac:
             is_dark_mode()
-            self.cur_dir = get_path('/tmp')
-            self.cur_dir += '/'
+            self.cur_dir = ''.join([get_path('/tmp'), '/'])
         else:
             self.cur_dir = os.getcwd() + '/'
         self.temp_root_dir = self.cur_dir + 'C4IconSwapperTemp/'
-        self.temp_dir = self.temp_root_dir + self.instance_id + '/'
+        self.temp_dir = ''.join([self.temp_root_dir, self.instance_id, '/'])
         self.checked_in = False
         self.recovery_wait = False
         self.recover_instance = ''
@@ -2500,7 +2503,7 @@ class C4IconSwapper:
 
         # Root window properties
         if len(checked_in_instances) > 0:
-            self.root.title('C4 Icon Swapper (' + self.instance_id + ')')
+            self.root.title(''.join(['C4 Icon Swapper (', self.instance_id, ')']))
         else:
             self.root.title('C4 Icon Swapper')
         self.root.resizable(False, False)
@@ -2637,7 +2640,7 @@ class C4IconSwapper:
                     if first_time:
                         os.mkdir(self.temp_dir + 'img_recovery')
                         first_time = False
-                    shutil.copy(self.temp_dir + file, self.temp_dir + 'img_recovery/' + file)
+                    shutil.copy(self.temp_dir + file, ''.join([self.temp_dir, 'img_recovery/', file]))
                     os.remove(self.temp_dir + file)
             if not first_time:
                 multi_images = False
@@ -2647,7 +2650,8 @@ class C4IconSwapper:
                 else:
                     stack_size = 4
                 for file in os.listdir(self.temp_dir + 'img_recovery'):
-                    self.replacement_panel.upload_replacement(given_path=self.temp_dir + 'img_recovery/' + file)
+                    self.replacement_panel.upload_replacement(given_path=''.join([self.temp_dir,
+                                                                                  'img_recovery/', file]))
                     if multi_check > stack_size + 1:
                         multi_images = True
                         continue
@@ -2903,10 +2907,11 @@ class C4IconSwapper:
             if self.checked_in and not os.path.isdir(self.temp_root_dir + 'check_in'):
                 self.checked_in = False
             elif not self.checked_in and os.path.isdir(self.temp_root_dir + 'check_in'):
-                with open(self.temp_root_dir + 'check_in/' + self.instance_id, 'w', errors='ignore') as check_in_file:
+                with open(''.join([self.temp_root_dir, 'check_in/', self.instance_id]), 'w',
+                          errors='ignore') as check_in_file:
                     check_in_file.writelines('')
                 self.checked_in = True
-                self.root.title('C4 Icon Swapper (' + self.instance_id + ')')
+                self.root.title(''.join(['C4 Icon Swapper (', self.instance_id, ')']))
 
             self.root.after(150, self.instance_check)
     else:
@@ -2951,15 +2956,12 @@ def list_all_sub_directories(directory: str, include_root_dir=False):
     subs = []
     for dir_name in os.listdir(directory):
         if '.' not in dir_name:
-            subs.append(directory + '/' + dir_name)
+            subs.append(''.join([directory, '/', dir_name]))
     if len(subs) != 0:
         new_subs = []
         for sub_dir in subs:
-            next_subs = list_all_sub_directories(sub_dir)
-            for new_sub in next_subs:
-                new_subs.append(new_sub)
-        for new_sub in new_subs:
-            subs.append(new_sub)
+            new_subs.extend(list_all_sub_directories(sub_dir))
+        subs.extend(new_subs)
     subs.sort()
     if include_root_dir:
         subs.insert(0, directory)
