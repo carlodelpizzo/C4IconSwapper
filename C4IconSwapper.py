@@ -9,8 +9,7 @@ import re
 import PIL.Image
 import tkinter as tk
 from tkinter import *
-from tkinter import ttk
-from tkinter import filedialog
+from tkinter import ttk, filedialog
 from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
@@ -25,8 +24,7 @@ else:
     on_mac = False
 
 version = '5.11.2b'
-light_entry_bg = '#FFFFFF'
-dark_entry_bg = '#282830'
+light_entry_bg, dark_entry_bg = '#FFFFFF', '#282830'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -79,10 +77,10 @@ class C4IconSwapper:
                             continue
                         size1 += char
                     try:
-                        if int(size0) and int(size1):
+                        if (size0_int := int(size0)) and (size1_int := int(size1)):
                             self.alt_format = True
-                            if int(size0) != int(size1):
-                                self.size_alt = (int(size0, int(size1)))
+                            if size0_int != size1_int:
+                                self.size_alt = (size0_int, size1_int)
                     except ValueError:
                         pass
 
@@ -1082,10 +1080,10 @@ class C4IconSwapper:
                 stack_length = 5
             else:
                 stack_length = 4
-            for i in range(len(self.img_stack)):
+            for i, image in enumerate(self.img_stack):
                 if i == stack_length:
                     break
-                icon_image = Image.open(self.img_stack[i])
+                icon_image = Image.open(image)
                 icon = icon_image.resize((60, 60))
                 icon = ImageTk.PhotoImage(icon)
                 self.stack_labels[i].configure(image=icon)
@@ -1139,8 +1137,8 @@ class C4IconSwapper:
             self.uc.c4z_panel.update_icon()
 
         def replace_all(self):
-            for i in range(len(self.uc.c4z_panel.icons)):
-                if self.uc.c4z_panel.show_extra_icons.get() == 0 and self.uc.c4z_panel.icons[i].extra:
+            for i, icon in enumerate(self.uc.c4z_panel.icons):
+                if self.uc.c4z_panel.show_extra_icons.get() == 0 and icon.extra:
                     continue
                 self.replace_icon(index=i)
 
@@ -2423,6 +2421,9 @@ class C4IconSwapper:
                             failed_to_check_in.append(instance_id.replace('\n', ''))
 
                     # Offer project recovery if applicable
+                    if not os.path.isdir(self.temp_root_dir + failed_to_check_in[0]):
+                        # Hack to deal with bug cause by crash during recovery
+                        failed_to_check_in = []
                     if len(failed_to_check_in) >= 1 and \
                             len(os.listdir(self.temp_root_dir + failed_to_check_in[0])) != 0:
                         def win_close():
