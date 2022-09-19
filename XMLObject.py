@@ -34,6 +34,10 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
             if ' ' in name:
                 parameters = name[name.index(' '):]
                 name = name[:name.index(' ')]
+            # I don't know what the fuck the problem is and I need to go to bed, this will fix it for now
+            if name == '\n':
+                name = ''
+                parameters = ''
         elif name != tag_name and '/' + name != tag_name:
             children_indexes.append(tag_indexes[i])
             children_indexes.append(tag_indexes[i + 1])
@@ -109,13 +113,16 @@ class XMLObject:
             if xml_data[2].endswith('/'):
                 self.self_closed = True
             param_name, param_value, get_name, get_value = '', '', False, False
+            inside_attribute = False
             for char in xml_data[2]:
-                if char == ' ':
+                if char == ' ' and not inside_attribute:
                     continue
                 if get_value:
                     if char == '"' or char == "'":
                         if param_value == '':
+                            inside_attribute = True
                             continue
+                        inside_attribute = False
                         self.parameters.append([param_name, param_value])
                         param_name, param_value, get_value = '', '', False
                         continue
@@ -135,6 +142,7 @@ class XMLObject:
         for child in xml_data[3]:
             self.children.append(XMLObject(xml_data=child, parents=parents_for_children))
 
+    # Need to remove file '\n' from output
     def get_lines(self, layer=0):
         if self.delete:
             return []
