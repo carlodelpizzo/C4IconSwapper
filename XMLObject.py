@@ -5,14 +5,25 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
         xml_string = ''.join(xml_lines)
         xml_string = xml_string.replace('\t', '')
         tag_indexes = [i for i in range(len(xml_string)) if xml_string[i] == '<' or xml_string[i] == '>']
+        if len(tag_indexes) % 2 != 0:
+            print('Error: Invalid xml file')
+            return
 
     name, value, parameters, children, children_indexes, output = '', '', '', [], [], []
     duplicate_name_counter = 0
+    index_offset = 0
     for i in range(len(tag_indexes)):
+        if index_offset > 0:
+            index_offset -= 2
+            continue
         if i % 2 != 0:
             continue
         tag = xml_string[tag_indexes[i]:tag_indexes[i + 1] + 1]
-        tag_name = xml_string[tag_indexes[i] + 1:tag_indexes[i + 1]]
+        if tag.startswith('<!--'):
+            while not tag.endswith('-->'):
+                index_offset += 2
+                tag = xml_string[tag_indexes[i]:tag_indexes[i + 1 + index_offset] + 1]
+        tag_name = xml_string[tag_indexes[i] + 1:tag_indexes[i + 1 + index_offset]]
         if name == '':
             if tag[1] == '?':
                 continue
@@ -25,7 +36,7 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
                 name = name[:name.index(' ')]
         elif name != tag_name and '/' + name != tag_name:
             children_indexes.append(tag_indexes[i])
-            children_indexes.append(tag_indexes[i+1])
+            children_indexes.append(tag_indexes[i + 1])
         elif name == tag_name:
             duplicate_name_counter += 1
             children_indexes.append(tag_indexes[i])
@@ -44,7 +55,7 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
             name, value, parameters, children = '', '', '', []
             children_indexes = []
         else:
-            print(''.join(['skipped: ', tag]), name, tag_name)
+            print(''.join(['skipped: ', tag, '||', name, '||', tag_name]))
 
     return output
 
