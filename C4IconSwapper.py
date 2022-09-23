@@ -23,7 +23,7 @@ else:
     from tkinterdnd2 import DND_FILES, TkinterDnD
     on_mac = False
 
-version = '5.11.2b'
+version = '1.0'
 light_entry_bg, dark_entry_bg = '#FFFFFF', '#282830'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
@@ -2511,7 +2511,7 @@ class C4IconSwapper:
 
         # Version Label
         self.version_label = Label(self.root, text=version)
-        self.version_label.place(relx=1.0028, rely=1.01, anchor='se')
+        self.version_label.place(relx=1, rely=1.01, anchor='se')
         self.version_label.bind('<Button-1>', self.easter)
         self.easter_counter = 0
 
