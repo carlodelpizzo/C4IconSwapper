@@ -58,11 +58,11 @@ if execute:
         if os.path.isfile(cur_dir + 'C4IconSwapper.' + version + '.exe'):
             overwrite_file = input('Overwrite file? (y/n)... ')
         else:
-            make_exe('Control4 Icon Swapper.py')
+            make_exe('C4IconSwapper.py')
     else:
         if os.path.isdir(cur_dir + 'C4IconSwapper.' + version + '.app'):
             overwrite_file = input('Overwrite file? (y/n)... ')
         else:
-            make_exe('Control4 Icon Swapper.py')
+            make_exe('C4IconSwapper.py')
     if overwrite_file[0] == 'y' or overwrite_file[0] == 'Y':
-        make_exe('Control4 Icon Swapper.py')
+        make_exe('C4IconSwapper.py')

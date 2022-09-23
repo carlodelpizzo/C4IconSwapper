@@ -219,7 +219,7 @@ class C4IconSwapper:
                 resized_icon = Image.open(self.uc.device_icon_dir + picture)
                 for size in sizes:
                     new_icon = resized_icon.resize(size)
-                    new_icon.save(self.uc.device_icon_dir + picture.replace(str(1024), str(size[0])))
+                    new_icon.save(self.uc.device_icon_dir + picture.replace('1024', str(size[0])))
 
             shutil.make_archive(temp_gen_driver.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
             os.rename(temp_gen_driver.replace('.c4z', '.zip'), temp_gen_driver)
@@ -271,7 +271,7 @@ class C4IconSwapper:
                 resized_icon = Image.open(self.uc.device_icon_dir + picture)
                 for size in sizes:
                     new_icon = resized_icon.resize(size)
-                    new_icon.save(self.uc.device_icon_dir + picture.replace(str(70), str(size[0])))
+                    new_icon.save(self.uc.device_icon_dir + picture.replace('70', str(size[0])))
 
             shutil.make_archive(temp_gen_driver.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
             os.rename(temp_gen_driver.replace('.c4z', '.zip'), temp_gen_driver)
@@ -3023,3 +3023,7 @@ if on_mac:
 
 def natural_key(string: str):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
+
+
+if __name__ == '__main__':
+    C4IconSwapper()
