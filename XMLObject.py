@@ -9,9 +9,8 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
             print('Error: Invalid xml file')
             return
 
-    name, value, parameters, children, children_indexes, output = '', '', '', [], [], []
+    name, value, parameters, children, children_indexes, output, comment_start = '', '', '', [], [], [], None
     duplicate_name_counter = 0
-    comment_start = None
     for i, tag_index in enumerate(tag_indexes):
         if comment_start:
             if not xml_string[comment_start:tag_index + 1].endswith('-->'):
@@ -78,8 +77,7 @@ class XMLObject:
             return
         self.top_level = False
         self.children = []
-        self.name = ''
-        self.value = ''
+        self.name, self.value = '', ''
         if type(xml_data) is list:
             if len(xml_data) == 4 and type(xml_data[0]) is str and type(xml_data[1]) is str and \
                     type(xml_data[2]) is str and type(xml_data[3]) is list:
@@ -119,8 +117,7 @@ class XMLObject:
         if type(xml_data[2]) is str and xml_data[2] != '':
             if xml_data[2].endswith('/'):
                 self.self_closed = True
-            param_name, param_value, get_name, get_value = '', '', False, False
-            inside_attribute = False
+            param_name, param_value, get_name, get_value, inside_attribute = '', '', False, False, False
             for char in xml_data[2]:
                 if char == ' ' and not inside_attribute:
                     continue

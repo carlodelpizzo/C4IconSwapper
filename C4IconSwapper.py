@@ -24,7 +24,7 @@ else:
     on_mac = False
 
 version = '1.0'
-light_entry_bg, dark_entry_bg = '#FFFFFF', '#282830'
+label_font, light_entry_bg, dark_entry_bg,  = 'Arial', '#FFFFFF', '#282830'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
@@ -36,15 +36,12 @@ valid_chars.extend(letters)
 valid_chars.extend(capital_letters)
 valid_chars.extend(numbers)
 
-# For some reason I previously had the 3rd list element as an empty list instead of empty string...
-# I don't know how it was even working before and why it stopped working now
 conn_template = ['connection', '', '', [['id', '0', '', []], ['type', '0', '', []],
                                         ['connectionname', 'REPLACE', '', []],
                                         ['consumer', 'False', '', []], ['linelevel', 'True', '', []],
                                         ['classes', '', '', [['class', '', '', [['classname', 'REPLACE', '', []]]]]]]]
 if on_mac:
     no_dark_mode = None
-label_font = 'Arial'
 
 
 class C4IconSwapper:
@@ -54,15 +51,11 @@ class C4IconSwapper:
                 # Initialize Icon
                 self.root = root_path  # Path to directory containing image
                 self.path = path  # Full path to image file
-                self.name = name
-                self.size = size
-                self.size_alt = None
-                self.name_alt = ''
+                self.name, self.size, self.size_alt, self.name_alt, self.alt_format = name, size, None, '', False
                 for char in reversed(self.root):
                     if char == '/':
                         break
                     self.name_alt = char + self.name_alt
-                self.alt_format = False
                 # Check for alt format of icon
                 if 'x' in self.name_alt:
                     size0 = ''
@@ -87,23 +80,16 @@ class C4IconSwapper:
         class Icon:
             def __init__(self, icons: list, extra=False):
                 # Initialize Icon Group
-                self.name = icons[0].name
-                self.name_orig = self.name
-                self.name_alt = icons[0].name_alt
-                self.path = icons[0].path
-                self.root = icons[0].root
-                self.icons = icons
-                self.extra = extra
-                self.dupe_number = 0
+                self.name, self.name_orig = icons[0].name, icons[0].name
+                self.name_alt, self.path, self.root = icons[0].name_alt, icons[0].path, icons[0].root
+                self.icons, self.extra, self.dupe_number = icons, extra, 0
 
         def __init__(self, upper_class):
             # Initialize C4z Panel
-            self.x = 5
-            self.y = 20
             self.uc = upper_class
-            self.current_icon = 0
+            self.x, self.y = 5, 20
+            self.current_icon, self.extra_icons = 0, 0
             self.icons = []
-            self.extra_icons = 0
             self.valid_connections = ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI', 'STEREO', 'DIGITAL_OPTICAL',
                                       'IR_OUT', 'HDMI IN', 'COMPOSITE IN', 'VGA IN', 'COMPONENT IN', 'DVI IN',
                                       'STEREO IN', 'DIGITAL_OPTICAL IN', 'HDMI OUT', 'COMPOSITE OUT', 'VGA OUT',
@@ -882,14 +868,12 @@ class C4IconSwapper:
     class ReplacementPanel:
         def __init__(self, upper_class):
             # Initialize Replacement Panel
-            if on_mac:
-                self.x = 355
-            else:
-                self.x = 303
-            self.y = 20
             self.uc = upper_class
-            self.img_stack = []
-            self.stack_labels = []
+            if on_mac:
+                self.x, self.y = 355, 20
+            else:
+                self.x, self.y = 303, 20
+            self.img_stack, self.stack_labels = [], []
 
             # Labels
             self.panel_label = tk.Label(self.uc.root, text='Replacement Icons', font=(label_font, 15))
@@ -1325,12 +1309,11 @@ class C4IconSwapper:
     class ExportPanel:
         def __init__(self, upper_class):
             # Initialize Export Panel
-            if on_mac:
-                self.x = 730
-            else:
-                self.x = 615
-            self.y = -50
             self.uc = upper_class
+            if on_mac:
+                self.x, self.y = 730, -50
+            else:
+                self.x, self.y = 615, -50
             self.abort = False
 
             # Labels
@@ -2012,18 +1995,13 @@ class C4IconSwapper:
             def __init__(self, upper_class, x_pos: int, y_pos: int, conn_id=0):
                 # Initialize Connection UI Object
                 self.uc = upper_class
-                self.x = x_pos
-                self.y = y_pos
+                self.x, self.y = x_pos, y_pos
                 self.id = conn_id
-                self.original = False
-                self.in_id_group = False
-                self.delete = False
-                self.prior_txt = ''
-                self.prior_type = ''
+                self.original, self.in_id_group, self.delete = False, False, False
+                self.prior_txt, self.prior_type = '', ''
                 # tags[0] = connection_tag, tags[1] = class_tag, tags[2] = connectionname_tag
                 # tags[3] = id_tag, tags[4] = type_tag, tags[5] = classname_tag
-                self.tags = []
-                self.id_group = []
+                self.tags, self.id_group = [], []
 
                 # Entry
                 if on_mac:
@@ -2122,19 +2100,15 @@ class C4IconSwapper:
                 self.name_entry['state'] = DISABLED
                 self.type.set(self.prior_type)
                 self.prior_type = ''
-                self.tags[0].delete = False
-                self.tags[1].delete = False
+                self.tags[0].delete, self.tags[1].delete = False, False
                 self.del_button['text'] = 'Del'
                 self.del_button['width'] = 3
                 self.del_button.place(x=self.del_button.winfo_x() + 6, y=self.y)
 
             def reinit(self):
                 self.id = 0
-                self.original = False
-                self.in_id_group = False
-                self.delete = False
-                self.prior_txt = ''
-                self.prior_type = ''
+                self.original, self.in_id_group, self.delete = False, False, False
+                self.prior_txt, self.prior_type = '', ''
                 if self.tags:
                     self.disable()
                     self.tags = []
@@ -2206,19 +2180,13 @@ class C4IconSwapper:
 
         def __init__(self, upper_class):
             # Initialize Connection Panel
-            if on_mac:
-                self.x = 10
-                self.y = 300
-                x_spacing = 365
-            else:
-                self.x = 14
-                self.y = 280
-                x_spacing = 318
             self.uc = upper_class
-            self.connections = []
-            self.ids = []
+            if on_mac:
+                self.x, self.y, x_spacing, y_spacing = 10, 300, 365, 40
+            else:
+                self.x, self.y, x_spacing, y_spacing = 14, 280, 318, 40
+            self.connections, self.ids = [], []
 
-            y_spacing = 40
             for x in range(0, 4):
                 for i in range(0, 6):
                     self.connections.append(self.Connection(self.uc, (x * x_spacing) + self.x,
@@ -2233,10 +2201,8 @@ class C4IconSwapper:
             def __init__(self, upper_class, name: str, x_pos: int, y_pos: int, state_name='State69:'):
                 # Initialize Driver State UI Object
                 self.uc = upper_class
-                self.original_name = name
-                self.x = x_pos
-                self.y = y_pos
-                self.name = state_name
+                self.original_name, self.name = name, state_name
+                self.x, self.y = x_pos, y_pos
 
                 # Label
                 self.name_label = tk.Label(self.uc.root, text=self.name)
@@ -2347,17 +2313,12 @@ class C4IconSwapper:
 
         def __init__(self, upper_class):
             # Initialize State Panel
-            if on_mac:
-                self.x = 1085
-                x_spacing = 190
-            else:
-                self.x = 930
-                x_spacing = 200
-            self.y = 27
             self.uc = upper_class
-            self.states = []
-            self.dupes = []
-            y_spacing = 34
+            if on_mac:
+                self.x, self.y, x_spacing, y_spacing = 1085, 27, 190, 34
+            else:
+                self.x, self.y, x_spacing, y_spacing = 930, 27, 200, 34
+            self.states, self.dupes = [], []
             for i in range(13):
                 self.states.append(self.DriverState(self.uc, 'state' + str(i + 1),
                                                     (int(i / 7) * x_spacing) + self.x,
@@ -2383,10 +2344,7 @@ class C4IconSwapper:
             self.cur_dir = os.getcwd() + '/'
         self.temp_root_dir = self.cur_dir + 'C4IconSwapperTemp/'
         self.temp_dir = ''.join([self.temp_root_dir, self.instance_id, '/'])
-        self.checked_in = False
-        self.recovery_wait = False
-        self.recover_instance = ''
-        checked_in_instances = []
+        self.checked_in, self.recovery_wait, self.recover_instance, checked_in_instances = False, False, '', []
         if os.path.isdir(self.temp_root_dir):
             if os.path.isfile(self.temp_root_dir + 'instance'):
                 if on_mac:
@@ -2505,10 +2463,9 @@ class C4IconSwapper:
         self.version_label = Label(self.root, text=version)
         self.version_label.place(relx=1, rely=1.01, anchor='se')
         self.version_label.bind('<Button-1>', self.easter)
-        self.easter_counter = 0
 
         # Class variables
-        self.driver_info_win = None
+        self.driver_info_win, self.driver_xml = None, None
         self.driver_manufac_var = StringVar()
         self.driver_manufac_new_var = StringVar()
         self.driver_manufac_new_var.set('C4IconSwapper')
@@ -2519,22 +2476,15 @@ class C4IconSwapper:
         self.driver_version_var = StringVar()
         self.driver_version_new_var = StringVar()
         self.driver_version_new_var.set('1')
-        self.multi_state_driver = False
-        self.counter = 0
-        self.states_orig_names = []
-        self.driver_xml = None
-        self.states_shown = False
+        self.multi_state_driver, self.states_shown = False, False
+        self.counter, self.easter_counter = 0, 0
+        self.states_orig_names, self.conn_dict = [], {}
         self.device_icon_dir = self.temp_dir + 'driver/www/icons/device/'
         self.icon_dir = self.temp_dir + 'driver/www/icons/'
         self.images_dir = self.temp_dir + 'driver/www/images/'
         self.replacement_image_path = self.temp_dir + 'replacement_icon.png'
-        self.orig_file_dir = ''
-        self.orig_file_path = ''
-        self.driver_selected = False
-        self.replacement_selected = False
-        self.schedule_entry_restore = False
-        self.restore_entry_string = ''
-        self.conn_dict = {}
+        self.orig_file_dir, self.orig_file_path, self.restore_entry_string = '', '', ''
+        self.driver_selected, self.replacement_selected, self.schedule_entry_restore = False, False, False
         for key in ['HDMI IN', 'COMPOSITE IN', 'VGA IN', 'COMPONENT IN', 'DVI IN']:
             self.conn_dict[key] = '\t\t\t<type>5</type>\n\t\t\t' \
                                   '<connectionname>REPLACE</connectionname>\n' \
