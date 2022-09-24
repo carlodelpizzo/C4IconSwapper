@@ -764,31 +764,23 @@ class C4IconSwapper:
             # Get connections from xml object
             connections = []
             classname_tags = self.uc.driver_xml.get_tag('classname')
-            pop_list = []
             if classname_tags is not None:
-                for classname_tag in classname_tags:
+                for classname_tag in reversed(classname_tags):
                     if classname_tag.value not in self.valid_connections:
-                        pop_list.append(classname_tags.index(classname_tag))
-                pop_list.sort(reverse=True)
-                for index in pop_list:
-                    classname_tags.pop(index)
+                        classname_tags.pop(classname_tags.index(classname_tag))
                 for classname_tag in classname_tags:
-                    class_tag = None
-                    connection_tag = None
-                    connectionname_tag = None
-                    id_tag = None
-                    type_tag = None
+                    class_tag, connection_tag, connectionname_tag, id_tag, type_tag = None, None, None, None, None
                     for parent in classname_tag.parents:
-                        if parent.name == 'class':
+                        if (parent_name := parent.name) == 'class':
                             class_tag = parent
-                        if parent.name == 'connection':
+                        elif parent_name == 'connection':
                             connection_tag = parent
                             for child in parent.children:
-                                if child.name == 'type':
+                                if (child_name := child.name) == 'type':
                                     type_tag = child
-                                if child.name == 'id':
+                                elif child_name == 'id':
                                     id_tag = child
-                                if child.name == 'connectionname':
+                                elif child_name == 'connectionname':
                                     connectionname_tag = child
                     if id_tag is None or connection_tag is None or class_tag is None or connectionname_tag is None \
                             or type_tag is None:
