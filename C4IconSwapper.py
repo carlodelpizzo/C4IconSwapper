@@ -696,20 +696,20 @@ class C4IconSwapper:
                 self.prev_icon_button['state'] = DISABLED
                 self.next_icon_button['state'] = DISABLED
             else:
-                self.prev_icon_button['state'] = ACTIVE
-                self.next_icon_button['state'] = ACTIVE
+                self.prev_icon_button['state'] = NORMAL
+                self.next_icon_button['state'] = NORMAL
             # Update replacement prev/next buttons
             if self.uc.replacement_selected and self.uc.driver_selected:
-                self.uc.replacement_panel.replace_button['state'] = ACTIVE
-                self.uc.replacement_panel.replace_all_button['state'] = ACTIVE
+                self.uc.replacement_panel.replace_button['state'] = NORMAL
+                self.uc.replacement_panel.replace_all_button['state'] = NORMAL
             else:
                 self.uc.replacement_panel.replace_button['state'] = DISABLED
                 self.uc.replacement_panel.replace_all_button['state'] = DISABLED
             # Update Export button(s)
             if self.uc.driver_selected:
                 if not on_mac:
-                    self.uc.export_panel.export_button['state'] = ACTIVE
-                self.uc.export_panel.export_as_button['state'] = ACTIVE
+                    self.uc.export_panel.export_button['state'] = NORMAL
+                self.uc.export_panel.export_as_button['state'] = NORMAL
             # Update 'Restore All' button in driver panel
             done = False
             self.restore_all_button['state'] = DISABLED
@@ -717,7 +717,7 @@ class C4IconSwapper:
                 files = os.listdir(path)
                 for file in files:
                     if ('.bak' in file or '.orig' in file) and '.xml' not in file:
-                        self.restore_all_button['state'] = ACTIVE
+                        self.restore_all_button['state'] = NORMAL
                         done = True
                         break
                 if done:
@@ -725,7 +725,7 @@ class C4IconSwapper:
             # Update restore current icon button in driver panel
             if os.path.isfile(self.icons[self.current_icon].path + '.bak') or \
                     os.path.isfile(self.icons[self.current_icon].path + '.orig'):
-                self.restore_button['state'] = ACTIVE
+                self.restore_button['state'] = NORMAL
             else:
                 self.restore_button['state'] = DISABLED
 
@@ -776,7 +776,7 @@ class C4IconSwapper:
 
             if os.path.isfile(self.icons[self.current_icon].path + '.bak') or \
                     os.path.isfile(self.icons[self.current_icon].path + '.orig'):
-                self.restore_button['state'] = ACTIVE
+                self.restore_button['state'] = NORMAL
             else:
                 self.restore_button['state'] = DISABLED
 
@@ -799,7 +799,7 @@ class C4IconSwapper:
 
             if os.path.isfile(self.icons[self.current_icon].path + '.bak') or \
                     os.path.isfile(self.icons[self.current_icon].path + '.orig'):
-                self.restore_button['state'] = ACTIVE
+                self.restore_button['state'] = NORMAL
             else:
                 self.restore_button['state'] = DISABLED
 
@@ -1071,8 +1071,8 @@ class C4IconSwapper:
             self.file_entry_field['state'] = 'readonly'
 
             if self.uc.driver_selected:
-                self.replace_button['state'] = ACTIVE
-                self.replace_all_button['state'] = ACTIVE
+                self.replace_button['state'] = NORMAL
+                self.replace_all_button['state'] = NORMAL
             else:
                 self.replace_button['state'] = DISABLED
                 self.replace_all_button['state'] = DISABLED
@@ -1178,8 +1178,8 @@ class C4IconSwapper:
                     continue
                 new_icon = replacement_icon.resize((icon.size, icon.size))
                 new_icon.save(icon.path)
-            self.uc.c4z_panel.restore_button['state'] = ACTIVE
-            self.uc.c4z_panel.restore_all_button['state'] = ACTIVE
+            self.uc.c4z_panel.restore_button['state'] = NORMAL
+            self.uc.c4z_panel.restore_all_button['state'] = NORMAL
             self.uc.c4z_panel.update_icon()
 
         def replace_all(self):
@@ -1582,7 +1582,7 @@ class C4IconSwapper:
                     self.uc.export_panel.export_as_button['state'] = NORMAL
                 if os.path.isfile(self.uc.c4z_panel.icons[self.uc.c4z_panel.current_icon].path + '.bak') or \
                         os.path.isfile(self.uc.c4z_panel.icons[self.uc.c4z_panel.current_icon].path + '.orig'):
-                    self.uc.c4z_panel.restore_button['state'] = ACTIVE
+                    self.uc.c4z_panel.restore_button['state'] = NORMAL
             else:
                 self.uc.export_panel.export_button['state'] = DISABLED
                 if not on_mac:
