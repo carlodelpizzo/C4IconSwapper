@@ -1551,7 +1551,8 @@ class C4IconSwapper:
                         shutil.copy(bak_files_dict[file], file)
                     shutil.rmtree(bak_folder)
 
-        def save_project(self):
+        # noinspection PyUnusedLocal
+        def save_project(self, *args):
             out_file = filedialog.asksaveasfile(initialfile=self.uc.export_panel.driver_name_var.get() + '.c4is',
                                                 filetypes=[('C4IconsSwapper Project', '*.c4is')])
             if not out_file:
@@ -1562,7 +1563,8 @@ class C4IconSwapper:
             with open(out_file_path, 'wb') as output:
                 pickle.dump(C4IS(self.uc), output)
 
-        def load_project(self):
+        # noinspection PyUnusedLocal
+        def load_project(self, *args):
             filename = filedialog.askopenfilename(filetypes=[('C4IconsSwapper Project', '*.c4is')])
             if not filename:
                 return
@@ -2745,6 +2747,8 @@ class C4IconSwapper:
         self.export_panel = self.ExportPanel(self)
         self.connections_panel = self.ConnectionsPanel(self)
         self.state_panel = self.StatePanel(self)
+        self.root.bind('<Control-s>', self.export_panel.save_project)
+        self.root.bind('<Control-o>', self.export_panel.load_project)
 
         for conn in self.connections_panel.connections:
             conn.name_entry['takefocus'] = 0
@@ -2831,50 +2835,8 @@ class C4IconSwapper:
             self.wait_to_check = False
             if not no_dark_mode:
                 self.root.after(150, self.dark_mode_check)
+        self.root.protocol('WM_DELETE_WINDOW', self.on_program_exit)
         self.root.mainloop()
-        # On program close
-        if on_mac:
-            shutil.rmtree(self.temp_root_dir)
-            return
-        with open(self.temp_root_dir + 'instance', 'r', errors='ignore') as instance_file:
-            current_instances = instance_file.readlines()
-        if len(current_instances) > 1:
-            if os.path.isdir(self.temp_root_dir + 'check_in') and not self.checked_in:
-                return
-            elif os.path.isdir(self.temp_root_dir + 'check_in'):
-                begin_time = float(time.mktime(datetime.now().timetuple()))
-                while os.path.isdir(self.temp_root_dir + 'check_in'):
-                    if float(time.mktime(datetime.now().timetuple())) - begin_time >= 5:
-                        return
-            os.mkdir(self.temp_root_dir + 'check_in')
-            waiting = True
-            begin_time = float(time.mktime(datetime.now().timetuple()))
-            while waiting:
-                if len(os.listdir(self.temp_root_dir + 'check_in')) == len(current_instances):
-                    waiting = False
-                if float(time.mktime(datetime.now().timetuple())) - begin_time >= 2:
-                    waiting = False
-            failed_to_check_in = []
-            for instance_id in current_instances:
-                if instance_id == self.instance_id + '\n':
-                    continue
-                if instance_id.replace('\n', '') not in os.listdir(self.temp_root_dir + 'check_in'):
-                    failed_to_check_in.append(instance_id.replace('\n', ''))
-            for failed_id in failed_to_check_in:
-                if os.path.isdir(self.temp_root_dir + failed_id):
-                    shutil.rmtree(self.temp_root_dir + failed_id)
-            current_instances = []
-            for instance_id in os.listdir(self.temp_root_dir + 'check_in'):
-                current_instances.append(instance_id + '\n')
-            shutil.rmtree(self.temp_root_dir + 'check_in')
-            if len(current_instances) > 0:
-                with open(self.temp_root_dir + 'instance', 'w', errors='ignore') as out_file:
-                    out_file.writelines(current_instances)
-                shutil.rmtree(self.temp_dir)
-            else:
-                shutil.rmtree(self.temp_root_dir)
-        else:
-            shutil.rmtree(self.temp_root_dir)
 
     def toggle_connections_panel(self):
         if not self.states_shown:
@@ -3059,6 +3021,83 @@ class C4IconSwapper:
                 else:
                     self.export_panel.driver_name_entry['background'] = 'pink'
             self.root.after(150, self.blink_driver_name_entry)
+
+    def on_program_exit(self):
+        def end_program():
+            if on_mac:
+                shutil.rmtree(self.temp_root_dir)
+                return
+            with open(self.temp_root_dir + 'instance', 'r', errors='ignore') as instance_file:
+                current_instances = instance_file.readlines()
+            if len(current_instances) > 1:
+                if os.path.isdir(self.temp_root_dir + 'check_in') and not self.checked_in:
+                    return
+                elif os.path.isdir(self.temp_root_dir + 'check_in'):
+                    begin_time = float(time.mktime(datetime.now().timetuple()))
+                    while os.path.isdir(self.temp_root_dir + 'check_in'):
+                        if float(time.mktime(datetime.now().timetuple())) - begin_time >= 5:
+                            return
+                os.mkdir(self.temp_root_dir + 'check_in')
+                waiting = True
+                begin_time = float(time.mktime(datetime.now().timetuple()))
+                while waiting:
+                    if len(os.listdir(self.temp_root_dir + 'check_in')) == len(current_instances):
+                        waiting = False
+                    if float(time.mktime(datetime.now().timetuple())) - begin_time >= 2:
+                        waiting = False
+                failed_to_check_in = []
+                for instance_id in current_instances:
+                    if instance_id == self.instance_id + '\n':
+                        continue
+                    if instance_id.replace('\n', '') not in os.listdir(self.temp_root_dir + 'check_in'):
+                        failed_to_check_in.append(instance_id.replace('\n', ''))
+                for failed_id in failed_to_check_in:
+                    if os.path.isdir(self.temp_root_dir + failed_id):
+                        shutil.rmtree(self.temp_root_dir + failed_id)
+                current_instances = []
+                for instance_id in os.listdir(self.temp_root_dir + 'check_in'):
+                    current_instances.append(instance_id + '\n')
+                shutil.rmtree(self.temp_root_dir + 'check_in')
+                if len(current_instances) > 0:
+                    with open(self.temp_root_dir + 'instance', 'w', errors='ignore') as out_file:
+                        out_file.writelines(current_instances)
+                    shutil.rmtree(self.temp_dir)
+                else:
+                    shutil.rmtree(self.temp_root_dir)
+            else:
+                shutil.rmtree(self.temp_root_dir)
+
+            self.root.destroy()
+        if self.driver_selected or self.replacement_selected or len(self.replacement_panel.img_stack) > 0:
+            def exit_save_dialog():
+                save_on_exit.destroy()
+                end_program()
+
+            def do_project_save():
+                self.export_panel.save_project()
+                exit_save_dialog()
+            win_x = self.root.winfo_rootx()
+            win_y = self.root.winfo_rooty()
+            save_on_exit = Toplevel(self.root)
+            save_on_exit.title('Save current project?')
+            save_on_exit.geometry('239x70')
+            save_on_exit.geometry(f'+{win_x}+{win_y}')
+            save_on_exit.protocol('WM_DELETE_WINDOW', exit_save_dialog)
+            save_on_exit.grab_set()
+            save_on_exit.focus()
+            save_on_exit.transient(self.root)
+            save_on_exit.resizable(False, False)
+
+            confirm_label = Label(save_on_exit, text='Would you like to save the current project?')
+            confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
+
+            yes_button = tk.Button(save_on_exit, text='Yes', width='10', command=do_project_save)
+            yes_button.grid(row=2, column=0, sticky='e', padx=5)
+
+            no_button = tk.Button(save_on_exit, text='No', width='10', command=exit_save_dialog)
+            no_button.grid(row=2, column=1, sticky='w', padx=5)
+        else:
+            end_program()
 
     if not on_mac:
         def instance_check(self):
