@@ -2301,7 +2301,7 @@ class C4IconSwapper:
                     return
                 if not self.delete:
                     self.delete = True
-                    self.prior_txt = self.name_entry.get()
+                    self.prior_txt = self.name_entry_var.get()
                     self.prior_type = self.type.get()
                     self.type.set('RIP')
                     self.name_entry['state'] = NORMAL
