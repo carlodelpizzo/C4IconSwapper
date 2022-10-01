@@ -1554,7 +1554,7 @@ class C4IconSwapper:
         # noinspection PyUnusedLocal
         def save_project(self, *args):
             out_file = filedialog.asksaveasfile(initialfile=self.uc.export_panel.driver_name_var.get() + '.c4is',
-                                                filetypes=[('C4IconsSwapper Project', '*.c4is')])
+                                                filetypes=[('C4IconSwapper Project', '*.c4is')])
             if not out_file:
                 return
             if not (out_file_path := out_file.name).endswith('.c4is'):
@@ -1565,7 +1565,7 @@ class C4IconSwapper:
 
         # noinspection PyUnusedLocal
         def load_project(self, *args):
-            filename = filedialog.askopenfilename(filetypes=[('C4IconsSwapper Project', '*.c4is')])
+            filename = filedialog.askopenfilename(filetypes=[('C4IconSwapper Project', '*.c4is')])
             if not filename:
                 return
             with open(filename, 'rb') as file:
