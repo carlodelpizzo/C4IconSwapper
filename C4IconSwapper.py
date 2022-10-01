@@ -47,8 +47,10 @@ if on_mac:
 
 class C4IS:
     def __init__(self, uc: object):
+        if type(uc) is not C4IconSwapper:
+            raise TypeError
         if not uc:
-            uc = C4IconSwapper()
+            uc = C4IconSwapper()  # For IDE UnresolvedReferences errors
         # Root class
         self.driver_xml = uc.driver_xml
         self.driver_manufac_var = uc.driver_manufac_var.get()
@@ -64,18 +66,16 @@ class C4IS:
         self.replacement_selected = uc.replacement_selected
 
         # State Panel
-        self.states = []
-        for state in uc.state_panel.states:
-            self.states.append({'original_name': state.original_name, 'name_var': state.name_var.get()})
+        self.states = [{'original_name': state.original_name, 'name_var': state.name_var.get()}
+                       for state in uc.state_panel.states]
 
         # Connection Panel
         self.ids = uc.connections_panel.ids
-        self.connections = []
-        for conn in uc.connections_panel.connections:
-            self.connections.append({'id': conn.id, 'original': conn.original, 'in_id_group': conn.in_id_group,
-                                     'delete': conn.delete, 'prior_txt': conn.prior_txt, 'prior_type': conn.prior_type,
-                                     'tags': conn.tags, 'id_group': conn.id_group, 'type': conn.type.get(),
-                                     'name': conn.name_entry.get(), 'state': conn.name_entry['state']})
+        self.connections = [{'id': conn.id, 'original': conn.original, 'in_id_group': conn.in_id_group,
+                             'delete': conn.delete, 'prior_txt': conn.prior_txt, 'prior_type': conn.prior_type,
+                             'tags': conn.tags, 'id_group': conn.id_group, 'type': conn.type.get(),
+                             'name': conn.name_entry.get(), 'state': conn.name_entry['state']}
+                            for conn in uc.connections_panel.connections]
 
         # Export Panel
         self.driver_name_var = uc.export_panel.driver_name_var.get()
@@ -104,9 +104,7 @@ class C4IS:
             self.replacement = Image.open(uc.temp_dir + 'replacement_icon.png')
         else:
             self.replacement = None
-        self.img_stack = []
-        for img in uc.replacement_panel.img_stack:
-            self.img_stack.append(Image.open(img))
+        self.img_stack = [Image.open(img) for img in uc.replacement_panel.img_stack]
 
         self.replacement_panel = {'replace': uc.replacement_panel.replace_button['state'],
                                   'replace_all': uc.replacement_panel.replace_all_button['state'],
@@ -1063,7 +1061,11 @@ class C4IconSwapper:
 
             if self.uc.replacement_selected:
                 self.add_to_img_stack(self.uc.replacement_image_path)
-            shutil.copy(filename, self.uc.replacement_image_path)
+            replacement_image = Image.open(filename)
+            output_img = replacement_image.resize((1024, 1024))
+            replacement_image.close()
+            output_img.save(self.uc.replacement_image_path)
+            output_img.close()
 
             self.file_entry_field['state'] = NORMAL
             self.file_entry_field.delete(0, 'end')
@@ -1082,6 +1084,7 @@ class C4IconSwapper:
             self.uc.replacement_selected = True
             icon_image = Image.open(self.uc.replacement_image_path)
             icon = icon_image.resize((128, 128))
+            icon_image.close()
             icon = ImageTk.PhotoImage(icon)
             self.blank_image_label.configure(image=icon)
             self.blank_image_label.image = icon
@@ -1102,7 +1105,11 @@ class C4IconSwapper:
             if 'replacement_icon.png' in img_path:
                 os.rename(img_path, new_img_path)
             else:
-                shutil.copy(img_path, new_img_path)
+                stack_image = Image.open(img_path)
+                output_img = stack_image.resize((1024, 1024))
+                stack_image.close()
+                output_img.save(new_img_path)
+                output_img.close()
             if index is None:
                 self.img_stack.insert(0, new_img_path)
                 self.refresh_img_stack()
@@ -1553,8 +1560,7 @@ class C4IconSwapper:
                 out_file.close()
                 os.rename(out_file_path, (out_file_path := out_file_path + '.c4is'))
             with open(out_file_path, 'wb') as output:
-                save_state = C4IS(self.uc)
-                pickle.dump(save_state, output)
+                pickle.dump(C4IS(self.uc), output)
 
         def load_project(self):
             filename = filedialog.askopenfilename(filetypes=[('C4IconsSwapper Project', '*.c4is')])
@@ -1562,8 +1568,8 @@ class C4IconSwapper:
                 return
             with open(filename, 'rb') as file:
                 save_state = pickle.load(file)
-            if not save_state:
-                save_state = C4IS(None)
+            if type(save_state) is not C4IS:
+                raise TypeError
 
             # C4z Panel (and export button)
             self.uc.c4z_panel.icons = []
