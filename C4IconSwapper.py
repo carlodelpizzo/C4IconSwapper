@@ -74,7 +74,7 @@ class C4IS:
         self.connections = [{'id': conn.id, 'original': conn.original, 'in_id_group': conn.in_id_group,
                              'delete': conn.delete, 'prior_txt': conn.prior_txt, 'prior_type': conn.prior_type,
                              'tags': conn.tags, 'id_group': conn.id_group, 'type': conn.type.get(),
-                             'name': conn.name_entry.get(), 'state': conn.name_entry['state']}
+                             'name': conn.name_entry_var.get(), 'state': conn.name_entry['state']}
                             for conn in uc.connections_panel.connections]
 
         # Export Panel
@@ -734,6 +734,8 @@ class C4IconSwapper:
             # Update connections panel
             self.get_connections()
 
+            self.uc.ask_to_save = True
+
         def restore_icon(self, index=None):
             if index is None:
                 index = self.current_icon
@@ -1089,6 +1091,8 @@ class C4IconSwapper:
             self.blank_image_label.configure(image=icon)
             self.blank_image_label.image = icon
 
+            self.uc.ask_to_save = True
+
         def add_to_img_stack(self, img_path: str, index=None):
             if not os.path.isfile(img_path) or not is_valid_image(img_path):
                 return
@@ -1125,6 +1129,8 @@ class C4IconSwapper:
             if len(self.img_stack) > stack_length:
                 self.prev_icon_button['state'] = NORMAL
                 self.next_icon_button['state'] = NORMAL
+
+            self.uc.ask_to_save = True
 
         def refresh_img_stack(self):
             if len(self.img_stack) == 0:
@@ -1562,6 +1568,7 @@ class C4IconSwapper:
                 os.rename(out_file_path, (out_file_path := out_file_path + '.c4is'))
             with open(out_file_path, 'wb') as output:
                 pickle.dump(C4IS(self.uc), output)
+            self.uc.ask_to_save = False
 
         # noinspection PyUnusedLocal
         def load_project(self, *args):
@@ -1638,8 +1645,7 @@ class C4IconSwapper:
                 self.uc.connections_panel.connections[i].id_group = conn['id_group']
                 self.uc.connections_panel.connections[i].type.set(conn['type'])
                 self.uc.connections_panel.connections[i].name_entry['state'] = NORMAL
-                self.uc.connections_panel.connections[i].name_entry.delete(0, 'end')
-                self.uc.connections_panel.connections[i].name_entry.insert(0, conn['name'])
+                self.uc.connections_panel.connections[i].name_entry_var.set(conn['name'])
                 self.uc.connections_panel.connections[i].name_entry['state'] = conn['state']
                 if conn['delete']:
                     self.uc.connections_panel.connections[i].flag_delete()
@@ -1679,6 +1685,8 @@ class C4IconSwapper:
             self.uc.replacement_panel.replace_all_button['state'] = save_state.replacement_panel['replace_all']
             self.uc.replacement_panel.prev_icon_button['state'] = save_state.replacement_panel['prev']
             self.uc.replacement_panel.next_icon_button['state'] = save_state.replacement_panel['next']
+
+            self.uc.ask_to_save = False
 
         def do_export(self, quick_export=False):
             # Format driver name
@@ -1881,7 +1889,7 @@ class C4IconSwapper:
 
             # Update connection names
             for conn in self.uc.connections_panel.connections:
-                conn.tags[2].value = conn.name_entry.get()
+                conn.tags[2].value = conn.name_entry_var.get()
                 conn.tags[5].value = conn.type.get()
 
             # Update xml with new driver name
@@ -2031,6 +2039,8 @@ class C4IconSwapper:
                     driver_name.append(char)
             self.driver_name_var.set(''.join(driver_name))
 
+            self.uc.ask_to_save = True
+
         def edit_driver_info(self):
             def on_win_close():
                 if self.uc.driver_version_new_var.get() == '':
@@ -2061,6 +2071,8 @@ class C4IconSwapper:
                     driver_ver_new_entry.icursor(cursor_pos - str_diff)
                 self.uc.driver_version_new_var.set(''.join(version_compare))
 
+                self.uc.ask_to_save = True
+
             # noinspection PyUnusedLocal
             def validate_name(*args):
                 # Check manufacturer variable
@@ -2076,6 +2088,8 @@ class C4IconSwapper:
                     if char in valid_chars:
                         name.append(char)
                 self.uc.driver_creator_new_var.set(''.join(name))
+
+                self.uc.ask_to_save = True
 
             if self.uc.driver_info_win:
                 self.uc.driver_info_win.focus()
@@ -2195,6 +2209,7 @@ class C4IconSwapper:
 
         # noinspection PyUnusedLocal
         def update_driver_version(self, *args):
+            self.uc.ask_to_save = True
             # Update driver version if 'increment driver' is selected and new version value is <= last version value
             if self.inc_driver_version.get() == 0:
                 return
@@ -2218,13 +2233,15 @@ class C4IconSwapper:
                 self.tags, self.id_group = [], []
 
                 # Entry
+                self.name_entry_var = StringVar()
+                self.name_entry_var.set('Connection Name...')
+                self.name_entry_var.trace('w', self.name_update)
                 if on_mac:
-                    self.name_entry = tk.Entry(self.uc.root, width=15)
+                    self.name_entry = tk.Entry(self.uc.root, width=15, textvariable=self.name_entry_var)
                     self.name_entry.place(x=self.x + 60, y=self.y, anchor='w')
                 else:
-                    self.name_entry = tk.Entry(self.uc.root, width=20)
+                    self.name_entry = tk.Entry(self.uc.root, width=20, textvariable=self.name_entry_var)
                     self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
-                self.name_entry.insert(0, 'Connection Name...')
                 self.name_entry['state'] = DISABLED
 
                 # Dropdown
@@ -2288,8 +2305,7 @@ class C4IconSwapper:
                     self.prior_type = self.type.get()
                     self.type.set('RIP')
                     self.name_entry['state'] = NORMAL
-                    self.name_entry.delete(0, END)
-                    self.name_entry.insert(0, 'TO BE DELETED')
+                    self.name_entry_var.set('TO BE DELETED')
                     self.name_entry['state'] = DISABLED
                     self.del_button['text'] = 'Keep'
                     self.del_button['width'] = 4
@@ -2310,8 +2326,7 @@ class C4IconSwapper:
                     return
                 self.delete = False
                 self.name_entry['state'] = NORMAL
-                self.name_entry.delete(0, END)
-                self.name_entry.insert(0, self.prior_txt)
+                self.name_entry_var.set(self.prior_txt)
                 self.prior_txt = ''
                 self.name_entry['state'] = DISABLED
                 self.type.set(self.prior_type)
@@ -2333,8 +2348,7 @@ class C4IconSwapper:
 
                 # Entry
                 self.name_entry['state'] = NORMAL
-                self.name_entry.delete(0, END)
-                self.name_entry.insert(0, 'Connection Name...')
+                self.name_entry_var.set('Connection Name...')
                 self.name_entry['state'] = DISABLED
                 self.name_entry['takefocus'] = 0
 
@@ -2356,6 +2370,7 @@ class C4IconSwapper:
                     self.add_button.place(x=self.x, y=self.y, anchor='w')
 
             def update_id(self, *args, refresh=False):
+                self.uc.ask_to_save = True
                 if not args:
                     args = [self.type]
                 if self.original:
@@ -2394,6 +2409,10 @@ class C4IconSwapper:
                 self.id = valid_id[0]
                 self.tags[3].value = str(self.id)
                 self.uc.connections_panel.ids.append(self.id)
+
+            # noinspection PyUnusedLocal
+            def name_update(self, *args):
+                self.uc.ask_to_save = True
 
         def __init__(self, upper_class):
             # Initialize Connection Panel
@@ -2439,6 +2458,7 @@ class C4IconSwapper:
 
             # noinspection PyUnusedLocal
             def validate_state(self, *args):
+                self.uc.ask_to_save = True
                 background_color = light_entry_bg
                 if on_mac and is_dark_mode():
                     background_color = dark_entry_bg
@@ -2693,7 +2713,7 @@ class C4IconSwapper:
         self.driver_version_var = StringVar()
         self.driver_version_new_var = StringVar()
         self.driver_version_new_var.set('1')
-        self.multi_state_driver, self.states_shown = False, False
+        self.multi_state_driver, self.states_shown, self.ask_to_save = False, False, False
         self.counter, self.easter_counter = 0, 0
         self.states_orig_names, self.conn_dict = [], {}
         self.device_icon_dir = self.temp_dir + 'driver/www/icons/device/'
@@ -3068,7 +3088,7 @@ class C4IconSwapper:
                 shutil.rmtree(self.temp_root_dir)
 
             self.root.destroy()
-        if self.driver_selected or self.replacement_selected or len(self.replacement_panel.img_stack) > 0:
+        if self.ask_to_save:
             def exit_save_dialog():
                 save_on_exit.destroy()
                 end_program()
