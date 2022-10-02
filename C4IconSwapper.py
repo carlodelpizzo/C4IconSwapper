@@ -9,8 +9,8 @@ import re
 import pickle
 import PIL.Image
 import tkinter as tk
-from tkinter import *
-from tkinter import ttk, filedialog
+from tkinter import NORMAL, DISABLED, END, INSERT
+from tkinter import ttk, filedialog, Toplevel, StringVar, IntVar, Checkbutton, Label, OptionMenu
 from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
@@ -1438,6 +1438,9 @@ class C4IconSwapper:
             self.driver_name_var.trace('w', self.validate_driver_name)
             self.driver_name_entry = tk.Entry(self.uc.root, width=25, textvariable=self.driver_name_var)
             self.driver_name_entry.place(x=145 + self.x, y=190 + self.y, anchor='n')
+            self.driver_ver_new_entry = None
+            self.driver_man_new_entry = None
+            self.driver_creator_new_entry = None
 
             # Checkboxes
             self.inc_driver_version = IntVar(value=1)
@@ -1485,12 +1488,10 @@ class C4IconSwapper:
 
                 # Overwrite file popup
                 if os.path.isfile(self.uc.cur_dir + driver_name + '.c4z'):
-                    win_x = self.uc.root.winfo_rootx() + self.x
-                    win_y = self.uc.root.winfo_rooty()
                     overwrite_pop_up = Toplevel(self.uc.root)
                     overwrite_pop_up.title('Overwrite')
                     overwrite_pop_up.geometry('239x70')
-                    overwrite_pop_up.geometry(f'+{win_x}+{win_y}')
+                    overwrite_pop_up.geometry(f'+{self.uc.root.winfo_rootx() + self.x}+{self.uc.root.winfo_rooty()}')
                     overwrite_pop_up.protocol('WM_DELETE_WINDOW', export_cleanup)
                     overwrite_pop_up.grab_set()
                     overwrite_pop_up.focus()
@@ -1721,8 +1722,6 @@ class C4IconSwapper:
                         single_invalid_state = False
                         break
                 if invalid_states:
-                    win_x = self.uc.root.winfo_rootx() + self.x
-                    win_y = self.uc.root.winfo_rooty()
                     invalid_states_pop_up = Toplevel(self.uc.root)
                     if single_invalid_state:
                         invalid_states_pop_up.title('Invalid State Found')
@@ -1731,7 +1730,8 @@ class C4IconSwapper:
                         invalid_states_pop_up.title('Invalid States Found')
                         label_text = 'Cannot Export: Invalid state labels'
                     invalid_states_pop_up.geometry('239x70')
-                    invalid_states_pop_up.geometry(f'+{win_x}+{win_y}')
+                    invalid_states_pop_up.geometry(f'+{self.uc.root.winfo_rootx() + self.x}+'
+                                                   f'{self.uc.root.winfo_rooty()}')
                     invalid_states_pop_up.grab_set()
                     invalid_states_pop_up.focus()
                     invalid_states_pop_up.transient(self.uc.root)
@@ -1862,13 +1862,12 @@ class C4IconSwapper:
             # Check driver info variables
             if self.uc.driver_version_new_var.get() == '' or self.uc.driver_manufac_new_var.get() == '' or \
                     self.uc.driver_creator_new_var.get() == '':
-                win_x = self.uc.root.winfo_rootx() + self.x
-                win_y = self.uc.root.winfo_rooty()
                 missing_driver_info_pop_up = Toplevel(self.uc.root)
                 missing_driver_info_pop_up.title('Missing Driver Information')
                 label_text = 'Cannot Export: Missing driver info'
                 missing_driver_info_pop_up.geometry('239x70')
-                missing_driver_info_pop_up.geometry(f'+{win_x}+{win_y}')
+                missing_driver_info_pop_up.geometry(f'+{self.uc.root.winfo_rootx() + self.x}+'
+                                                    f'{self.uc.root.winfo_rooty()}')
                 missing_driver_info_pop_up.grab_set()
                 missing_driver_info_pop_up.focus()
                 missing_driver_info_pop_up.transient(self.uc.root)
@@ -2049,6 +2048,11 @@ class C4IconSwapper:
                     self.uc.driver_creator_new_var.set('C4IconSwapper')
                 if self.uc.driver_manufac_new_var.get() == '':
                     self.uc.driver_manufac_new_var.set('C4IconSwapper')
+                if self.uc.driver_version_new_var.get() == '':
+                    if self.uc.driver_version_var.get() != '':
+                        self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_var.get()) + 1))
+                    else:
+                        self.uc.driver_version_new_var.set('1')
                 if self.inc_driver_version.get() == 1 and self.uc.driver_version_var.get() != '' and \
                         int(self.uc.driver_version_new_var.get()) <= int(self.uc.driver_version_var.get()):
                     self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_var.get()) + 1))
@@ -2059,7 +2063,7 @@ class C4IconSwapper:
             def validate_version(*args):
                 version_str = self.uc.driver_version_new_var.get()
                 version_compare = []
-                cursor_pos = driver_ver_new_entry.index(INSERT)
+                cursor_pos = self.driver_ver_new_entry.index(INSERT)
                 for char in version_str:
                     if char not in numbers:
                         continue
@@ -2068,7 +2072,7 @@ class C4IconSwapper:
                     version_compare.append(char)
                 str_diff = len(version_str) - len(version_compare)
                 if str_diff > 0:
-                    driver_ver_new_entry.icursor(cursor_pos - str_diff)
+                    self.driver_ver_new_entry.icursor(cursor_pos - str_diff)
                 self.uc.driver_version_new_var.set(''.join(version_compare))
 
                 self.uc.ask_to_save = True
@@ -2076,18 +2080,28 @@ class C4IconSwapper:
             # noinspection PyUnusedLocal
             def validate_name(*args):
                 # Check manufacturer variable
-                name = []
+                cursor_pos = self.driver_man_new_entry.index(INSERT)
+                name = self.uc.driver_manufac_new_var.get()
+                name_compare = []
                 for char in self.uc.driver_manufac_new_var.get():
                     if char in valid_chars:
-                        name.append(char)
-                self.uc.driver_manufac_new_var.set(''.join(name))
+                        name_compare.append(char)
+                str_diff = len(name) - len(name_compare)
+                if str_diff > 0:
+                    self.driver_man_new_entry.icursor(cursor_pos - str_diff)
+                self.uc.driver_manufac_new_var.set(''.join(name_compare))
 
                 # Check creator variable
-                name = []
+                cursor_pos = self.driver_creator_new_entry.index(INSERT)
+                name = self.uc.driver_creator_new_var.get()
+                name_compare = []
                 for char in self.uc.driver_creator_new_var.get():
                     if char in valid_chars:
-                        name.append(char)
-                self.uc.driver_creator_new_var.set(''.join(name))
+                        name_compare.append(char)
+                str_diff = len(name) - len(name_compare)
+                if str_diff > 0:
+                    self.driver_creator_new_entry.icursor(cursor_pos - str_diff)
+                self.uc.driver_creator_new_var.set(''.join(name_compare))
 
                 self.uc.ask_to_save = True
 
@@ -2095,8 +2109,6 @@ class C4IconSwapper:
                 self.uc.driver_info_win.focus()
                 return
             # Initialize window
-            win_x = self.uc.root.winfo_rootx() + self.x
-            win_y = self.uc.root.winfo_rooty()
             self.uc.driver_info_win = Toplevel(self.uc.root)
             self.uc.driver_info_win.focus()
             self.uc.driver_info_win.protocol('WM_DELETE_WINDOW', on_win_close)
@@ -2105,11 +2117,12 @@ class C4IconSwapper:
                 self.uc.driver_info_win.geometry('255x240')
             else:
                 self.uc.driver_info_win.geometry('347x240')
-            self.uc.driver_info_win.geometry(f'+{win_x}+{win_y}')
+            self.uc.driver_info_win.geometry(f'+{self.uc.root.winfo_rootx() + self.x}+{self.uc.root.winfo_rooty()}')
             self.uc.driver_info_win.resizable(False, False)
 
             # Validate driver version
             if self.inc_driver_version.get() == 1 and self.uc.driver_version_var.get() != '' and \
+                    self.uc.driver_version_new_var.get() != '' and \
                     int(self.uc.driver_version_new_var.get()) <= int(self.uc.driver_version_var.get()):
                 self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_var.get()) + 1))
 
@@ -2152,22 +2165,22 @@ class C4IconSwapper:
             driver_man_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
                                         textvariable=self.uc.driver_manufac_var)
             driver_man_entry['state'] = DISABLED
-            driver_man_new_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
-                                            textvariable=self.uc.driver_manufac_new_var)
+            self.driver_man_new_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
+                                                 textvariable=self.uc.driver_manufac_new_var)
 
             self.uc.driver_creator_new_var.trace('w', validate_name)
             driver_creator_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
                                             textvariable=self.uc.driver_creator_var)
             driver_creator_entry['state'] = DISABLED
-            driver_creator_new_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
-                                                textvariable=self.uc.driver_creator_new_var)
+            self.driver_creator_new_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
+                                                     textvariable=self.uc.driver_creator_new_var)
 
             driver_ver_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
                                         textvariable=self.uc.driver_version_var)
             driver_ver_entry['state'] = DISABLED
-            driver_ver_new_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
-                                            textvariable=self.uc.driver_version_new_var)
-            driver_ver_new_entry.bind('<FocusOut>', self.update_driver_version)
+            self.driver_ver_new_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
+                                                 textvariable=self.uc.driver_version_new_var)
+            self.driver_ver_new_entry.bind('<FocusOut>', self.update_driver_version)
             self.uc.driver_version_new_var.trace('w', validate_version)
             driver_ver_orig_entry = tk.Entry(self.uc.driver_info_win, width=6, textvariable=self.uc.driver_ver_orig)
             driver_ver_orig_entry['state'] = DISABLED
@@ -2181,11 +2194,11 @@ class C4IconSwapper:
                 driver_ver_label.place(x=127, y=version_y - 15, anchor='n')
                 driver_ver_orig_label.place(x=110, y=version_y + 30, anchor='ne')
                 driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
-                driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
+                self.driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
                 driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
-                driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
+                self.driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
                 driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
-                driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
+                self.driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
                 driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
             else:
                 instance_id_label.place(x=173, y=220, anchor='n')
@@ -2200,11 +2213,11 @@ class C4IconSwapper:
                 driver_ver_orig_label.place(x=140, y=version_y + 35, anchor='ne')
 
                 driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
-                driver_man_new_entry.place(x=180, y=man_y + 7, anchor='nw')
+                self.driver_man_new_entry.place(x=180, y=man_y + 7, anchor='nw')
                 driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
-                driver_creator_new_entry.place(x=180, y=creator_y + 7, anchor='nw')
+                self.driver_creator_new_entry.place(x=180, y=creator_y + 7, anchor='nw')
                 driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
-                driver_ver_new_entry.place(x=180, y=version_y + 7, anchor='nw')
+                self.driver_ver_new_entry.place(x=180, y=version_y + 7, anchor='nw')
                 driver_ver_orig_entry.place(x=140, y=version_y + 35, anchor='nw')
 
         # noinspection PyUnusedLocal
@@ -3096,12 +3109,11 @@ class C4IconSwapper:
             def do_project_save():
                 self.export_panel.save_project()
                 exit_save_dialog()
-            win_x = self.root.winfo_rootx()
-            win_y = self.root.winfo_rooty()
             save_on_exit = Toplevel(self.root)
             save_on_exit.title('Save current project?')
             save_on_exit.geometry('239x70')
-            save_on_exit.geometry(f'+{win_x}+{win_y}')
+            win_x = self.root.winfo_rootx() + self.root.winfo_width() - 250
+            save_on_exit.geometry(f'+{win_x}+{self.root.winfo_rooty()}')
             save_on_exit.protocol('WM_DELETE_WINDOW', exit_save_dialog)
             save_on_exit.grab_set()
             save_on_exit.focus()
