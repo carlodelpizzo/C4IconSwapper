@@ -30,7 +30,7 @@ def make_exe(python_file: str):
     clean_up()
     if not on_mac:
         # Build Exe
-        PyInstaller.__main__.run([python_file, '--onefile', '-w', '--icon=icon.ico'])
+        PyInstaller.__main__.run([python_file, '--onefile', '-w', '--icon=assets/icon.ico'])
         # Move and Rename
         if os.path.isfile(cur_dir + 'dist/' + python_file_name + '.exe'):
             if os.path.isfile(cur_dir + 'C4IconSwapper.' + version + '.exe'):
@@ -39,7 +39,7 @@ def make_exe(python_file: str):
                         cur_dir + 'C4IconSwapper.' + version + '.exe')
     else:
         # Build Exe
-        PyInstaller.__main__.run([python_file, '--onefile', '-w', '--icon=icon.icns'])
+        PyInstaller.__main__.run([python_file, '--onefile', '-w', '--icon=assets/icon.icns'])
         # Move and Rename
         if os.path.isdir(cur_dir + '/C4IconSwapper.' + version + '.app'):
             shutil.rmtree(cur_dir + '/C4IconSwapper.' + version + '.app')
