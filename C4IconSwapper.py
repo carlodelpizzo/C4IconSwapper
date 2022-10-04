@@ -23,7 +23,7 @@ else:
     on_mac = False
 
 version = '1.1'
-label_font, light_entry_bg, dark_entry_bg,  = 'Arial', '#FFFFFF', '#282830'
+label_font, light_entry_bg, dark_entry_bg  = 'Arial', '#FFFFFF', '#282830'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
