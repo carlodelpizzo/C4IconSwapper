@@ -2,6 +2,7 @@ import filecmp
 import platform
 import os
 import shutil
+import base64
 import time
 import random
 import re
@@ -12,6 +13,7 @@ from tkinter import NORMAL, DISABLED, END, INSERT
 from tkinter import ttk, filedialog, Toplevel, StringVar, IntVar, Checkbutton, Label, OptionMenu
 from PIL import ImageTk, Image
 from datetime import datetime
+from Base64Assets import *
 from XMLObject import XMLObject
 if platform.system() == 'Darwin':
     import subprocess
@@ -249,20 +251,21 @@ class C4IconSwapper:
         def load_gen_driver(self):
             # Upload generic two-state driver from Base64Assets
             self.multi_driver_button['state'] = NORMAL
-            gen_driver_path = self.uc.temp_dir + 'generic.c4z'
-            if self.file_entry_field.get() == gen_driver_path:
+            temp_gen_driver = self.uc.temp_dir + 'generic.c4z'
+            if self.file_entry_field.get() == temp_gen_driver:
                 return
+            if on_mac:
+                with open(get_path(temp_gen_driver), 'wb') as gen_driver:
+                    gen_driver.write(base64.b64decode(generic_driver))
+            else:
+                with open(temp_gen_driver, 'wb') as gen_driver:
+                    gen_driver.write(base64.b64decode(generic_driver))
 
             if os.path.isdir(self.uc.temp_dir + 'driver'):
                 shutil.rmtree(self.uc.temp_dir + 'driver')
 
-            with open('assets/gen_driver', 'rb') as file:
-                gen_driver = pickle.load(file)
-            with open(gen_driver_path, 'wb') as file:
-                file.write(gen_driver)
-
-            shutil.unpack_archive(gen_driver_path, self.uc.temp_dir + 'driver', 'zip')
-            os.remove(gen_driver_path)
+            shutil.unpack_archive(temp_gen_driver, self.uc.temp_dir + 'driver', 'zip')
+            os.remove(temp_gen_driver)
 
             sizes = [(70, 70), (90, 90), (300, 300), (512, 512)]
             pictures = os.listdir(self.uc.device_icon_dir)
@@ -272,21 +275,26 @@ class C4IconSwapper:
                     new_icon = resized_icon.resize(size)
                     new_icon.save(self.uc.device_icon_dir + picture.replace('1024', str(size[0])))
 
-            shutil.make_archive(gen_driver_path.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
-            os.rename(gen_driver_path.replace('.c4z', '.zip'), gen_driver_path)
+            shutil.make_archive(temp_gen_driver.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
+            os.rename(temp_gen_driver.replace('.c4z', '.zip'), temp_gen_driver)
 
-            self.upload_c4z(gen_driver_path)
+            self.upload_c4z(temp_gen_driver)
             self.uc.export_panel.driver_name_entry.delete(0, 'end')
             self.uc.export_panel.driver_name_entry.insert(0, 'New Driver')
-            os.remove(gen_driver_path)
+            os.remove(temp_gen_driver)
             self.gen_driver_button['state'] = DISABLED
 
         def load_gen_multi(self, show_loading_image=True):
             # Upload generic multi-state driver from Base64Assets
             if show_loading_image:
-                # Has to return to mainloop and be recalled so image will show
-                with open('assets/loading_icon', 'rb') as file:
-                    icon_image = pickle.load(file)
+                # Show loading image while driver images are created
+                if on_mac:
+                    with open(get_path(self.uc.temp_dir + 'loading_icon.gif'), 'wb') as loading_img:
+                        loading_img.write(base64.b64decode(loading_icon))
+                else:
+                    with open(self.uc.temp_dir + 'loading_icon.gif', 'wb') as loading_img:
+                        loading_img.write(base64.b64decode(loading_icon))
+                icon_image = Image.open(self.uc.temp_dir + 'loading_icon.gif')
                 icon = ImageTk.PhotoImage(icon_image)
                 self.blank_image_label.configure(image=icon)
                 self.blank_image_label.image = icon
@@ -295,20 +303,21 @@ class C4IconSwapper:
                 return
 
             self.gen_driver_button['state'] = NORMAL
-            multi_driver_path = self.uc.temp_dir + 'multi generic.c4z'
-            if self.file_entry_field.get() == multi_driver_path:
+            temp_gen_driver = self.uc.temp_dir + 'multi generic.c4z'
+            if self.file_entry_field.get() == temp_gen_driver:
                 return
+            if on_mac:
+                with open(get_path(temp_gen_driver), 'wb') as gen_driver:
+                    gen_driver.write(base64.b64decode(generic_multi))
+            else:
+                with open(temp_gen_driver, 'wb') as gen_driver:
+                    gen_driver.write(base64.b64decode(generic_multi))
 
             if os.path.isdir(self.uc.temp_dir + 'driver'):
                 shutil.rmtree(self.uc.temp_dir + 'driver')
 
-            with open('assets/multi_driver', 'rb') as file:
-                multi_driver = pickle.load(file)
-            with open(multi_driver_path, 'wb') as file:
-                file.write(multi_driver)
-
-            shutil.unpack_archive(multi_driver_path, self.uc.temp_dir + 'driver', 'zip')
-            os.remove(multi_driver_path)
+            shutil.unpack_archive(temp_gen_driver, self.uc.temp_dir + 'driver', 'zip')
+            os.remove(temp_gen_driver)
 
             sizes = [(90, 90), (300, 300), (512, 512), (1024, 1024)]
             pictures = os.listdir(self.uc.device_icon_dir)
@@ -318,13 +327,14 @@ class C4IconSwapper:
                     new_icon = resized_icon.resize(size)
                     new_icon.save(self.uc.device_icon_dir + picture.replace('70', str(size[0])))
 
-            shutil.make_archive(multi_driver_path.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
-            os.rename(multi_driver_path.replace('.c4z', '.zip'), multi_driver_path)
+            shutil.make_archive(temp_gen_driver.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
+            os.rename(temp_gen_driver.replace('.c4z', '.zip'), temp_gen_driver)
 
-            self.upload_c4z(multi_driver_path)
+            self.upload_c4z(temp_gen_driver)
             self.uc.export_panel.driver_name_entry.delete(0, 'end')
             self.uc.export_panel.driver_name_entry.insert(0, 'New Driver')
-            os.remove(multi_driver_path)
+            os.remove(temp_gen_driver)
+            os.remove(self.uc.temp_dir + 'loading_icon.gif')
 
             self.multi_driver_button['state'] = DISABLED
 
@@ -2749,13 +2759,20 @@ class C4IconSwapper:
                                    '\t\t\t<videosource>False</videosource>\n\t\t\t<linelevel>False</linelevel>'
 
         # Panels; Creating blank image for panels
-        with open('assets/blank_img', 'rb') as file:
-            blank_image = pickle.load(file)
+        temp_image_file = self.temp_root_dir + 'blank.gif'
+        if on_mac:
+            with open(get_path(temp_image_file), 'wb') as blank_img_file:
+                blank_img_file.write(base64.b64decode(blank_img_b64))
+        else:
+            with open(temp_image_file, 'wb') as blank_img_file:
+                blank_img_file.write(base64.b64decode(blank_img_b64))
+        blank_image = Image.open(temp_image_file)
         blank = blank_image.resize((128, 128))
         self.blank = ImageTk.PhotoImage(blank)
         stack_blank = blank_image.resize((60, 60))
         self.stack_blank = ImageTk.PhotoImage(stack_blank)
         blank_image.close()
+        os.remove(temp_image_file)
 
         # Initialize Panels
         self.c4z_panel = self.C4zPanel(self)
@@ -2802,10 +2819,8 @@ class C4IconSwapper:
         # Creating window icon
         if not on_mac:
             temp_icon_file = self.temp_root_dir + 'icon.ico'
-            with open('assets/win_icon', 'rb') as file:
-                win_icon_obj = pickle.load(file)
-            with open(temp_icon_file, 'wb') as file:
-                file.write(win_icon_obj)
+            with open(temp_icon_file, 'wb') as icon_file:
+                icon_file.write(base64.b64decode(win_icon))
             self.root.wm_iconbitmap(temp_icon_file)
             os.remove(temp_icon_file)
 
