@@ -251,21 +251,21 @@ class C4IconSwapper:
         def load_gen_driver(self):
             # Upload generic two-state driver from Base64Assets
             self.multi_driver_button['state'] = NORMAL
-            temp_gen_driver = self.uc.temp_dir + 'generic.c4z'
-            if self.file_entry_field.get() == temp_gen_driver:
+            gen_driver_path = self.uc.temp_dir + 'generic.c4z'
+            if self.file_entry_field.get() == gen_driver_path:
                 return
             if on_mac:
-                with open(get_path(temp_gen_driver), 'wb') as gen_driver:
+                with open(get_path(gen_driver_path), 'wb') as gen_driver:
                     gen_driver.write(base64.b64decode(generic_driver))
             else:
-                with open(temp_gen_driver, 'wb') as gen_driver:
+                with open(gen_driver_path, 'wb') as gen_driver:
                     gen_driver.write(base64.b64decode(generic_driver))
 
             if os.path.isdir(self.uc.temp_dir + 'driver'):
                 shutil.rmtree(self.uc.temp_dir + 'driver')
 
-            shutil.unpack_archive(temp_gen_driver, self.uc.temp_dir + 'driver', 'zip')
-            os.remove(temp_gen_driver)
+            shutil.unpack_archive(gen_driver_path, self.uc.temp_dir + 'driver', 'zip')
+            os.remove(gen_driver_path)
 
             sizes = [(70, 70), (90, 90), (300, 300), (512, 512)]
             pictures = os.listdir(self.uc.device_icon_dir)
@@ -275,13 +275,13 @@ class C4IconSwapper:
                     new_icon = resized_icon.resize(size)
                     new_icon.save(self.uc.device_icon_dir + picture.replace('1024', str(size[0])))
 
-            shutil.make_archive(temp_gen_driver.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
-            os.rename(temp_gen_driver.replace('.c4z', '.zip'), temp_gen_driver)
+            shutil.make_archive(gen_driver_path.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
+            os.rename(gen_driver_path.replace('.c4z', '.zip'), gen_driver_path)
 
-            self.upload_c4z(temp_gen_driver)
+            self.upload_c4z(gen_driver_path)
             self.uc.export_panel.driver_name_entry.delete(0, 'end')
             self.uc.export_panel.driver_name_entry.insert(0, 'New Driver')
-            os.remove(temp_gen_driver)
+            os.remove(gen_driver_path)
             self.gen_driver_button['state'] = DISABLED
 
         def load_gen_multi(self, show_loading_image=True):
@@ -303,21 +303,21 @@ class C4IconSwapper:
                 return
 
             self.gen_driver_button['state'] = NORMAL
-            temp_gen_driver = self.uc.temp_dir + 'multi generic.c4z'
-            if self.file_entry_field.get() == temp_gen_driver:
+            multi_driver_path = self.uc.temp_dir + 'multi generic.c4z'
+            if self.file_entry_field.get() == multi_driver_path:
                 return
             if on_mac:
-                with open(get_path(temp_gen_driver), 'wb') as gen_driver:
+                with open(get_path(multi_driver_path), 'wb') as gen_driver:
                     gen_driver.write(base64.b64decode(generic_multi))
             else:
-                with open(temp_gen_driver, 'wb') as gen_driver:
+                with open(multi_driver_path, 'wb') as gen_driver:
                     gen_driver.write(base64.b64decode(generic_multi))
 
             if os.path.isdir(self.uc.temp_dir + 'driver'):
                 shutil.rmtree(self.uc.temp_dir + 'driver')
 
-            shutil.unpack_archive(temp_gen_driver, self.uc.temp_dir + 'driver', 'zip')
-            os.remove(temp_gen_driver)
+            shutil.unpack_archive(multi_driver_path, self.uc.temp_dir + 'driver', 'zip')
+            os.remove(multi_driver_path)
 
             sizes = [(90, 90), (300, 300), (512, 512), (1024, 1024)]
             pictures = os.listdir(self.uc.device_icon_dir)
@@ -327,13 +327,13 @@ class C4IconSwapper:
                     new_icon = resized_icon.resize(size)
                     new_icon.save(self.uc.device_icon_dir + picture.replace('70', str(size[0])))
 
-            shutil.make_archive(temp_gen_driver.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
-            os.rename(temp_gen_driver.replace('.c4z', '.zip'), temp_gen_driver)
+            shutil.make_archive(multi_driver_path.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
+            os.rename(multi_driver_path.replace('.c4z', '.zip'), multi_driver_path)
 
-            self.upload_c4z(temp_gen_driver)
+            self.upload_c4z(multi_driver_path)
             self.uc.export_panel.driver_name_entry.delete(0, 'end')
             self.uc.export_panel.driver_name_entry.insert(0, 'New Driver')
-            os.remove(temp_gen_driver)
+            os.remove(multi_driver_path)
             os.remove(self.uc.temp_dir + 'loading_icon.gif')
 
             self.multi_driver_button['state'] = DISABLED
