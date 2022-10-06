@@ -164,7 +164,7 @@ class C4IconSwapper:
                                       'COMPONENT OUT', 'DVI OUT', 'STEREO OUT', 'DIGITAL_OPTICAL OUT']
 
             # Buttons
-            self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_c4z, takefocus=0)
+            self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.load_c4z, takefocus=0)
             self.restore_button = tk.Button(self.uc.root, text='Restore\nOriginal Icon', command=self.restore_icon,
                                             takefocus=0)
             self.restore_button['state'] = DISABLED
@@ -249,7 +249,7 @@ class C4IconSwapper:
             self.update_icon()
 
         def load_gen_driver(self):
-            # Upload generic two-state driver from Base64Assets
+            # Load generic two-state driver from Base64Assets
             self.multi_driver_button['state'] = NORMAL
             gen_driver_path = self.uc.temp_dir + 'generic.c4z'
             if self.file_entry_field.get() == gen_driver_path:
@@ -278,14 +278,14 @@ class C4IconSwapper:
             shutil.make_archive(gen_driver_path.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
             os.rename(gen_driver_path.replace('.c4z', '.zip'), gen_driver_path)
 
-            self.upload_c4z(gen_driver_path)
+            self.load_c4z(gen_driver_path)
             self.uc.export_panel.driver_name_entry.delete(0, 'end')
             self.uc.export_panel.driver_name_entry.insert(0, 'New Driver')
             os.remove(gen_driver_path)
             self.gen_driver_button['state'] = DISABLED
 
         def load_gen_multi(self, show_loading_image=True):
-            # Upload generic multi-state driver from Base64Assets
+            # Load generic multi-state driver from Base64Assets
             if show_loading_image:
                 # Show loading image while driver images are created
                 if on_mac:
@@ -330,7 +330,7 @@ class C4IconSwapper:
             shutil.make_archive(multi_driver_path.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
             os.rename(multi_driver_path.replace('.c4z', '.zip'), multi_driver_path)
 
-            self.upload_c4z(multi_driver_path)
+            self.load_c4z(multi_driver_path)
             self.uc.export_panel.driver_name_entry.delete(0, 'end')
             self.uc.export_panel.driver_name_entry.insert(0, 'New Driver')
             os.remove(multi_driver_path)
@@ -358,7 +358,7 @@ class C4IconSwapper:
                                                      str(len(self.icons))]))
             self.icon_name_label.config(text='name: ' + self.icons[self.current_icon].name)
 
-        def upload_c4z(self, given_path=None, recovery=False):
+        def load_c4z(self, given_path=None, recovery=False):
             def get_icons(directory):
                 if not os.path.isdir(directory):
                     return
@@ -923,17 +923,17 @@ class C4IconSwapper:
                     multi_file_drop.append(running_str)
                 if multi_file_drop:
                     for file in multi_file_drop:
-                        self.uc.replacement_panel.upload_replacement(given_path=file)
+                        self.uc.replacement_panel.load_replacement(given_path=file)
                     return
 
                 if dropped_path.endswith('.c4z'):
-                    self.upload_c4z(given_path=dropped_path)
+                    self.load_c4z(given_path=dropped_path)
                 elif is_valid_image(dropped_path):
-                    self.uc.replacement_panel.upload_replacement(given_path=dropped_path)
+                    self.uc.replacement_panel.load_replacement(given_path=dropped_path)
                 elif '.' not in dropped_path:
                     image_paths = os.listdir(dropped_path)
                     for new_img_path in image_paths:
-                        self.uc.replacement_panel.upload_replacement(given_path=dropped_path + '/' + new_img_path)
+                        self.uc.replacement_panel.load_replacement(given_path=dropped_path + '/' + new_img_path)
 
     class ReplacementPanel:
         def __init__(self, upper_class):
@@ -1002,7 +1002,7 @@ class C4IconSwapper:
                 self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_replacement)
 
             # Buttons
-            self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.upload_replacement,
+            self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.load_replacement,
                                               takefocus=0)
 
             self.replace_all_button = tk.Button(self.uc.root, text='Replace All', command=self.replace_all, takefocus=0)
@@ -1045,7 +1045,7 @@ class C4IconSwapper:
             self.file_entry_field.insert(0, 'Select image file...')
             self.file_entry_field['state'] = DISABLED
 
-        def upload_replacement(self, given_path=''):
+        def load_replacement(self, given_path=''):
             if given_path == '':
                 filename = filedialog.askopenfilenames(filetypes=[('Image', '*.png'), ('Image', '*.jpg'),
                                                                   ('Image', '*.gif'), ('Image', '*.jpeg')])
@@ -1053,7 +1053,7 @@ class C4IconSwapper:
                     filename = filename[0]
                 else:
                     for file in filename:
-                        self.upload_replacement(given_path=file)
+                        self.load_replacement(given_path=file)
                     return
             else:
                 filename = given_path
@@ -1213,14 +1213,14 @@ class C4IconSwapper:
                     break
             if not replacement_in_stack:
                 self.add_to_img_stack(self.uc.replacement_image_path, index=0)
-                self.upload_replacement(given_path=self.img_stack[-1])
+                self.load_replacement(given_path=self.img_stack[-1])
                 return
             if on_mac:
                 stack_length = 5
             else:
                 stack_length = 4
             if len(self.img_stack) > stack_length and replacement_index > 3:
-                self.upload_replacement(given_path=self.img_stack[0])
+                self.load_replacement(given_path=self.img_stack[0])
                 temp = self.img_stack[0]
                 temp_r = self.img_stack[replacement_index]
                 self.img_stack.pop(replacement_index)
@@ -1229,7 +1229,7 @@ class C4IconSwapper:
                 self.img_stack.insert(replacement_index, temp)
                 self.refresh_img_stack()
                 return
-            self.upload_replacement(given_path=self.img_stack[0])
+            self.load_replacement(given_path=self.img_stack[0])
 
         def select_stack1(self, event):
             if len(self.img_stack) <= 1:
@@ -1243,14 +1243,14 @@ class C4IconSwapper:
                     break
             if not replacement_in_stack:
                 self.add_to_img_stack(self.uc.replacement_image_path, index=1)
-                self.upload_replacement(given_path=self.img_stack[-1])
+                self.load_replacement(given_path=self.img_stack[-1])
                 return
             if on_mac:
                 stack_length = 5
             else:
                 stack_length = 4
             if len(self.img_stack) > stack_length and replacement_index > 3:
-                self.upload_replacement(given_path=self.img_stack[1])
+                self.load_replacement(given_path=self.img_stack[1])
                 temp = self.img_stack[1]
                 temp_r = self.img_stack[replacement_index]
                 self.img_stack.pop(replacement_index)
@@ -1259,7 +1259,7 @@ class C4IconSwapper:
                 self.img_stack.insert(replacement_index, temp)
                 self.refresh_img_stack()
                 return
-            self.upload_replacement(given_path=self.img_stack[1])
+            self.load_replacement(given_path=self.img_stack[1])
 
         def select_stack2(self, event):
             if len(self.img_stack) <= 2:
@@ -1273,14 +1273,14 @@ class C4IconSwapper:
                     break
             if not replacement_in_stack:
                 self.add_to_img_stack(self.uc.replacement_image_path, index=2)
-                self.upload_replacement(given_path=self.img_stack[-1])
+                self.load_replacement(given_path=self.img_stack[-1])
                 return
             if on_mac:
                 stack_length = 5
             else:
                 stack_length = 4
             if len(self.img_stack) > stack_length and replacement_index > 3:
-                self.upload_replacement(given_path=self.img_stack[2])
+                self.load_replacement(given_path=self.img_stack[2])
                 temp = self.img_stack[2]
                 temp_r = self.img_stack[replacement_index]
                 self.img_stack.pop(replacement_index)
@@ -1289,7 +1289,7 @@ class C4IconSwapper:
                 self.img_stack.insert(replacement_index, temp)
                 self.refresh_img_stack()
                 return
-            self.upload_replacement(given_path=self.img_stack[2])
+            self.load_replacement(given_path=self.img_stack[2])
 
         def select_stack3(self, event):
             if len(self.img_stack) <= 3:
@@ -1303,14 +1303,14 @@ class C4IconSwapper:
                     break
             if not replacement_in_stack:
                 self.add_to_img_stack(self.uc.replacement_image_path, index=3)
-                self.upload_replacement(given_path=self.img_stack[-1])
+                self.load_replacement(given_path=self.img_stack[-1])
                 return
             if on_mac:
                 stack_length = 5
             else:
                 stack_length = 4
             if len(self.img_stack) > stack_length and replacement_index > 3:
-                self.upload_replacement(given_path=self.img_stack[3])
+                self.load_replacement(given_path=self.img_stack[3])
                 temp = self.img_stack[3]
                 temp_r = self.img_stack[replacement_index]
                 self.img_stack.pop(replacement_index)
@@ -1319,7 +1319,7 @@ class C4IconSwapper:
                 self.img_stack.insert(replacement_index, temp)
                 self.refresh_img_stack()
                 return
-            self.upload_replacement(given_path=self.img_stack[3])
+            self.load_replacement(given_path=self.img_stack[3])
 
         if on_mac:
             def select_stack4(self, event):
@@ -1334,10 +1334,10 @@ class C4IconSwapper:
                         break
                 if not replacement_in_stack:
                     self.add_to_img_stack(self.uc.replacement_image_path, index=4)
-                    self.upload_replacement(given_path=self.img_stack[-1])
+                    self.load_replacement(given_path=self.img_stack[-1])
                     return
                 if len(self.img_stack) > 5 and replacement_index > 4:
-                    self.upload_replacement(given_path=self.img_stack[4])
+                    self.load_replacement(given_path=self.img_stack[4])
                     temp = self.img_stack[4]
                     temp_r = self.img_stack[replacement_index]
                     self.img_stack.pop(replacement_index)
@@ -1346,7 +1346,7 @@ class C4IconSwapper:
                     self.img_stack.insert(replacement_index, temp)
                     self.refresh_img_stack()
                     return
-                self.upload_replacement(given_path=self.img_stack[4])
+                self.load_replacement(given_path=self.img_stack[4])
         else:
             def drop_in_replacement(self, event):
                 img_path = event.data.replace('{', '').replace('}', '')
@@ -1362,16 +1362,16 @@ class C4IconSwapper:
                     multi_file_drop.append(running_str)
                 if multi_file_drop:
                     for file in multi_file_drop:
-                        self.upload_replacement(given_path=file)
+                        self.load_replacement(given_path=file)
                     return
                 if '.' not in img_path:
                     image_paths = os.listdir(img_path)
                     for new_img_path in image_paths:
-                        self.upload_replacement(given_path=''.join([img_path, '/', new_img_path]))
+                        self.load_replacement(given_path=''.join([img_path, '/', new_img_path]))
                     return
                 if not is_valid_image(img_path):
                     return
-                self.upload_replacement(given_path=img_path)
+                self.load_replacement(given_path=img_path)
 
             def drop_stack0(self, event):
                 dropped_path = event.data.replace('{', '').replace('}', '')
@@ -1591,7 +1591,7 @@ class C4IconSwapper:
             if save_state.driver_selected:
                 with open(self.uc.temp_dir + 'saved_driver.c4z', 'wb') as driver_zip:
                     driver_zip.write(save_state.driver_zip)
-                self.uc.c4z_panel.upload_c4z(self.uc.temp_dir + 'saved_driver.c4z')
+                self.uc.c4z_panel.load_c4z(self.uc.temp_dir + 'saved_driver.c4z')
                 os.remove(self.uc.temp_dir + 'saved_driver.c4z')
                 self.uc.export_panel.export_button['state'] = NORMAL
                 if not on_mac:
@@ -2827,7 +2827,7 @@ class C4IconSwapper:
         # Do recovery if necessary
         if self.recover_instance != '':
             # Recover Driver
-            self.c4z_panel.upload_c4z(recovery=True)
+            self.c4z_panel.load_c4z(recovery=True)
             # Recover replacement images; Need to make this more efficient
             first_time = True
             for file in os.listdir(self.temp_dir):
@@ -2845,8 +2845,7 @@ class C4IconSwapper:
                 else:
                     stack_size = 4
                 for file in os.listdir(self.temp_dir + 'img_recovery'):
-                    self.replacement_panel.upload_replacement(given_path=''.join([self.temp_dir,
-                                                                                  'img_recovery/', file]))
+                    self.replacement_panel.load_replacement(given_path=''.join([self.temp_dir, 'img_recovery/', file]))
                     if multi_check > stack_size + 1:
                         multi_images = True
                         continue
