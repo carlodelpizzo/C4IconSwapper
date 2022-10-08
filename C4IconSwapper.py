@@ -10,7 +10,7 @@ import pickle
 import PIL.Image
 import tkinter as tk
 from tkinter import NORMAL, DISABLED, END, INSERT
-from tkinter import ttk, filedialog, Toplevel, StringVar, IntVar, Checkbutton, Label, OptionMenu
+from tkinter import ttk, filedialog, Toplevel, StringVar, IntVar, Checkbutton, Label, OptionMenu, Menu
 from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
@@ -67,15 +67,15 @@ class C4IS:
 
         # State Panel
         self.states = [{'original_name': state.original_name, 'name_var': state.name_var.get()}
-                       for state in uc.state_panel.states]
+                       for state in uc.states]
 
         # Connection Panel
-        self.ids = uc.connections_panel.ids
+        self.ids = uc.conn_ids
         self.connections = [{'id': conn.id, 'original': conn.original, 'in_id_group': conn.in_id_group,
                              'delete': conn.delete, 'prior_txt': conn.prior_txt, 'prior_type': conn.prior_type,
                              'tags': conn.tags, 'id_group': conn.id_group, 'type': conn.type.get(),
-                             'name': conn.name_entry_var.get(), 'state': conn.name_entry['state']}
-                            for conn in uc.connections_panel.connections]
+                             'name': conn.name_entry_var.get(), 'state': conn.enabled}
+                            for conn in uc.connections]
 
         # Export Panel
         self.driver_name_var = uc.export_panel.driver_name_var.get()
@@ -95,9 +95,7 @@ class C4IS:
         self.c4z_panel = {'restore': uc.c4z_panel.restore_button['state'],
                           'restore_all': uc.c4z_panel.restore_all_button['state'],
                           'prev': uc.c4z_panel.prev_icon_button['state'],
-                          'next': uc.c4z_panel.next_icon_button['state'],
-                          'gen_driver': uc.c4z_panel.gen_driver_button['state'],
-                          'multi_driver': uc.c4z_panel.multi_driver_button['state']}
+                          'next': uc.c4z_panel.next_icon_button['state']}
 
         # Replacement Panel
         if self.replacement_selected:
@@ -113,6 +111,556 @@ class C4IS:
 
 
 class C4IconSwapper:
+    class Connection:
+        def __init__(self, upper_class):
+            self.uc = upper_class
+            self.id = 0
+            self.original, self.in_id_group, self.delete, self.enabled = False, False, False, False
+            self.prior_txt, self.prior_type = '', ''
+            self.tags, self.id_group = [], []
+            self.name_entry_var, self.type = StringVar(), StringVar()
+            self.name_entry_var.set('Connection Name...')
+            self.type.set('HDMI IN')
+
+        def update_id(self, *args, refresh=False):
+            if not self.tags:
+                return
+            self.uc.ask_to_save = True
+            if not args:
+                args = [self.type]
+            if self.original:
+                for conn in self.uc.connections:
+                    if conn is not self and conn.original and conn.id == self.id:
+                        self.in_id_group = True
+                        return
+                self.in_id_group = False
+                return
+            if not refresh and args[0] != str(self.type):
+                return
+            conn_type = self.type.get()
+            valid_id = []
+            if ' IN' in conn_type:
+                conn_type = conn_type.replace(' IN', '')
+                if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
+                    valid_id = find_valid_id(2000, self.uc.conn_ids)
+                    self.tags[4].value = '5'
+                elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
+                    valid_id = find_valid_id(4000, self.uc.conn_ids)
+                    self.tags[4].value = '6'
+            elif ' OUT' in conn_type:
+                conn_type = conn_type.replace(' OUT', '')
+                if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
+                    valid_id = find_valid_id(1900, self.uc.conn_ids)
+                    self.tags[4].value = '5'
+                elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
+                    valid_id = find_valid_id(3900, self.uc.conn_ids)
+                    self.tags[4].value = '6'
+            if conn_type == 'IR_OUT':
+                valid_id = find_valid_id(1, self.uc.conn_ids)
+                self.tags[4].value = '6'
+
+            if self.id in self.uc.conn_ids:
+                self.uc.conn_ids.pop(self.uc.conn_ids.index(self.id))
+            self.id = valid_id[0]
+            self.tags[3].value = str(self.id)
+            self.uc.conn_ids.append(self.id)
+
+    class State:
+        def __init__(self, name: str):
+            self.original_name = name
+            self.name_var = StringVar()
+            self.name_var.set(name)
+            self.bg_color = '#FFFFFF'
+
+    class ConnectionsWin:
+        class ConnectionEntry:
+            def __init__(self, upper_class, conn_obj, x_pos: int, y_pos: int):
+                # Initialize Connection UI Object
+                self.window = upper_class.window
+                self.uc = upper_class.uc
+                self.conn_object = conn_obj
+                self.x, self.y = x_pos, y_pos
+
+                # Entry
+                self.name_entry_var = conn_obj.name_entry_var
+                self.name_entry_var.trace('w', self.name_update)
+                if on_mac:
+                    self.name_entry = tk.Entry(self.window, width=15, textvariable=self.name_entry_var)
+                    self.name_entry.place(x=self.x + 60, y=self.y, anchor='w')
+                else:
+                    self.name_entry = tk.Entry(self.window, width=20, textvariable=self.name_entry_var)
+                    self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+                if not self.conn_object.enabled:
+                    self.name_entry['state'] = DISABLED
+
+                # Dropdown
+                self.type = conn_obj.type
+                self.type_menu = OptionMenu(self.window, self.type, 'HDMI IN', 'HDMI OUT', 'COMPOSITE IN',
+                                            'COMPOSITE OUT', 'VGA IN', 'VGA OUT', 'COMPONENT IN', 'COMPONENT OUT',
+                                            'DVI IN', 'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
+                                            'DIGITAL_OPTICAL OUT', 'IR_OUT')
+                if on_mac:
+                    self.type_menu.place(x=self.x + 207, y=self.y, anchor='w')
+                else:
+                    self.type_menu.place(x=self.x + 160, y=self.y, anchor='w')
+                self.type.trace('w', self.conn_object.update_id)
+                if not self.conn_object.enabled:
+                    self.type_menu['state'] = DISABLED
+
+                # Buttons
+                self.add_button = tk.Button(self.window, text='Add', width=3, command=self.enable, takefocus=0)
+                if self.conn_object.enabled or self.conn_object.original:
+                    self.add_button.place(x=-420, y=-420, anchor='w')
+                else:
+                    if on_mac:
+                        self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
+                    else:
+                        self.add_button.place(x=self.x, y=self.y, anchor='w')
+                if not self.uc.driver_selected:
+                    self.add_button['state'] = DISABLED
+
+                self.x_button = tk.Button(self.window, text='x', width=1, command=self.disable, takefocus=0)
+                if self.conn_object.enabled and not self.conn_object.original:
+                    if on_mac:
+                        self.x_button.place(x=self.x + 18, y=self.y - 3, anchor='w')
+                    else:
+                        self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
+                else:
+                    self.x_button.place(x=-420, y=-420, anchor='w')
+
+                self.del_button = tk.Button(self.window, text='Del', width=3, command=self.flag_delete, takefocus=0)
+                if self.conn_object.original:
+                    if on_mac:
+                        self.del_button.place(x=self.x, y=self.y - 3, anchor='w')
+                    else:
+                        self.del_button.place(x=self.x, y=self.y, anchor='w')
+                else:
+                    self.del_button.place(x=-420, y=-420, anchor='w')
+                if self.conn_object.delete:
+                    self.del_button['text'] = 'Keep'
+                    self.del_button['width'] = 4
+                    self.del_button.place(x=self.x + self.del_button.winfo_x() - 6, y=self.y)
+
+            def enable(self):
+                self.conn_object.enabled = True
+                self.name_entry['state'] = NORMAL
+                self.type_menu['state'] = NORMAL
+                self.add_button.place(x=-420, y=-420, anchor='w')
+                if on_mac:
+                    self.x_button.place(x=self.x + 18, y=self.y - 3, anchor='w')
+                else:
+                    self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
+                if self.conn_object.tags:
+                    self.conn_object.tags[0].delete = False
+                self.name_entry['takefocus'] = 1
+
+            def disable(self):
+                self.conn_object.enabled = False
+                self.name_entry['state'] = DISABLED
+                self.type_menu['state'] = DISABLED
+                if on_mac:
+                    self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
+                else:
+                    self.add_button.place(x=self.x, y=self.y, anchor='w')
+                self.x_button.place(x=-420, y=-420, anchor='w')
+                if self.conn_object.tags:
+                    self.conn_object.tags[0].delete = True
+                self.name_entry['takefocus'] = 0
+
+            def flag_delete(self):
+                if not self.conn_object.original:
+                    return
+                if not self.conn_object.delete:
+                    self.conn_object.delete = True
+                    self.conn_object.prior_txt = self.name_entry_var.get()
+                    self.conn_object.prior_type = self.type.get()
+                    self.type.set('RIP')
+                    self.name_entry['state'] = NORMAL
+                    self.name_entry_var.set('TO BE DELETED')
+                    self.name_entry['state'] = DISABLED
+                    self.del_button['text'] = 'Keep'
+                    self.del_button['width'] = 4
+                    self.del_button.place(x=self.del_button.winfo_x() - 6, y=self.y)
+                    if len(self.conn_object.id_group) > 1:
+                        first = True
+                        last_alive = True
+                        for groupie in self.conn_object.id_group:
+                            if first:
+                                first = False
+                                continue
+                            if not groupie.delete:
+                                last_alive = False
+                                break
+                        if last_alive:
+                            self.conn_object.tags[0].delete = True
+                        self.conn_object.tags[1].delete = True
+                    return
+                self.conn_object.delete = False
+                self.name_entry['state'] = NORMAL
+                self.name_entry_var.set(self.conn_object.prior_txt)
+                self.conn_object.prior_txt = ''
+                self.name_entry['state'] = DISABLED
+                self.type.set(self.conn_object.prior_type)
+                self.conn_object.prior_type = ''
+                if self.conn_object.tags:
+                    self.conn_object.tags[0].delete, self.conn_object.tags[1].delete = False, False
+                self.del_button['text'] = 'Del'
+                self.del_button['width'] = 3
+                self.del_button.place(x=self.del_button.winfo_x() + 6, y=self.y)
+
+            # noinspection PyUnusedLocal
+            def name_update(self, *args):
+                self.uc.ask_to_save = True
+
+            def refresh(self):
+                self.name_entry_var.set(self.conn_object.name_entry_var.get())
+                self.type.set(self.conn_object.type.get())
+                if self.conn_object.enabled:
+                    self.type_menu['state'] = NORMAL
+                    self.name_entry['state'] = NORMAL
+                else:
+                    self.type_menu['state'] = DISABLED
+                    self.name_entry['state'] = DISABLED
+
+                if self.conn_object.enabled or self.conn_object.original:
+                    self.add_button.place(x=-420, y=-420, anchor='w')
+                else:
+                    if on_mac:
+                        self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
+                    else:
+                        self.add_button.place(x=self.x, y=self.y, anchor='w')
+                if self.uc.driver_selected:
+                    self.add_button['state'] = NORMAL
+                else:
+                    self.add_button['state'] = DISABLED
+
+                if self.conn_object.enabled and not self.conn_object.original:
+                    if on_mac:
+                        self.x_button.place(x=self.x + 18, y=self.y - 3, anchor='w')
+                    else:
+                        self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
+                else:
+                    self.x_button.place(x=-420, y=-420, anchor='w')
+
+                if self.conn_object.original:
+                    if on_mac:
+                        self.del_button.place(x=self.x, y=self.y - 3, anchor='w')
+                    else:
+                        self.del_button.place(x=self.x, y=self.y, anchor='w')
+                else:
+                    self.del_button.place(x=-420, y=-420, anchor='w')
+                if self.conn_object.delete:
+                    self.del_button['text'] = 'Keep'
+                    self.del_button['width'] = 4
+                    self.del_button.place(x=self.x + self.del_button.winfo_x() - 6, y=self.y)
+
+        def __init__(self, upper_class):
+            self.uc = upper_class
+
+            # Initialize window
+            self.window = Toplevel(self.uc.root)
+            self.window.focus()
+            self.window.protocol('WM_DELETE_WINDOW', self.uc.close_connections)
+            self.window.title('Edit Driver Connections')
+            self.window.geometry('975x250')
+            self.window.geometry(f'+{self.uc.root.winfo_rootx()}+{self.uc.root.winfo_rooty()}')
+            self.window.resizable(False, False)
+
+            self.connections = []
+            x_spacing, y_spacing = 330, 40
+            for x in range(3):
+                for y in range(6):
+                    i = (x * 6) + y
+                    self.connections.append(self.ConnectionEntry(self, self.uc.connections[i],
+                                                                 x * x_spacing + 15,
+                                                                 (y * y_spacing) + 25))
+
+        def refresh(self):
+            for conn_entry in self.connections:
+                conn_entry.refresh()
+
+    class DriverInfoWin:
+        def __init__(self, upper_class):
+            self.uc = upper_class
+
+            # Initialize window
+            self.window = Toplevel(self.uc.root)
+            self.window.focus()
+            self.window.protocol('WM_DELETE_WINDOW', self.uc.close_driver_info)
+            self.window.title('Edit Driver Info')
+            if not on_mac:
+                self.window.geometry('255x240')
+            else:
+                self.window.geometry('347x240')
+            self.window.geometry(f'+{self.uc.root.winfo_rootx() + self.uc.export_panel.x}+'
+                                 f'{self.uc.root.winfo_rooty()}')
+            self.window.resizable(False, False)
+
+            # Validate driver version
+            if self.uc.export_panel.inc_driver_version.get() == 1 and self.uc.driver_version_var.get() != '' and \
+                    self.uc.driver_version_new_var.get() != '' and \
+                    int(self.uc.driver_version_new_var.get()) <= int(self.uc.driver_version_var.get()):
+                self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_var.get()) + 1))
+
+            # Labels
+            instance_id_label = tk.Label(self.window, text='instance id: ' + self.uc.instance_id)
+
+            man_y = 20
+            man_arrow = tk.Label(self.window, text='\u2192', font=('', 15))
+
+            creator_y = man_y + 55
+            creator_arrow = tk.Label(self.window, text='\u2192', font=('', 15))
+
+            version_y = creator_y + 55
+            version_arrow = tk.Label(self.window, text='\u2192', font=('', 15))
+
+            if not on_mac:
+                font_size = 10
+                driver_ver_orig_label = tk.Label(self.window, text='Original Version:',
+                                                 font=(label_font, 8))
+            else:
+                font_size = 13
+                driver_ver_orig_label = tk.Label(self.window, text='Original Version:',
+                                                 font=(label_font, 11))
+
+            driver_man_label = tk.Label(self.window, text='Driver Manufacturer',
+                                        font=(label_font, font_size))
+
+            driver_creator_label = tk.Label(self.window, text='Driver Creator',
+                                            font=(label_font, font_size))
+
+            driver_ver_label = tk.Label(self.window, text='Driver Version',
+                                        font=(label_font, font_size))
+
+            # Entry
+            if not on_mac:
+                entry_width = 17
+            else:
+                entry_width = 16
+            self.uc.driver_manufac_new_var.trace('w', self.uc.validate_driver_ver)
+            driver_man_entry = tk.Entry(self.window, width=entry_width,
+                                        textvariable=self.uc.driver_manufac_var)
+            driver_man_entry['state'] = DISABLED
+            self.driver_man_new_entry = tk.Entry(self.window, width=entry_width,
+                                                 textvariable=self.uc.driver_manufac_new_var)
+
+            self.uc.driver_creator_new_var.trace('w', self.uc.validate_man_and_creator)
+            driver_creator_entry = tk.Entry(self.window, width=entry_width,
+                                            textvariable=self.uc.driver_creator_var)
+            driver_creator_entry['state'] = DISABLED
+            self.driver_creator_new_entry = tk.Entry(self.window, width=entry_width,
+                                                     textvariable=self.uc.driver_creator_new_var)
+
+            driver_ver_entry = tk.Entry(self.window, width=entry_width,
+                                        textvariable=self.uc.driver_version_var)
+            driver_ver_entry['state'] = DISABLED
+            self.driver_ver_new_entry = tk.Entry(self.window, width=entry_width,
+                                                 textvariable=self.uc.driver_version_new_var)
+            self.driver_ver_new_entry.bind('<FocusOut>', self.uc.export_panel.update_driver_version)
+            self.uc.driver_version_new_var.trace('w', self.uc.validate_man_and_creator)
+            driver_ver_orig_entry = tk.Entry(self.window, width=6, textvariable=self.uc.driver_ver_orig)
+            driver_ver_orig_entry['state'] = DISABLED
+            if not on_mac:
+                instance_id_label.place(x=127, y=220, anchor='n')
+                man_arrow.place(x=115, y=man_y, anchor='nw')
+                creator_arrow.place(x=115, y=creator_y, anchor='nw')
+                version_arrow.place(x=115, y=version_y, anchor='nw')
+                driver_man_label.place(x=127, y=man_y - 15, anchor='n')
+                driver_creator_label.place(x=127, y=creator_y - 15, anchor='n')
+                driver_ver_label.place(x=127, y=version_y - 15, anchor='n')
+                driver_ver_orig_label.place(x=110, y=version_y + 30, anchor='ne')
+                driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
+                self.driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
+                driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
+                self.driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
+                driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
+                self.driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
+                driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
+            else:
+                instance_id_label.place(x=173, y=220, anchor='n')
+
+                man_arrow.place(x=163, y=man_y + 7, anchor='nw')
+                creator_arrow.place(x=163, y=creator_y + 7, anchor='nw')
+                version_arrow.place(x=163, y=version_y + 7, anchor='nw')
+
+                driver_man_label.place(x=173, y=man_y - 15, anchor='n')
+                driver_creator_label.place(x=173, y=creator_y - 15, anchor='n')
+                driver_ver_label.place(x=173, y=version_y - 15, anchor='n')
+                driver_ver_orig_label.place(x=140, y=version_y + 35, anchor='ne')
+
+                driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
+                self.driver_man_new_entry.place(x=180, y=man_y + 7, anchor='nw')
+                driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
+                self.driver_creator_new_entry.place(x=180, y=creator_y + 7, anchor='nw')
+                driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
+                self.driver_ver_new_entry.place(x=180, y=version_y + 7, anchor='nw')
+                driver_ver_orig_entry.place(x=140, y=version_y + 35, anchor='nw')
+
+    class StatesWin:
+        class StateEntry:
+            def __init__(self, upper_class, state_obj, x_pos: int, y_pos: int, label='State69:'):
+                # Initialize Driver State UI Object
+                self.uc = upper_class.uc
+                self.window = upper_class.window
+                self.state_object = state_obj
+                self.original_name = state_obj.original_name
+                self.x, self.y = x_pos, y_pos
+
+                # Label
+                self.name_label = tk.Label(self.window, text=label)
+                self.name_label.place(x=self.x + 35, y=self.y, anchor='e')
+
+                # Entry
+                self.name_var = StringVar()
+                self.name_var.set(state_obj.name_var.get())
+                self.name_var.trace('w', self.validate_state)
+                if on_mac:
+                    self.name_entry = tk.Entry(self.window, width=13, textvariable=self.name_var)
+                    self.name_entry.place(x=self.x + 36, y=self.y, anchor='w')
+                else:
+                    self.name_entry = tk.Entry(self.window, width=20, textvariable=self.name_var)
+                    self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+                self.name_entry['background'] = state_obj.bg_color
+                if not self.uc.multi_state_driver:
+                    self.name_entry['state'] = DISABLED
+
+            # noinspection PyUnusedLocal
+            def validate_state(self, *args):
+                self.uc.ask_to_save = True
+                if not self.uc.states_win:
+                    return
+                background_color = light_entry_bg
+                if on_mac and is_dark_mode():
+                    background_color = dark_entry_bg
+                self.format_state_name()
+                if self.name_var.get() == '':
+                    self.state_object.bg_color = 'pink'
+                    return
+                duplicate = False
+                for state in self.uc.states_win.states:
+                    if state is not self and state.name_var.get() == self.name_var.get():
+                        duplicate = True
+                        for dupe_list in self.uc.state_dupes:
+                            if self.state_object in dupe_list:
+                                if len(dupe_list) == 2:
+                                    dupe_list[0].bg_color = background_color
+                                    dupe_list[1].bg_color = background_color
+                                    to_validate = None
+                                    if dupe_list[0] is not self.state_object:
+                                        to_validate = dupe_list[0]
+                                    if dupe_list[1] is not self.state_object:
+                                        to_validate = dupe_list[1]
+                                    self.uc.state_dupes.pop(self.uc.state_dupes.index(dupe_list))
+                                    if to_validate:
+                                        for state0 in self.uc.states_win.states:
+                                            if state0.state_object is to_validate:
+                                                to_validate = state0
+                                                break
+                                        to_validate.validate_state()
+                                    break
+                                dupe_list.pop(dupe_list.index(self.state_object))
+                                break
+                        append_new_list = True
+                        for dupe_list in self.uc.state_dupes:
+                            if dupe_list[0].name_var.get() == self.name_var.get():
+                                if self.state_object not in dupe_list:
+                                    dupe_list.append(self.state_object)
+                                append_new_list = False
+                                break
+                        if append_new_list:
+                            self.uc.state_dupes.append([self.state_object, state.state_object])
+                        self.state_object.bg_color = 'pink'
+                        state.state_object.bg_color = 'pink'
+                        break
+                if not duplicate:
+                    for dupe_list in self.uc.state_dupes:
+                        if self.state_object in dupe_list:
+                            if len(dupe_list) == 2:
+                                dupe_list[0].bg_color = background_color
+                                dupe_list[1].bg_color = background_color
+                                to_validate = None
+                                if dupe_list[0] is not self.state_object:
+                                    to_validate = dupe_list[0]
+                                if dupe_list[1] is not self.state_object:
+                                    to_validate = dupe_list[1]
+                                self.uc.state_dupes.pop(self.uc.state_dupes.index(dupe_list))
+                                if to_validate:
+                                    for state in self.uc.states_win.states:
+                                        if state.state_object is to_validate:
+                                            to_validate = state
+                                            break
+                                    to_validate.validate_state()
+                                break
+                            dupe_list.pop(dupe_list.index(self.state_object))
+                            break
+                    self.state_object.bg_color = background_color
+
+                for state in self.uc.states_win.states:
+                    if state is self:
+                        continue
+                    using_existing_name = False
+                    for orig_name in self.uc.states_orig_names:
+                        if self.uc.states_win.states.index(self) == self.uc.states_orig_names.index(orig_name):
+                            continue
+                        if self.name_var.get() in orig_name:
+                            using_existing_name = True
+                            break
+                    if using_existing_name:
+                        if self.state_object.bg_color != 'pink':
+                            self.state_object.bg_color = 'cyan'
+                        break
+                for state in self.uc.states_win.states:
+                    state.refresh(bg_only=True)
+
+                self.state_object.name_var.set(self.name_var.get())
+
+            def format_state_name(self):
+                formatted_name = []
+                for character in self.name_var.get():
+                    if character == ' ' or (character not in letters and character not in capital_letters and
+                                            character not in numbers):
+                        continue
+                    if formatted_name == [] and character in letters:
+                        formatted_name.append(capital_letters[letters.index(character)])
+                        continue
+                    formatted_name.append(character)
+                formatted_name = ''.join(formatted_name)
+                if formatted_name == self.name_var.get():
+                    return
+                self.name_var.set(formatted_name)
+
+            def refresh(self, bg_only=False):
+                self.name_entry['background'] = self.state_object.bg_color
+                if bg_only:
+                    return
+                self.name_var.set(self.state_object.name_var.get())
+
+        def __init__(self, upper_class):
+            self.uc = upper_class
+
+            # Initialize window
+            self.window = Toplevel(self.uc.root)
+            self.window.focus()
+            self.window.protocol('WM_DELETE_WINDOW', self.uc.close_states)
+            self.window.title('Edit Driver States')
+            self.window.geometry('385x287')
+            self.window.geometry(f'+{self.uc.root.winfo_rootx()}+{self.uc.root.winfo_rooty()}')
+            self.window.resizable(False, False)
+
+            if on_mac:
+                x_spacing, y_spacing = 190, 34
+            else:
+                x_spacing, y_spacing = 200, 34
+            self.states, self.dupes = [], []
+            for i in range(13):
+                self.states.append(self.StateEntry(self, self.uc.states[i],
+                                                   int(i / 7) * x_spacing + 10, (i % 7) * y_spacing + 30,
+                                                   label=''.join(['state', str(i + 1), ':'])))
+
+        def refresh(self):
+            for state in self.states:
+                state.refresh()
+
     class C4zPanel:
         class SubIcon:
             def __init__(self, root_path: str, path: str, name: str, size: int):
@@ -178,28 +726,18 @@ class C4IconSwapper:
             self.next_icon_button = tk.Button(self.uc.root, text='Next', command=self.next_icon, width=5, takefocus=0)
             self.next_icon_button['state'] = DISABLED
 
-            self.gen_driver_button = tk.Button(self.uc.root, text='Load Generic Driver', command=self.load_gen_driver,
-                                               takefocus=0)
-
-            self.multi_driver_button = tk.Button(self.uc.root, text='Load Multi Driver', command=self.load_gen_multi,
-                                                 takefocus=0)
-
             if on_mac:
                 self.open_file_button.place(x=203 + self.x, y=27 + self.y, anchor='w')
                 self.restore_button.place(x=258 + self.x, y=91 + self.y, anchor='n')
                 self.restore_all_button.place(x=258 + self.x, y=58 + self.y, anchor='n')
                 self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
                 self.next_icon_button.place(x=260 + self.x, y=146 + self.y)
-                self.gen_driver_button.place(x=240 + self.x, y=219 + self.y, anchor='n')
-                self.multi_driver_button.place(x=15 + self.x, y=219 + self.y, anchor='nw')
             else:
                 self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
                 self.restore_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
                 self.restore_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
                 self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
                 self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
-                self.gen_driver_button.place(x=228 + self.x, y=219 + self.y, anchor='n')
-                self.multi_driver_button.place(x=5 + self.x, y=219 + self.y, anchor='nw')
 
             # Entry
             if on_mac:
@@ -249,8 +787,10 @@ class C4IconSwapper:
             self.update_icon()
 
         def load_gen_driver(self):
+            if self.uc.ask_to_save:
+                self.uc.ask_to_save_dialog(on_exit=False, load_gen=True)
+                return
             # Load generic two-state driver from Base64Assets
-            self.multi_driver_button['state'] = NORMAL
             gen_driver_path = self.uc.temp_dir + 'generic.c4z'
             if self.file_entry_field.get() == gen_driver_path:
                 return
@@ -282,9 +822,11 @@ class C4IconSwapper:
             self.uc.export_panel.driver_name_entry.delete(0, 'end')
             self.uc.export_panel.driver_name_entry.insert(0, 'New Driver')
             os.remove(gen_driver_path)
-            self.gen_driver_button['state'] = DISABLED
 
         def load_gen_multi(self, show_loading_image=True):
+            if self.uc.ask_to_save:
+                self.uc.ask_to_save_dialog(on_exit=False, load_multi=True)
+                return
             # Load generic multi-state driver from Base64Assets
             if show_loading_image:
                 # Show loading image while driver images are created
@@ -298,11 +840,9 @@ class C4IconSwapper:
                 icon = ImageTk.PhotoImage(icon_image)
                 self.blank_image_label.configure(image=icon)
                 self.blank_image_label.image = icon
-                self.multi_driver_button['state'] = DISABLED
                 self.uc.root.after(1, self.uc.show_loading_image)
                 return
 
-            self.gen_driver_button['state'] = NORMAL
             multi_driver_path = self.uc.temp_dir + 'multi generic.c4z'
             if self.file_entry_field.get() == multi_driver_path:
                 return
@@ -335,8 +875,6 @@ class C4IconSwapper:
             self.uc.export_panel.driver_name_entry.insert(0, 'New Driver')
             os.remove(multi_driver_path)
             os.remove(self.uc.temp_dir + 'loading_icon.gif')
-
-            self.multi_driver_button['state'] = DISABLED
 
         def update_icon(self):
             if len(self.icons) == 0:
@@ -658,16 +1196,17 @@ class C4IconSwapper:
                     self.uc.driver_version_new_var.set(temp_str)
             id_tags = self.uc.driver_xml.get_tag('id')
             if id_tags is not None:
-                self.uc.connections_panel.ids = []
+                self.uc.conn_ids = []
                 for id_tag in id_tags:
                     try:
-                        if int(id_tag.value) not in self.uc.connections_panel.ids:
-                            self.uc.connections_panel.ids.append(int(id_tag.value))
+                        if int(id_tag.value) not in self.uc.conn_ids:
+                            self.uc.conn_ids.append(int(id_tag.value))
                     except ValueError:
                         pass
 
             # Check lua file for multi-state
             self.uc.multi_state_driver = False
+            self.uc.edit.entryconfig(3, state=DISABLED)
             if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua'):
                 if on_mac:
                     with open(get_path(self.uc.temp_dir + 'driver/driver.lua'), errors='ignore') as driver_lua_file:
@@ -680,15 +1219,12 @@ class C4IconSwapper:
                         self.uc.get_states(driver_lua_lines)
                         self.uc.multi_state_driver = True
                         break
-            if not self.uc.multi_state_driver:
-                self.uc.disable_states()
+            if self.uc.multi_state_driver:
+                self.uc.edit.entryconfig(3, state=NORMAL)
+            elif self.uc.states_win:
+                self.uc.close_states()
+            self.uc.state_dupes = []
 
-            # Update button statuses
-            if not self.file_entry_field.get().endswith('generic.c4z') and not \
-                    self.file_entry_field.get() == 'Invalid driver selected...':
-                # Update generic driver buttons
-                self.gen_driver_button['state'] = NORMAL
-                self.multi_driver_button['state'] = NORMAL
             # Update driver prev/next buttons
             if len(self.icons) <= 1:
                 self.prev_icon_button['state'] = DISABLED
@@ -733,6 +1269,10 @@ class C4IconSwapper:
 
             # Update connections panel
             self.get_connections()
+            if self.uc.connections_win:
+                self.uc.connections_win.refresh()
+            if self.uc.states_win:
+                self.uc.states_win.refresh()
 
             self.uc.ask_to_save = True
 
@@ -815,18 +1355,19 @@ class C4IconSwapper:
         def get_connections(self):
             if not os.path.isfile(self.uc.temp_dir + 'driver/driver.xml') or not self.uc.driver_selected:
                 return
-            self.uc.connections_panel.reinit()
+            for conn in self.uc.connections:
+                conn.__init__(self.uc)
 
             # Get connections from xml object
             connections = []
             classname_tags = self.uc.driver_xml.get_tag('classname')
-            if classname_tags is not None:
+            if classname_tags:
                 for classname_tag in reversed(classname_tags):
                     if classname_tag.value not in self.valid_connections:
                         classname_tags.pop(classname_tags.index(classname_tag))
                 for classname_tag in classname_tags:
                     class_tag, connection_tag, connectionname_tag, id_tag, type_tag = None, None, None, None, None
-                    for parent in classname_tag.parents:
+                    for parent in reversed(classname_tag.parents):
                         if (parent_name := parent.name) == 'class':
                             class_tag = parent
                         elif parent_name == 'connection':
@@ -845,8 +1386,8 @@ class C4IconSwapper:
                                         connection_tag, class_tag, connectionname_tag, id_tag, type_tag, classname_tag])
 
             # Check that number of connections does not exceed maximum
-            if len(connections) > len(self.uc.connections_panel.connections):
-                conn_range = len(self.uc.connections_panel.connections) - 1
+            if len(connections) > len(self.uc.connections):
+                conn_range = len(self.uc.connections) - 1
             else:
                 conn_range = len(connections)
 
@@ -856,29 +1397,20 @@ class C4IconSwapper:
                 not_in_group = True
                 for group in id_groups:
                     if group[0] is connections[i][3]:
-                        group.append(self.uc.connections_panel.connections[i])
+                        group.append(self.uc.connections[i])
                         not_in_group = False
                 if not_in_group:
-                    id_groups.append([connections[i][3], self.uc.connections_panel.connections[i]])
-                x = self.uc.connections_panel.connections[i].x
-                y = self.uc.connections_panel.connections[i].y
-                self.uc.connections_panel.connections[i].add_button.place(x=-420, y=-420)
-                self.uc.connections_panel.connections[i].del_button.place(x=x, y=y)
-                self.uc.connections_panel.connections[i].name_entry['state'] = NORMAL
-                self.uc.connections_panel.connections[i].name_entry.delete(0, END)
-                self.uc.connections_panel.connections[i].name_entry.insert(0, connections[i][0])
-                self.uc.connections_panel.connections[i].name_entry['state'] = DISABLED
-                self.uc.connections_panel.connections[i].type_menu['state'] = DISABLED
-                self.uc.connections_panel.connections[i].type.set(connections[i][1])
-                self.uc.connections_panel.connections[i].id = connections[i][2]
-                self.uc.connections_panel.connections[i].tags = [connections[i][3], connections[i][4],
-                                                                 connections[i][5], connections[i][6],
-                                                                 connections[i][7], connections[i][8]]
-                self.uc.connections_panel.connections[i].original = True
+                    id_groups.append([connections[i][3], self.uc.connections[i]])
+                self.uc.connections[i].name_entry_var.set(connections[i][0])
+                self.uc.connections[i].type.set(connections[i][1])
+                self.uc.connections[i].id = connections[i][2]
+                self.uc.connections[i].tags = [connections[i][3], connections[i][4],
+                                               connections[i][5], connections[i][6],
+                                               connections[i][7], connections[i][8]]
+                self.uc.connections[i].original = True
 
             # Fill in remaining empty connections
-            for conn in self.uc.connections_panel.connections:
-                conn.add_button['state'] = NORMAL
+            for conn in self.uc.connections:
                 if conn.original:
                     continue
                 new_conn = XMLObject(xml_data=conn_template)
@@ -905,7 +1437,7 @@ class C4IconSwapper:
                         if conn0 != conn:
                             new_group.append(conn0)
                     conn.id_group = new_group
-            for conn in self.uc.connections_panel.connections:
+            for conn in self.uc.connections:
                 conn.update_id()
 
         if not on_mac:
@@ -1407,10 +1939,6 @@ class C4IconSwapper:
             self.driver_name_label.place(x=65 + self.x, y=180 + self.y, anchor='w')
 
             # Buttons
-            self.driver_info_button = tk.Button(self.uc.root, text='Edit Driver Info',
-                                                command=self.edit_driver_info, takefocus=0)
-            self.driver_info_button.place(x=145 + self.x, y=80 + self.y, anchor='n')
-
             self.export_as_button = tk.Button(self.uc.root, text='Export As...', width=20,
                                               command=self.do_export, takefocus=0)
             self.export_as_button['state'] = DISABLED
@@ -1424,23 +1952,12 @@ class C4IconSwapper:
             else:
                 self.export_as_button.place(x=145 + self.x, y=220 + self.y, anchor='n')
 
-            self.save_project_button = tk.Button(self.uc.root, text='Save', width=4,
-                                                 command=self.save_project, takefocus=0)
-            self.save_project_button.place(x=270 + self.x, y=55 + self.y, anchor='n')
-
-            self.load_project_button = tk.Button(self.uc.root, text='Load', width=4,
-                                                 command=self.load_project, takefocus=0)
-            self.load_project_button.place(x=270 + self.x, y=85 + self.y, anchor='n')
-
             # Entry
             self.driver_name_var = StringVar()
             self.driver_name_var.set('New Driver')
             self.driver_name_var.trace('w', self.validate_driver_name)
             self.driver_name_entry = tk.Entry(self.uc.root, width=25, textvariable=self.driver_name_var)
             self.driver_name_entry.place(x=145 + self.x, y=190 + self.y, anchor='n')
-            self.driver_ver_new_entry = None
-            self.driver_man_new_entry = None
-            self.driver_creator_new_entry = None
 
             # Checkboxes
             self.inc_driver_version = IntVar(value=1)
@@ -1558,137 +2075,6 @@ class C4IconSwapper:
                         shutil.copy(bak_files_dict[file], file)
                     shutil.rmtree(bak_folder)
 
-        # noinspection PyUnusedLocal
-        def save_project(self, *args):
-            out_file = filedialog.asksaveasfile(initialfile=self.uc.export_panel.driver_name_var.get() + '.c4is',
-                                                filetypes=[('C4IconSwapper Project', '*.c4is')])
-            if not out_file:
-                return
-            if not (out_file_path := out_file.name).endswith('.c4is'):
-                out_file.close()
-                os.rename(out_file_path, (out_file_path := out_file_path + '.c4is'))
-            with open(out_file_path, 'wb') as output:
-                pickle.dump(C4IS(self.uc), output)
-            self.uc.ask_to_save = False
-
-        # noinspection PyUnusedLocal
-        def load_project(self, *args):
-            filename = filedialog.askopenfilename(filetypes=[('C4IconSwapper Project', '*.c4is')])
-            if not filename:
-                return
-            with open(filename, 'rb') as file:
-                save_state = pickle.load(file)
-            if type(save_state) is not C4IS:
-                raise TypeError
-
-            # C4z Panel (and export button)
-            self.uc.c4z_panel.icons = []
-            self.uc.c4z_panel.current_icon = 0
-            self.uc.c4z_panel.blank_image_label.configure(image=self.uc.blank)
-            if os.path.isdir(self.uc.temp_dir + 'driver/'):
-                shutil.rmtree(self.uc.temp_dir + 'driver/')
-            self.uc.c4z_panel.restore_button['state'] = DISABLED
-            if save_state.driver_selected:
-                with open(self.uc.temp_dir + 'saved_driver.c4z', 'wb') as driver_zip:
-                    driver_zip.write(save_state.driver_zip)
-                self.uc.c4z_panel.load_c4z(self.uc.temp_dir + 'saved_driver.c4z')
-                os.remove(self.uc.temp_dir + 'saved_driver.c4z')
-                self.uc.export_panel.export_button['state'] = NORMAL
-                if not on_mac:
-                    self.uc.export_panel.export_as_button['state'] = NORMAL
-                if os.path.isfile(self.uc.c4z_panel.icons[self.uc.c4z_panel.current_icon].path + '.bak') or \
-                        os.path.isfile(self.uc.c4z_panel.icons[self.uc.c4z_panel.current_icon].path + '.orig'):
-                    self.uc.c4z_panel.restore_button['state'] = NORMAL
-            else:
-                self.uc.export_panel.export_button['state'] = DISABLED
-                if not on_mac:
-                    self.uc.export_panel.export_as_button['state'] = DISABLED
-                self.uc.c4z_panel.icon_name_label.config(text='icon name')
-                self.uc.c4z_panel.icon_label.config(text='0 of 0')
-            self.uc.driver_selected = save_state.driver_selected
-
-            self.uc.c4z_panel.extra_icons = save_state.extra_icons
-            self.uc.c4z_panel.show_extra_icons.set(save_state.show_extra_icons)
-            self.uc.c4z_panel.restore_all_button['state'] = save_state.c4z_panel['restore_all']
-            self.uc.c4z_panel.prev_icon_button['state'] = save_state.c4z_panel['prev']
-            self.uc.c4z_panel.next_icon_button['state'] = save_state.c4z_panel['next']
-            self.uc.c4z_panel.gen_driver_button['state'] = save_state.c4z_panel['gen_driver']
-            self.uc.c4z_panel.multi_driver_button['state'] = save_state.c4z_panel['multi_driver']
-
-            # Root class
-            self.uc.driver_xml = save_state.driver_xml
-            self.uc.driver_manufac_var.set(save_state.driver_manufac_var)
-            self.uc.driver_manufac_new_var.set(save_state.driver_manufac_new_var)
-            self.uc.driver_creator_var.set(save_state.driver_creator_var)
-            self.uc.driver_creator_new_var.set(save_state.driver_creator_new_var)
-            self.uc.driver_ver_orig.set(save_state.driver_ver_orig)
-            self.uc.driver_version_var.set(save_state.driver_version_var)
-            self.uc.driver_version_new_var.set(save_state.driver_version_new_var)
-            self.uc.multi_state_driver = save_state.multi_state_driver
-            self.uc.states_orig_names = save_state.states_orig_names
-            self.uc.replacement_selected = save_state.replacement_selected
-
-            # State Panel
-            for i, state in enumerate(save_state.states):
-                self.uc.state_panel.states[i].original_name = state['original_name']
-                self.uc.state_panel.states[i].name_var.set(state['name_var'])
-
-            # Connection Panel
-            self.uc.connections_panel.ids = save_state.ids
-            for i, conn in enumerate(save_state.connections):
-                self.uc.connections_panel.connections[i].id = conn['id']
-                self.uc.connections_panel.connections[i].original = conn['original']
-                self.uc.connections_panel.connections[i].in_id_group = conn['in_id_group']
-                self.uc.connections_panel.connections[i].delete = conn['delete']
-                self.uc.connections_panel.connections[i].prior_txt = conn['prior_txt']
-                self.uc.connections_panel.connections[i].prior_type = conn['prior_type']
-                self.uc.connections_panel.connections[i].tags = conn['tags']
-                self.uc.connections_panel.connections[i].id_group = conn['id_group']
-                self.uc.connections_panel.connections[i].type.set(conn['type'])
-                self.uc.connections_panel.connections[i].name_entry['state'] = NORMAL
-                self.uc.connections_panel.connections[i].name_entry_var.set(conn['name'])
-                self.uc.connections_panel.connections[i].name_entry['state'] = conn['state']
-                if conn['delete']:
-                    self.uc.connections_panel.connections[i].flag_delete()
-                elif conn['state'] == DISABLED:
-                    self.uc.connections_panel.connections[i].disable()
-                else:
-                    self.uc.connections_panel.connections[i].enable()
-
-            # Export Panel
-            self.uc.export_panel.driver_name_var.set(save_state.driver_name_var)
-            self.uc.export_panel.inc_driver_version.set(save_state.inc_driver_version)
-            self.uc.export_panel.include_backups.set(save_state.include_backups)
-
-            # Replacement Panel
-            if save_state.replacement:
-                if os.path.isfile(self.uc.replacement_image_path):
-                    os.remove(self.uc.replacement_image_path)
-                save_state.replacement.save(self.uc.replacement_image_path)
-                save_state.replacement.close()
-                icon_image = Image.open(self.uc.replacement_image_path)
-                icon = icon_image.resize((128, 128))
-                icon = ImageTk.PhotoImage(icon)
-                self.uc.replacement_panel.blank_image_label.configure(image=icon)
-                self.uc.replacement_panel.blank_image_label.image = icon
-            for img in self.uc.replacement_panel.img_stack:
-                os.remove(img)
-            self.uc.replacement_panel.img_stack = []
-            for stack_label in self.uc.replacement_panel.stack_labels:
-                stack_label.configure(image=self.uc.stack_blank)
-            for img in save_state.img_stack:
-                img_path = ''.join([self.uc.temp_dir, 'stack', str(len(self.uc.replacement_panel.img_stack)), '.png'])
-                img.save(img_path)
-                img.close()
-                self.uc.replacement_panel.img_stack.append(img_path)
-            self.uc.replacement_panel.refresh_img_stack()
-            self.uc.replacement_panel.replace_button['state'] = save_state.replacement_panel['replace']
-            self.uc.replacement_panel.replace_all_button['state'] = save_state.replacement_panel['replace_all']
-            self.uc.replacement_panel.prev_icon_button['state'] = save_state.replacement_panel['prev']
-            self.uc.replacement_panel.next_icon_button['state'] = save_state.replacement_panel['next']
-
-            self.uc.ask_to_save = False
-
         def do_export(self, quick_export=False):
             # Format driver name
             driver_name = self.driver_name_var.get()
@@ -1707,13 +2093,13 @@ class C4IconSwapper:
 
             # Multi-state related checks
             if self.uc.multi_state_driver:
+                if self.uc.states_win:
+                    self.uc.states_win.refresh()
                 # Check State Validity
                 invalid_states = False
                 single_invalid_state = False
-                for state in self.uc.state_panel.states:
-                    if state.name_entry['state'] == DISABLED:
-                        continue
-                    if state.name_entry['background'] == 'pink' or state.name_entry['background'] == 'cyan':
+                for state in self.uc.states:
+                    if state.bg_color == 'pink' or state.bg_color == 'cyan':
                         self.abort = True
                         invalid_states = True
                         if not single_invalid_state:
@@ -1753,9 +2139,8 @@ class C4IconSwapper:
                     if os.path.isfile(self.uc.temp_dir + 'driver/driver.lua.bak'):
                         os.remove(self.uc.temp_dir + 'driver/driver.lua.bak')
                     shutil.copy(self.uc.temp_dir + 'driver/driver.lua', self.uc.temp_dir + 'driver/driver.lua.bak')
-                    for state in self.uc.state_panel.states:
-                        if state.name_entry['state'] == NORMAL:
-                            state_name_changes.append([state.original_name, state.name_entry.get()])
+                    for state in self.uc.states:
+                        state_name_changes.append([state.original_name, state.name_var.get()])
                     for name_change in state_name_changes:
                         formatted_name = ''
                         for character in name_change[1]:
@@ -1880,14 +2265,14 @@ class C4IconSwapper:
                 return
 
             # Confirm all connections have non-conflicting ids
-            for conn in self.uc.connections_panel.connections:
+            for conn in self.uc.connections:
                 conn.update_id(refresh=True)
 
             # Set restore point for xml object
             self.uc.driver_xml.set_restore_point()
 
             # Update connection names
-            for conn in self.uc.connections_panel.connections:
+            for conn in self.uc.connections:
                 conn.tags[2].value = conn.name_entry_var.get()
                 conn.tags[5].value = conn.type.get()
 
@@ -2040,186 +2425,6 @@ class C4IconSwapper:
 
             self.uc.ask_to_save = True
 
-        def edit_driver_info(self):
-            def on_win_close():
-                if self.uc.driver_version_new_var.get() == '':
-                    self.uc.driver_version_new_var.set('0')
-                if self.uc.driver_creator_new_var.get() == '':
-                    self.uc.driver_creator_new_var.set('C4IconSwapper')
-                if self.uc.driver_manufac_new_var.get() == '':
-                    self.uc.driver_manufac_new_var.set('C4IconSwapper')
-                if self.uc.driver_version_new_var.get() == '':
-                    if self.uc.driver_version_var.get() != '':
-                        self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_var.get()) + 1))
-                    else:
-                        self.uc.driver_version_new_var.set('1')
-                if self.inc_driver_version.get() == 1 and self.uc.driver_version_var.get() != '' and \
-                        int(self.uc.driver_version_new_var.get()) <= int(self.uc.driver_version_var.get()):
-                    self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_var.get()) + 1))
-                self.uc.driver_info_win.destroy()
-                self.uc.driver_info_win = None
-
-            # noinspection PyUnusedLocal
-            def validate_version(*args):
-                version_str = self.uc.driver_version_new_var.get()
-                version_compare = []
-                cursor_pos = self.driver_ver_new_entry.index(INSERT)
-                for char in version_str:
-                    if char not in numbers:
-                        continue
-                    if version_compare == [] and char == '0':
-                        continue
-                    version_compare.append(char)
-                str_diff = len(version_str) - len(version_compare)
-                if str_diff > 0:
-                    self.driver_ver_new_entry.icursor(cursor_pos - str_diff)
-                self.uc.driver_version_new_var.set(''.join(version_compare))
-
-                self.uc.ask_to_save = True
-
-            # noinspection PyUnusedLocal
-            def validate_name(*args):
-                # Check manufacturer variable
-                cursor_pos = self.driver_man_new_entry.index(INSERT)
-                name = self.uc.driver_manufac_new_var.get()
-                name_compare = []
-                for char in self.uc.driver_manufac_new_var.get():
-                    if char in valid_chars:
-                        name_compare.append(char)
-                str_diff = len(name) - len(name_compare)
-                if str_diff > 0:
-                    self.driver_man_new_entry.icursor(cursor_pos - str_diff)
-                self.uc.driver_manufac_new_var.set(''.join(name_compare))
-
-                # Check creator variable
-                cursor_pos = self.driver_creator_new_entry.index(INSERT)
-                name = self.uc.driver_creator_new_var.get()
-                name_compare = []
-                for char in self.uc.driver_creator_new_var.get():
-                    if char in valid_chars:
-                        name_compare.append(char)
-                str_diff = len(name) - len(name_compare)
-                if str_diff > 0:
-                    self.driver_creator_new_entry.icursor(cursor_pos - str_diff)
-                self.uc.driver_creator_new_var.set(''.join(name_compare))
-
-                self.uc.ask_to_save = True
-
-            if self.uc.driver_info_win:
-                self.uc.driver_info_win.focus()
-                return
-            # Initialize window
-            self.uc.driver_info_win = Toplevel(self.uc.root)
-            self.uc.driver_info_win.focus()
-            self.uc.driver_info_win.protocol('WM_DELETE_WINDOW', on_win_close)
-            self.uc.driver_info_win.title('Edit Driver Info')
-            if not on_mac:
-                self.uc.driver_info_win.geometry('255x240')
-            else:
-                self.uc.driver_info_win.geometry('347x240')
-            self.uc.driver_info_win.geometry(f'+{self.uc.root.winfo_rootx() + self.x}+{self.uc.root.winfo_rooty()}')
-            self.uc.driver_info_win.resizable(False, False)
-
-            # Validate driver version
-            if self.inc_driver_version.get() == 1 and self.uc.driver_version_var.get() != '' and \
-                    self.uc.driver_version_new_var.get() != '' and \
-                    int(self.uc.driver_version_new_var.get()) <= int(self.uc.driver_version_var.get()):
-                self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_var.get()) + 1))
-
-            # Labels
-            instance_id_label = tk.Label(self.uc.driver_info_win, text='instance id: ' + self.uc.instance_id)
-
-            man_y = 20
-            man_arrow = tk.Label(self.uc.driver_info_win, text='\u2192', font=('', 15))
-
-            creator_y = man_y + 55
-            creator_arrow = tk.Label(self.uc.driver_info_win, text='\u2192', font=('', 15))
-
-            version_y = creator_y + 55
-            version_arrow = tk.Label(self.uc.driver_info_win, text='\u2192', font=('', 15))
-
-            if not on_mac:
-                font_size = 10
-                driver_ver_orig_label = tk.Label(self.uc.driver_info_win, text='Original Version:',
-                                                 font=(label_font, 8))
-            else:
-                font_size = 13
-                driver_ver_orig_label = tk.Label(self.uc.driver_info_win, text='Original Version:',
-                                                 font=(label_font, 11))
-
-            driver_man_label = tk.Label(self.uc.driver_info_win, text='Driver Manufacturer',
-                                        font=(label_font, font_size))
-
-            driver_creator_label = tk.Label(self.uc.driver_info_win, text='Driver Creator',
-                                            font=(label_font, font_size))
-
-            driver_ver_label = tk.Label(self.uc.driver_info_win, text='Driver Version',
-                                        font=(label_font, font_size))
-
-            # Entry
-            if not on_mac:
-                entry_width = 17
-            else:
-                entry_width = 16
-            self.uc.driver_manufac_new_var.trace('w', validate_name)
-            driver_man_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
-                                        textvariable=self.uc.driver_manufac_var)
-            driver_man_entry['state'] = DISABLED
-            self.driver_man_new_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
-                                                 textvariable=self.uc.driver_manufac_new_var)
-
-            self.uc.driver_creator_new_var.trace('w', validate_name)
-            driver_creator_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
-                                            textvariable=self.uc.driver_creator_var)
-            driver_creator_entry['state'] = DISABLED
-            self.driver_creator_new_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
-                                                     textvariable=self.uc.driver_creator_new_var)
-
-            driver_ver_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
-                                        textvariable=self.uc.driver_version_var)
-            driver_ver_entry['state'] = DISABLED
-            self.driver_ver_new_entry = tk.Entry(self.uc.driver_info_win, width=entry_width,
-                                                 textvariable=self.uc.driver_version_new_var)
-            self.driver_ver_new_entry.bind('<FocusOut>', self.update_driver_version)
-            self.uc.driver_version_new_var.trace('w', validate_version)
-            driver_ver_orig_entry = tk.Entry(self.uc.driver_info_win, width=6, textvariable=self.uc.driver_ver_orig)
-            driver_ver_orig_entry['state'] = DISABLED
-            if not on_mac:
-                instance_id_label.place(x=127, y=220, anchor='n')
-                man_arrow.place(x=115, y=man_y, anchor='nw')
-                creator_arrow.place(x=115, y=creator_y, anchor='nw')
-                version_arrow.place(x=115, y=version_y, anchor='nw')
-                driver_man_label.place(x=127, y=man_y - 15, anchor='n')
-                driver_creator_label.place(x=127, y=creator_y - 15, anchor='n')
-                driver_ver_label.place(x=127, y=version_y - 15, anchor='n')
-                driver_ver_orig_label.place(x=110, y=version_y + 30, anchor='ne')
-                driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
-                self.driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
-                driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
-                self.driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
-                driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
-                self.driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
-                driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
-            else:
-                instance_id_label.place(x=173, y=220, anchor='n')
-
-                man_arrow.place(x=163, y=man_y + 7, anchor='nw')
-                creator_arrow.place(x=163, y=creator_y + 7, anchor='nw')
-                version_arrow.place(x=163, y=version_y + 7, anchor='nw')
-
-                driver_man_label.place(x=173, y=man_y - 15, anchor='n')
-                driver_creator_label.place(x=173, y=creator_y - 15, anchor='n')
-                driver_ver_label.place(x=173, y=version_y - 15, anchor='n')
-                driver_ver_orig_label.place(x=140, y=version_y + 35, anchor='ne')
-
-                driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
-                self.driver_man_new_entry.place(x=180, y=man_y + 7, anchor='nw')
-                driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
-                self.driver_creator_new_entry.place(x=180, y=creator_y + 7, anchor='nw')
-                driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
-                self.driver_ver_new_entry.place(x=180, y=version_y + 7, anchor='nw')
-                driver_ver_orig_entry.place(x=140, y=version_y + 35, anchor='nw')
-
         # noinspection PyUnusedLocal
         def update_driver_version(self, *args):
             self.uc.ask_to_save = True
@@ -2231,353 +2436,6 @@ class C4IconSwapper:
 
             if int(self.uc.driver_version_var.get()) >= int(self.uc.driver_version_new_var.get()):
                 self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_var.get()) + 1))
-
-    class ConnectionsPanel:
-        class Connection:
-            def __init__(self, upper_class, x_pos: int, y_pos: int, conn_id=0):
-                # Initialize Connection UI Object
-                self.uc = upper_class
-                self.x, self.y = x_pos, y_pos
-                self.id = conn_id
-                self.original, self.in_id_group, self.delete = False, False, False
-                self.prior_txt, self.prior_type = '', ''
-                # tags[0] = connection_tag, tags[1] = class_tag, tags[2] = connectionname_tag
-                # tags[3] = id_tag, tags[4] = type_tag, tags[5] = classname_tag
-                self.tags, self.id_group = [], []
-
-                # Entry
-                self.name_entry_var = StringVar()
-                self.name_entry_var.set('Connection Name...')
-                self.name_entry_var.trace('w', self.name_update)
-                if on_mac:
-                    self.name_entry = tk.Entry(self.uc.root, width=15, textvariable=self.name_entry_var)
-                    self.name_entry.place(x=self.x + 60, y=self.y, anchor='w')
-                else:
-                    self.name_entry = tk.Entry(self.uc.root, width=20, textvariable=self.name_entry_var)
-                    self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
-                self.name_entry['state'] = DISABLED
-
-                # Dropdown
-                self.type = StringVar(self.uc.root)
-                self.type.set('HDMI IN')
-                self.type_menu = OptionMenu(self.uc.root, self.type, 'HDMI IN', 'HDMI OUT', 'COMPOSITE IN',
-                                            'COMPOSITE OUT', 'VGA IN', 'VGA OUT', 'COMPONENT IN', 'COMPONENT OUT',
-                                            'DVI IN', 'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
-                                            'DIGITAL_OPTICAL OUT', 'IR_OUT')
-                if on_mac:
-                    self.type_menu.place(x=self.x + 207, y=self.y, anchor='w')
-                else:
-                    self.type_menu.place(x=self.x + 160, y=self.y, anchor='w')
-                self.type.trace('w', self.update_id)
-                self.type_menu['state'] = DISABLED
-
-                # Buttons
-                self.add_button = tk.Button(self.uc.root, text='Add', width=3, command=self.enable, takefocus=0)
-                if on_mac:
-                    self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
-                else:
-                    self.add_button.place(x=self.x, y=self.y, anchor='w')
-                self.add_button['state'] = DISABLED
-
-                self.x_button = tk.Button(self.uc.root, text='x', width=1, command=self.disable, takefocus=0)
-                self.x_button.place(x=-420, y=-420, anchor='w')
-
-                self.del_button = tk.Button(self.uc.root, text='Del', width=3, command=self.flag_delete, takefocus=0)
-                self.del_button.place(x=-420, y=-420, anchor='w')
-
-            def enable(self):
-                self.name_entry['state'] = NORMAL
-                self.type_menu['state'] = NORMAL
-                self.add_button.place(x=-420, y=-420, anchor='w')
-                if on_mac:
-                    self.x_button.place(x=self.x + 18, y=self.y - 3, anchor='w')
-                else:
-                    self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
-                if self.tags:
-                    self.tags[0].delete = False
-                self.name_entry['takefocus'] = 1
-
-            def disable(self):
-                self.name_entry['state'] = DISABLED
-                self.type_menu['state'] = DISABLED
-                if on_mac:
-                    self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
-                else:
-                    self.add_button.place(x=self.x, y=self.y, anchor='w')
-                self.x_button.place(x=-420, y=-420, anchor='w')
-                if self.tags:
-                    self.tags[0].delete = True
-                self.name_entry['takefocus'] = 0
-
-            def flag_delete(self):
-                if not self.original:
-                    return
-                if not self.delete:
-                    self.delete = True
-                    self.prior_txt = self.name_entry_var.get()
-                    self.prior_type = self.type.get()
-                    self.type.set('RIP')
-                    self.name_entry['state'] = NORMAL
-                    self.name_entry_var.set('TO BE DELETED')
-                    self.name_entry['state'] = DISABLED
-                    self.del_button['text'] = 'Keep'
-                    self.del_button['width'] = 4
-                    self.del_button.place(x=self.del_button.winfo_x() - 6, y=self.y)
-                    if len(self.id_group) > 1:
-                        first = True
-                        last_alive = True
-                        for groupie in self.id_group:
-                            if first:
-                                first = False
-                                continue
-                            if not groupie.delete:
-                                last_alive = False
-                                break
-                        if last_alive:
-                            self.tags[0].delete = True
-                        self.tags[1].delete = True
-                    return
-                self.delete = False
-                self.name_entry['state'] = NORMAL
-                self.name_entry_var.set(self.prior_txt)
-                self.prior_txt = ''
-                self.name_entry['state'] = DISABLED
-                self.type.set(self.prior_type)
-                self.prior_type = ''
-                if self.tags:
-                    self.tags[0].delete, self.tags[1].delete = False, False
-                self.del_button['text'] = 'Del'
-                self.del_button['width'] = 3
-                self.del_button.place(x=self.del_button.winfo_x() + 6, y=self.y)
-
-            def reinit(self):
-                self.id = 0
-                self.original, self.in_id_group, self.delete = False, False, False
-                self.prior_txt, self.prior_type = '', ''
-                if self.tags:
-                    self.disable()
-                    self.tags = []
-                self.id_group = []
-
-                # Entry
-                self.name_entry['state'] = NORMAL
-                self.name_entry_var.set('Connection Name...')
-                self.name_entry['state'] = DISABLED
-                self.name_entry['takefocus'] = 0
-
-                # Dropdown
-                self.type.set('HDMI IN')
-                self.type_menu['state'] = DISABLED
-
-                # Buttons
-                self.x_button.place(x=-420, y=-420, anchor='w')
-                self.del_button.place(x=-420, y=-420, anchor='w')
-
-                if on_mac:
-                    self.name_entry.place(x=self.x + 60, y=self.y, anchor='w')
-                    self.type_menu.place(x=self.x + 207, y=self.y, anchor='w')
-                    self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
-                else:
-                    self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
-                    self.type_menu.place(x=self.x + 160, y=self.y, anchor='w')
-                    self.add_button.place(x=self.x, y=self.y, anchor='w')
-
-            def update_id(self, *args, refresh=False):
-                self.uc.ask_to_save = True
-                if not args:
-                    args = [self.type]
-                if self.original:
-                    for conn in self.uc.connections_panel.connections:
-                        if conn is not self and conn.original and conn.id == self.id:
-                            self.in_id_group = True
-                            return
-                    self.in_id_group = False
-                    return
-                if not refresh and (args[0] != str(self.type) or self.type_menu['state'] == DISABLED):
-                    return
-                conn_type = self.type.get()
-                valid_id = []
-                if ' IN' in conn_type:
-                    conn_type = conn_type.replace(' IN', '')
-                    if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
-                        valid_id = find_valid_id(2000, self.uc.connections_panel.ids)
-                        self.tags[4].value = '5'
-                    elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
-                        valid_id = find_valid_id(4000, self.uc.connections_panel.ids)
-                        self.tags[4].value = '6'
-                elif ' OUT' in conn_type:
-                    conn_type = conn_type.replace(' OUT', '')
-                    if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
-                        valid_id = find_valid_id(1900, self.uc.connections_panel.ids)
-                        self.tags[4].value = '5'
-                    elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
-                        valid_id = find_valid_id(3900, self.uc.connections_panel.ids)
-                        self.tags[4].value = '6'
-                if conn_type == 'IR_OUT':
-                    valid_id = find_valid_id(1, self.uc.connections_panel.ids)
-                    self.tags[4].value = '6'
-
-                if self.id in self.uc.connections_panel.ids:
-                    self.uc.connections_panel.ids.pop(self.uc.connections_panel.ids.index(self.id))
-                self.id = valid_id[0]
-                self.tags[3].value = str(self.id)
-                self.uc.connections_panel.ids.append(self.id)
-
-            # noinspection PyUnusedLocal
-            def name_update(self, *args):
-                self.uc.ask_to_save = True
-
-        def __init__(self, upper_class):
-            # Initialize Connection Panel
-            self.uc = upper_class
-            if on_mac:
-                self.x, self.y, x_spacing, y_spacing = 10, 300, 365, 40
-            else:
-                self.x, self.y, x_spacing, y_spacing = 14, 280, 318, 40
-            self.connections, self.ids = [], []
-
-            for x in range(0, 4):
-                for i in range(0, 6):
-                    self.connections.append(self.Connection(self.uc, (x * x_spacing) + self.x,
-                                                            (i * y_spacing) + 20 + self.y))
-
-        def reinit(self):
-            for conn in self.connections:
-                conn.reinit()
-
-    class StatePanel:
-        class DriverState:
-            def __init__(self, upper_class, name: str, x_pos: int, y_pos: int, state_name='State69:'):
-                # Initialize Driver State UI Object
-                self.uc = upper_class
-                self.original_name = name
-                self.x, self.y = x_pos, y_pos
-
-                # Label
-                self.name_label = tk.Label(self.uc.root, text=state_name)
-                self.name_label.place(x=self.x + 35, y=self.y, anchor='e')
-
-                # Entry
-                self.name_var = StringVar()
-                self.name_var.set('')
-                self.name_var.trace('w', self.validate_state)
-                if on_mac:
-                    self.name_entry = tk.Entry(self.uc.root, width=13, textvariable=self.name_var)
-                    self.name_entry.place(x=self.x + 36, y=self.y, anchor='w')
-                else:
-                    self.name_entry = tk.Entry(self.uc.root, width=20, textvariable=self.name_var)
-                    self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
-                self.name_entry['state'] = DISABLED
-
-            # noinspection PyUnusedLocal
-            def validate_state(self, *args):
-                self.uc.ask_to_save = True
-                background_color = light_entry_bg
-                if on_mac and is_dark_mode():
-                    background_color = dark_entry_bg
-                self.format_state_name()
-                if self.name_var.get() == '':
-                    self.name_entry['background'] = 'pink'
-                    return
-                duplicate = False
-                for state in self.uc.state_panel.states:
-                    if state is not self and state.name_var.get() == self.name_var.get():
-                        duplicate = True
-                        for dupe_list in self.uc.state_panel.dupes:
-                            if self in dupe_list:
-                                if len(dupe_list) == 2:
-                                    dupe_list[0].name_entry['background'] = background_color
-                                    dupe_list[1].name_entry['background'] = background_color
-                                    to_validate = None
-                                    if dupe_list[0] is not self:
-                                        to_validate = dupe_list[0]
-                                    if dupe_list[1] is not self:
-                                        to_validate = dupe_list[1]
-                                    self.uc.state_panel.dupes.pop(self.uc.state_panel.dupes.index(dupe_list))
-                                    if to_validate:
-                                        to_validate.validate_state()
-                                    break
-                                dupe_list.pop(dupe_list.index(self))
-                                break
-                        append_new_list = True
-                        for dupe_list in self.uc.state_panel.dupes:
-                            if dupe_list[0].name_var.get() == self.name_var.get():
-                                if self not in dupe_list:
-                                    dupe_list.append(self)
-                                append_new_list = False
-                                break
-                        if append_new_list:
-                            self.uc.state_panel.dupes.append([self, state])
-                        self.name_entry['background'] = 'pink'
-                        state.name_entry['background'] = 'pink'
-                        break
-                if not duplicate:
-                    for dupe_list in self.uc.state_panel.dupes:
-                        if self in dupe_list:
-                            if len(dupe_list) == 2:
-                                dupe_list[0].name_entry['background'] = background_color
-                                dupe_list[1].name_entry['background'] = background_color
-                                to_validate = None
-                                if dupe_list[0] is not self:
-                                    to_validate = dupe_list[0]
-                                if dupe_list[1] is not self:
-                                    to_validate = dupe_list[1]
-                                self.uc.state_panel.dupes.pop(self.uc.state_panel.dupes.index(dupe_list))
-                                if to_validate:
-                                    to_validate.validate_state()
-                                break
-                            dupe_list.pop(dupe_list.index(self))
-                            break
-                    self.name_entry['background'] = background_color
-
-                for state in self.uc.state_panel.states:
-                    if state is self:
-                        continue
-                    using_existing_name = False
-                    for orig_name in self.uc.states_orig_names:
-                        if self.uc.state_panel.states.index(self) == self.uc.states_orig_names.index(orig_name):
-                            continue
-                        if self.name_var.get() in orig_name:
-                            using_existing_name = True
-                            break
-                    if using_existing_name:
-                        if self.name_entry['background'] != 'pink':
-                            self.name_entry['background'] = 'cyan'
-                        break
-
-            def format_state_name(self):
-                formatted_name = []
-                for character in self.name_entry.get():
-                    if character == ' ' or (character not in letters and character not in capital_letters and
-                                            character not in numbers):
-                        continue
-                    if formatted_name == [] and character in letters:
-                        formatted_name.append(capital_letters[letters.index(character)])
-                        continue
-                    formatted_name.append(character)
-                formatted_name = ''.join(formatted_name)
-                if formatted_name == self.name_entry.get():
-                    return
-                self.name_entry.delete(0, 'end')
-                self.name_entry.insert(0, formatted_name)
-
-        def __init__(self, upper_class):
-            # Initialize State Panel
-            self.uc = upper_class
-            if on_mac:
-                self.x, self.y, x_spacing, y_spacing = 1085, 27, 190, 34
-            else:
-                self.x, self.y, x_spacing, y_spacing = 930, 27, 200, 34
-            self.states, self.dupes = [], []
-            for i in range(13):
-                self.states.append(self.DriverState(self.uc, 'state' + str(i + 1),
-                                                    (int(i / 7) * x_spacing) + self.x,
-                                                    ((i % 7) * y_spacing) + 20 + self.y,
-                                   state_name=''.join(['state', str(i + 1), ':'])))
-
-            # Label
-            self.panel_label = tk.Label(self.uc.root, text='Multi-State Labels', font=(label_font, 15))
-            self.panel_label.place(x=185 + self.x, y=-27 + self.y, anchor='n')
 
     def __init__(self):
         def valid_instance_id(instance_ids: list):
@@ -2696,10 +2554,10 @@ class C4IconSwapper:
         # Initialize main program
         if on_mac:
             self.root = tk.Tk()
-            self.root.geometry('1055x290')
+            self.root.geometry('1055x307')
         else:
             self.root = TkinterDnD.Tk()
-            self.root.geometry('915x270')
+            self.root.geometry('915x287')
         self.root.bind('<KeyRelease>', self.key_release)
 
         # Root window properties
@@ -2715,7 +2573,7 @@ class C4IconSwapper:
         self.version_label.bind('<Button-1>', self.easter)
 
         # Class variables
-        self.driver_info_win, self.driver_xml = None, None
+        self.driver_xml = None
         self.driver_manufac_var = StringVar()
         self.driver_manufac_new_var = StringVar()
         self.driver_manufac_new_var.set('C4IconSwapper')
@@ -2728,6 +2586,8 @@ class C4IconSwapper:
         self.driver_version_new_var.set('1')
         self.multi_state_driver, self.states_shown, self.ask_to_save = False, False, False
         self.counter, self.easter_counter = 0, 0
+        self.connections, self.conn_ids = [self.Connection(self) for _ in range(18)], []
+        self.states, self.state_dupes = [self.State('') for _ in range(13)], []
         self.states_orig_names, self.conn_dict = [], {}
         self.device_icon_dir = self.temp_dir + 'driver/www/icons/device/'
         self.icon_dir = self.temp_dir + 'driver/www/icons/'
@@ -2778,15 +2638,28 @@ class C4IconSwapper:
         self.c4z_panel = self.C4zPanel(self)
         self.replacement_panel = self.ReplacementPanel(self)
         self.export_panel = self.ExportPanel(self)
-        self.connections_panel = self.ConnectionsPanel(self)
-        self.state_panel = self.StatePanel(self)
-        self.root.bind('<Control-s>', self.export_panel.save_project)
-        self.root.bind('<Control-o>', self.export_panel.load_project)
+        self.driver_info_win = None
+        self.states_win = None
+        self.connections_win = None
+        self.root.bind('<Control-s>', self.save_project)
+        self.root.bind('<Control-o>', self.load_project)
 
-        for conn in self.connections_panel.connections:
-            conn.name_entry['takefocus'] = 0
-        for state in self.state_panel.states:
-            state.name_entry['takefocus'] = 0
+        # Menu
+        self.menu = Menu(self.root)
+        self.file = Menu(self.menu, tearoff=0)
+        self.file.add_command(label='Open Project', command=self.load_project)
+        self.file.add_command(label='Save Project', command=self.save_project)
+        self.file.add_command(label='Open C4z', command=self.c4z_panel.load_c4z)
+        self.file.add_command(label='Open Replacement Image', command=self.replacement_panel.load_replacement)
+        self.file.add_command(label='Load Generic Driver', command=self.c4z_panel.load_gen_driver)
+        self.file.add_command(label='Load Multi Driver', command=self.c4z_panel.load_gen_multi)
+        self.edit = Menu(self.menu, tearoff=0)
+        self.edit.add_command(label='Connections', command=self.edit_connections)
+        self.edit.add_command(label='Driver Info', command=self.edit_driver_info)
+        self.edit.add_command(label='States', command=self.edit_states)
+        self.edit.entryconfig(3, state=DISABLED)
+        self.menu.add_cascade(label='File', menu=self.file)
+        self.menu.add_cascade(label='Edit', menu=self.edit)
 
         # Separators
         self.separator0 = ttk.Separator(self.root, orient='vertical')
@@ -2803,18 +2676,6 @@ class C4IconSwapper:
             self.separator1.place(x=610, y=0, height=270)
             self.separator2.place(x=0, y=270, relwidth=1)
             self.separator3.place(x=915, y=0, height=270)
-
-        # Buttons
-        self.toggle_conn_button = tk.Button(self.root, text='Show Connections', width=15,
-                                            command=self.toggle_connections_panel, takefocus=0)
-        self.show_states_button = tk.Button(self.root, text='Show States', width=15, command=self.show_states_panel,
-                                            takefocus=0)
-        if on_mac:
-            self.toggle_conn_button.place(x=790, y=240, anchor='n')
-            self.show_states_button.place(x=965, y=240, anchor='n')
-        else:
-            self.toggle_conn_button.place(x=700, y=240, anchor='n')
-            self.show_states_button.place(x=820, y=240, anchor='n')
 
         # Creating window icon
         if not on_mac:
@@ -2860,6 +2721,7 @@ class C4IconSwapper:
                     self.replacement_panel.prev_icon_button['state'] = NORMAL
 
         # Main Loop
+        self.root.config(menu=self.menu)
         if not on_mac:
             self.root.after(150, self.instance_check)
         else:
@@ -2869,86 +2731,6 @@ class C4IconSwapper:
                 self.root.after(150, self.dark_mode_check)
         self.root.protocol('WM_DELETE_WINDOW', self.on_program_exit)
         self.root.mainloop()
-
-    def toggle_connections_panel(self):
-        if not self.states_shown:
-            if self.toggle_conn_button['text'] == 'Show Connections':
-                self.toggle_conn_button['text'] = 'Hide Connections'
-                if on_mac:
-                    self.root.geometry('1055x550')
-                else:
-                    self.root.geometry('915x530')
-                for conn in self.connections_panel.connections:
-                    if conn.name_entry['state'] == NORMAL:
-                        conn.name_entry['takefocus'] = 1
-                return
-            self.toggle_conn_button['text'] = 'Show Connections'
-            if on_mac:
-                self.root.geometry('1055x290')
-            else:
-                self.root.geometry('915x270')
-            for conn in self.connections_panel.connections:
-                conn.name_entry['takefocus'] = 0
-            return
-        if self.toggle_conn_button['text'] == 'Show Connections':
-            self.toggle_conn_button['text'] = 'Hide Connections'
-            if on_mac:
-                self.root.geometry('1450x550')
-            else:
-                self.root.geometry('1300x530')
-            for conn in self.connections_panel.connections:
-                if conn.name_entry['state'] == NORMAL:
-                    conn.name_entry['takefocus'] = 1
-            return
-        self.toggle_conn_button['text'] = 'Show Connections'
-        if on_mac:
-            self.root.geometry('1450x290')
-        else:
-            self.root.geometry('1300x270')
-        for conn in self.connections_panel.connections:
-            conn.name_entry['takefocus'] = 0
-        return
-
-    def show_states_panel(self):
-        if not self.states_shown:
-            if self.toggle_conn_button['text'] == 'Show Connections':
-                if on_mac:
-                    self.root.geometry('1450x290')
-                else:
-                    self.root.geometry('1300x270')
-                self.states_shown = True
-            else:
-                if on_mac:
-                    self.root.geometry('1450x550')
-                else:
-                    self.root.geometry('1300x530')
-                self.states_shown = True
-            self.show_states_button['text'] = 'Hide States'
-            for i in range(7):
-                if self.connections_panel.connections[-i].name_entry['state'] == NORMAL:
-                    self.connections_panel.connections[-i].name_entry['takefocus'] = 1
-            for state in self.state_panel.states:
-                if state.name_entry['state'] == NORMAL:
-                    state.name_entry['takefocus'] = 1
-            return
-        elif self.toggle_conn_button['text'] == 'Show Connections':
-            if on_mac:
-                self.root.geometry('1055x290')
-            else:
-                self.root.geometry('915x270')
-            self.states_shown = False
-        else:
-            if on_mac:
-                self.root.geometry('1055x550')
-            else:
-                self.root.geometry('915x530')
-            self.states_shown = False
-        for i in range(7):
-            if self.connections_panel.connections[-i].name_entry['state'] == NORMAL:
-                self.connections_panel.connections[-i].name_entry['takefocus'] = 0
-        for state in self.state_panel.states:
-            state.name_entry['takefocus'] = 0
-        self.show_states_button['text'] = 'Show States'
 
     def restore_entry_text(self):
         if self.schedule_entry_restore and self.restore_entry_string != '':
@@ -3021,20 +2803,11 @@ class C4IconSwapper:
             if 'States, LED = {},' in line or 'States = {}' in line:
                 break
 
-        for state_name in state_names:
-            self.state_panel.states[state_names.index(state_name)].name_entry['state'] = NORMAL
-            if self.states_shown:
-                self.state_panel.states[state_names.index(state_name)].name_entry['takefocus'] = 1
-            self.state_panel.states[state_names.index(state_name)].name_entry.delete(0, END)
-            self.state_panel.states[state_names.index(state_name)].name_entry.insert(0, state_name)
-            self.state_panel.states[state_names.index(state_name)].original_name = state_name
-
-    def disable_states(self):
-        for state in self.state_panel.states:
-            state.name_entry.delete(0, END)
-            state.name_entry['state'] = DISABLED
-            state.name_entry['takefocus'] = 0
-            state.original_name = ''
+        for i, state_name in enumerate(state_names):
+            if self.states_win:
+                self.states_win.states[i].name_entry['state'] = NORMAL
+            self.states[i].name_var.set(state_name)
+            self.states[i].original_name = state_name
 
     def show_loading_image(self):
         self.c4z_panel.load_gen_multi(show_loading_image=False)
@@ -3055,80 +2828,325 @@ class C4IconSwapper:
             self.root.after(150, self.blink_driver_name_entry)
 
     def on_program_exit(self):
-        def end_program():
-            if on_mac:
-                shutil.rmtree(self.temp_root_dir)
+        if self.ask_to_save:
+            self.ask_to_save_dialog(root_destroy=True)
+            return
+        self.end_program()
+
+    def end_program(self):
+        if on_mac:
+            shutil.rmtree(self.temp_root_dir)
+            return
+        with open(self.temp_root_dir + 'instance', 'r', errors='ignore') as instance_file:
+            current_instances = instance_file.readlines()
+        if len(current_instances) > 1:
+            if os.path.isdir(self.temp_root_dir + 'check_in') and not self.checked_in:
                 return
-            with open(self.temp_root_dir + 'instance', 'r', errors='ignore') as instance_file:
-                current_instances = instance_file.readlines()
-            if len(current_instances) > 1:
-                if os.path.isdir(self.temp_root_dir + 'check_in') and not self.checked_in:
-                    return
-                elif os.path.isdir(self.temp_root_dir + 'check_in'):
-                    begin_time = float(time.mktime(datetime.now().timetuple()))
-                    while os.path.isdir(self.temp_root_dir + 'check_in'):
-                        if float(time.mktime(datetime.now().timetuple())) - begin_time >= 5:
-                            return
-                os.mkdir(self.temp_root_dir + 'check_in')
-                waiting = True
+            elif os.path.isdir(self.temp_root_dir + 'check_in'):
                 begin_time = float(time.mktime(datetime.now().timetuple()))
-                while waiting:
-                    if len(os.listdir(self.temp_root_dir + 'check_in')) == len(current_instances):
-                        waiting = False
-                    if float(time.mktime(datetime.now().timetuple())) - begin_time >= 2:
-                        waiting = False
-                failed_to_check_in = []
-                for instance_id in current_instances:
-                    if instance_id == self.instance_id + '\n':
-                        continue
-                    if instance_id.replace('\n', '') not in os.listdir(self.temp_root_dir + 'check_in'):
-                        failed_to_check_in.append(instance_id.replace('\n', ''))
-                for failed_id in failed_to_check_in:
-                    if os.path.isdir(self.temp_root_dir + failed_id):
-                        shutil.rmtree(self.temp_root_dir + failed_id)
-                current_instances = []
-                for instance_id in os.listdir(self.temp_root_dir + 'check_in'):
-                    current_instances.append(instance_id + '\n')
-                shutil.rmtree(self.temp_root_dir + 'check_in')
-                if len(current_instances) > 0:
-                    with open(self.temp_root_dir + 'instance', 'w', errors='ignore') as out_file:
-                        out_file.writelines(current_instances)
-                    shutil.rmtree(self.temp_dir)
-                else:
-                    shutil.rmtree(self.temp_root_dir)
+                while os.path.isdir(self.temp_root_dir + 'check_in'):
+                    if float(time.mktime(datetime.now().timetuple())) - begin_time >= 5:
+                        return
+            os.mkdir(self.temp_root_dir + 'check_in')
+            waiting = True
+            begin_time = float(time.mktime(datetime.now().timetuple()))
+            while waiting:
+                if len(os.listdir(self.temp_root_dir + 'check_in')) == len(current_instances):
+                    waiting = False
+                if float(time.mktime(datetime.now().timetuple())) - begin_time >= 2:
+                    waiting = False
+            failed_to_check_in = []
+            for instance_id in current_instances:
+                if instance_id == self.instance_id + '\n':
+                    continue
+                if instance_id.replace('\n', '') not in os.listdir(self.temp_root_dir + 'check_in'):
+                    failed_to_check_in.append(instance_id.replace('\n', ''))
+            for failed_id in failed_to_check_in:
+                if os.path.isdir(self.temp_root_dir + failed_id):
+                    shutil.rmtree(self.temp_root_dir + failed_id)
+            current_instances = []
+            for instance_id in os.listdir(self.temp_root_dir + 'check_in'):
+                current_instances.append(instance_id + '\n')
+            shutil.rmtree(self.temp_root_dir + 'check_in')
+            if len(current_instances) > 0:
+                with open(self.temp_root_dir + 'instance', 'w', errors='ignore') as out_file:
+                    out_file.writelines(current_instances)
+                shutil.rmtree(self.temp_dir)
             else:
                 shutil.rmtree(self.temp_root_dir)
-
-            self.root.destroy()
-        if self.ask_to_save:
-            def exit_save_dialog():
-                save_on_exit.destroy()
-                end_program()
-
-            def do_project_save():
-                self.export_panel.save_project()
-                exit_save_dialog()
-            save_on_exit = Toplevel(self.root)
-            save_on_exit.title('Save current project?')
-            save_on_exit.geometry('239x70')
-            win_x = self.root.winfo_rootx() + self.root.winfo_width() - 250
-            save_on_exit.geometry(f'+{win_x}+{self.root.winfo_rooty()}')
-            save_on_exit.protocol('WM_DELETE_WINDOW', exit_save_dialog)
-            save_on_exit.grab_set()
-            save_on_exit.focus()
-            save_on_exit.transient(self.root)
-            save_on_exit.resizable(False, False)
-
-            confirm_label = Label(save_on_exit, text='Would you like to save the current project?')
-            confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
-
-            yes_button = tk.Button(save_on_exit, text='Yes', width='10', command=do_project_save)
-            yes_button.grid(row=2, column=0, sticky='e', padx=5)
-
-            no_button = tk.Button(save_on_exit, text='No', width='10', command=exit_save_dialog)
-            no_button.grid(row=2, column=1, sticky='w', padx=5)
         else:
-            end_program()
+            shutil.rmtree(self.temp_root_dir)
+
+        self.root.destroy()
+
+    def ask_to_save_dialog(self, on_exit=True, root_destroy=False, load_gen=False, load_multi=False):
+        def cancel_dialog():
+            self.ask_to_save = True
+            save_dialog.destroy()
+
+        def exit_save_dialog():
+            save_dialog.destroy()
+            if root_destroy:
+                self.end_program()
+            elif load_gen:
+                self.c4z_panel.load_gen_driver()
+            elif load_multi:
+                self.c4z_panel.load_gen_multi()
+
+        def do_project_save():
+            self.save_project()
+            exit_save_dialog()
+
+        save_dialog = Toplevel(self.root)
+        save_dialog.title('Save current project?')
+        save_dialog.geometry('239x70')
+        if on_exit:
+            win_x = self.root.winfo_rootx() + self.root.winfo_width() - 250
+            save_dialog.geometry(f'+{win_x}+{self.root.winfo_rooty()}')
+        else:
+            save_dialog.geometry(f'+{self.root.winfo_rootx()}+{self.root.winfo_rooty()}')
+        save_dialog.protocol('WM_DELETE_WINDOW', cancel_dialog)
+        save_dialog.grab_set()
+        save_dialog.focus()
+        save_dialog.transient(self.root)
+        save_dialog.resizable(False, False)
+
+        confirm_label = Label(save_dialog, text='Would you like to save the current project?')
+        confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
+
+        yes_button = tk.Button(save_dialog, text='Yes', width='10', command=do_project_save)
+        yes_button.grid(row=2, column=0, sticky='e', padx=5)
+
+        no_button = tk.Button(save_dialog, text='No', width='10', command=exit_save_dialog)
+        no_button.grid(row=2, column=1, sticky='w', padx=5)
+
+        self.ask_to_save = False
+
+    def close_connections(self):
+        if self.connections_win is None:
+            return
+        self.connections_win.window.destroy()
+        del self.connections_win
+        self.connections_win = None
+
+    def close_driver_info(self):
+        if self.driver_info_win is None:
+            return
+        if self.driver_version_new_var.get() == '':
+            self.driver_version_new_var.set('0')
+        if self.driver_creator_new_var.get() == '':
+            self.driver_creator_new_var.set('C4IconSwapper')
+        if self.driver_manufac_new_var.get() == '':
+            self.driver_manufac_new_var.set('C4IconSwapper')
+        if self.driver_version_new_var.get() == '':
+            if self.driver_version_var.get() != '':
+                self.driver_version_new_var.set(str(int(self.driver_version_var.get()) + 1))
+            else:
+                self.driver_version_new_var.set('1')
+        if self.export_panel.inc_driver_version.get() == 1 and self.driver_version_var.get() != '' and \
+                int(self.driver_version_new_var.get()) <= int(self.driver_version_var.get()):
+            self.driver_version_new_var.set(str(int(self.driver_version_var.get()) + 1))
+        self.driver_info_win.window.destroy()
+        del self.driver_info_win
+        self.driver_info_win = None
+
+    def close_states(self):
+        if self.states_win is None:
+            return
+        self.states_win.refresh()
+        self.states_win.window.destroy()
+        del self.states_win
+        self.states_win = None
+
+    # noinspection PyUnusedLocal
+    def validate_driver_ver(self, *args):
+        version_str = self.driver_version_new_var.get()
+        version_compare = []
+        for char in version_str:
+            if char not in numbers:
+                continue
+            if version_compare == [] and char == '0':
+                continue
+            version_compare.append(char)
+        str_diff = len(version_str) - len(version_compare)
+        if self.driver_info_win and str_diff > 0:
+            cursor_pos = self.driver_info_win.driver_ver_new_entry.index(INSERT)
+            self.driver_info_win.driver_ver_new_entry.icursor(cursor_pos - str_diff)
+        self.driver_version_new_var.set(''.join(version_compare))
+
+        self.ask_to_save = True
+
+    # noinspection PyUnusedLocal
+    def validate_man_and_creator(self, *args):
+        # Check manufacturer variable
+        name = self.driver_manufac_new_var.get()
+        name_compare = []
+        for char in self.driver_manufac_new_var.get():
+            if char in valid_chars:
+                name_compare.append(char)
+        str_diff = len(name) - len(name_compare)
+        if self.driver_info_win and str_diff > 0:
+            cursor_pos = self.driver_info_win.driver_man_new_entry.index(INSERT)
+            self.driver_info_win.driver_man_new_entry.icursor(cursor_pos - str_diff)
+        self.driver_manufac_new_var.set(''.join(name_compare))
+
+        # Check creator variable
+        name = self.driver_creator_new_var.get()
+        name_compare = []
+        for char in self.driver_creator_new_var.get():
+            if char in valid_chars:
+                name_compare.append(char)
+        str_diff = len(name) - len(name_compare)
+        if self.driver_info_win and str_diff > 0:
+            cursor_pos = self.driver_info_win.driver_creator_new_entry.index(INSERT)
+            self.driver_info_win.driver_creator_new_entry.icursor(cursor_pos - str_diff)
+        self.driver_creator_new_var.set(''.join(name_compare))
+
+        self.ask_to_save = True
+
+    # noinspection PyUnusedLocal
+    def save_project(self, *args):
+        out_file = filedialog.asksaveasfile(initialfile=self.export_panel.driver_name_var.get() + '.c4is',
+                                            filetypes=[('C4IconSwapper Project', '*.c4is')])
+        if not out_file:
+            return
+        if not (out_file_path := out_file.name).endswith('.c4is'):
+            out_file.close()
+            os.rename(out_file_path, (out_file_path := out_file_path + '.c4is'))
+        with open(out_file_path, 'wb') as output:
+            pickle.dump(C4IS(self), output)
+        self.ask_to_save = False
+
+    # noinspection PyUnusedLocal
+    def load_project(self, *args):
+        filename = filedialog.askopenfilename(filetypes=[('C4IconSwapper Project', '*.c4is')])
+        if not filename:
+            return
+        with open(filename, 'rb') as file:
+            save_state = pickle.load(file)
+        if type(save_state) is not C4IS:
+            raise TypeError
+
+        # C4z Panel (and export button)
+        self.c4z_panel.icons = []
+        self.c4z_panel.current_icon = 0
+        self.c4z_panel.blank_image_label.configure(image=self.blank)
+        if os.path.isdir(self.temp_dir + 'driver/'):
+            shutil.rmtree(self.temp_dir + 'driver/')
+        self.c4z_panel.restore_button['state'] = DISABLED
+        if save_state.driver_selected:
+            with open(self.temp_dir + 'saved_driver.c4z', 'wb') as driver_zip:
+                driver_zip.write(save_state.driver_zip)
+            self.c4z_panel.load_c4z(self.temp_dir + 'saved_driver.c4z')
+            os.remove(self.temp_dir + 'saved_driver.c4z')
+            self.export_panel.export_button['state'] = NORMAL
+            if not on_mac:
+                self.export_panel.export_as_button['state'] = NORMAL
+            if os.path.isfile(self.c4z_panel.icons[self.c4z_panel.current_icon].path + '.bak') or \
+                    os.path.isfile(self.c4z_panel.icons[self.c4z_panel.current_icon].path + '.orig'):
+                self.c4z_panel.restore_button['state'] = NORMAL
+        else:
+            self.export_panel.export_button['state'] = DISABLED
+            if not on_mac:
+                self.export_panel.export_as_button['state'] = DISABLED
+            self.c4z_panel.icon_name_label.config(text='icon name')
+            self.c4z_panel.icon_label.config(text='0 of 0')
+        self.driver_selected = save_state.driver_selected
+
+        self.c4z_panel.extra_icons = save_state.extra_icons
+        self.c4z_panel.show_extra_icons.set(save_state.show_extra_icons)
+        self.c4z_panel.restore_all_button['state'] = save_state.c4z_panel['restore_all']
+        self.c4z_panel.prev_icon_button['state'] = save_state.c4z_panel['prev']
+        self.c4z_panel.next_icon_button['state'] = save_state.c4z_panel['next']
+
+        # Root class
+        self.driver_xml = save_state.driver_xml
+        self.driver_manufac_var.set(save_state.driver_manufac_var)
+        self.driver_manufac_new_var.set(save_state.driver_manufac_new_var)
+        self.driver_creator_var.set(save_state.driver_creator_var)
+        self.driver_creator_new_var.set(save_state.driver_creator_new_var)
+        self.driver_ver_orig.set(save_state.driver_ver_orig)
+        self.driver_version_var.set(save_state.driver_version_var)
+        self.driver_version_new_var.set(save_state.driver_version_new_var)
+        self.multi_state_driver = save_state.multi_state_driver
+        self.states_orig_names = save_state.states_orig_names
+        self.replacement_selected = save_state.replacement_selected
+        if self.multi_state_driver:
+            self.edit.entryconfig(3, state=NORMAL)
+        else:
+            self.edit.entryconfig(3, state=DISABLED)
+
+        # State Panel
+        for i, state in enumerate(save_state.states):
+            self.states[i].original_name = state['original_name']
+            self.states[i].name_var.set(state['name_var'])
+
+        # Connection Panel
+        self.conn_ids = save_state.ids
+        for i, conn in enumerate(save_state.connections):
+            self.connections[i].id = conn['id']
+            self.connections[i].original = conn['original']
+            self.connections[i].in_id_group = conn['in_id_group']
+            self.connections[i].delete = conn['delete']
+            self.connections[i].prior_txt = conn['prior_txt']
+            self.connections[i].prior_type = conn['prior_type']
+            self.connections[i].tags = conn['tags']
+            self.connections[i].id_group = conn['id_group']
+            self.connections[i].type.set(conn['type'])
+            self.connections[i].name_entry_var.set(conn['name'])
+            self.connections[i].enabled = conn['state']
+
+        # Export Panel
+        self.export_panel.driver_name_var.set(save_state.driver_name_var)
+        self.export_panel.inc_driver_version.set(save_state.inc_driver_version)
+        self.export_panel.include_backups.set(save_state.include_backups)
+
+        # Replacement Panel
+        if save_state.replacement:
+            if os.path.isfile(self.replacement_image_path):
+                os.remove(self.replacement_image_path)
+            save_state.replacement.save(self.replacement_image_path)
+            save_state.replacement.close()
+            icon_image = Image.open(self.replacement_image_path)
+            icon = icon_image.resize((128, 128))
+            icon = ImageTk.PhotoImage(icon)
+            self.replacement_panel.blank_image_label.configure(image=icon)
+            self.replacement_panel.blank_image_label.image = icon
+        for img in self.replacement_panel.img_stack:
+            os.remove(img)
+        self.replacement_panel.img_stack = []
+        for stack_label in self.replacement_panel.stack_labels:
+            stack_label.configure(image=self.stack_blank)
+        for img in save_state.img_stack:
+            img_path = ''.join([self.temp_dir, 'stack', str(len(self.replacement_panel.img_stack)), '.png'])
+            img.save(img_path)
+            img.close()
+            self.replacement_panel.img_stack.append(img_path)
+        self.replacement_panel.refresh_img_stack()
+        self.replacement_panel.replace_button['state'] = save_state.replacement_panel['replace']
+        self.replacement_panel.replace_all_button['state'] = save_state.replacement_panel['replace_all']
+        self.replacement_panel.prev_icon_button['state'] = save_state.replacement_panel['prev']
+        self.replacement_panel.next_icon_button['state'] = save_state.replacement_panel['next']
+
+        self.ask_to_save = False
+
+    def edit_connections(self):
+        if self.connections_win:
+            self.connections_win.window.focus()
+            return
+        self.connections_win = self.ConnectionsWin(self)
+
+    def edit_driver_info(self):
+        if self.driver_info_win:
+            self.driver_info_win.window.focus()
+            return
+        self.driver_info_win = self.DriverInfoWin(self)
+
+    def edit_states(self):
+        if self.states_win:
+            self.states_win.window.focus()
+            return
+        self.states_win = self.StatesWin(self)
 
     if not on_mac:
         def instance_check(self):
@@ -3154,11 +3172,12 @@ class C4IconSwapper:
                     background = dark_entry_bg
                 else:
                     background = light_entry_bg
-                for connection in self.connections_panel.connections:
-                    connection.name_entry['background'] = background
+                if self.connections_win:
+                    for entry in self.connections_win.connections:
+                        entry.name_entry['background'] = background
                 self.export_panel.driver_name_entry['background'] = background
-                for state in self.state_panel.states:
-                    state.name_entry['background'] = background
+                for state in self.states:
+                    state.bg_color = background
                 self.wait_to_check = False
             self.root.after(150, self.dark_mode_check)
 
