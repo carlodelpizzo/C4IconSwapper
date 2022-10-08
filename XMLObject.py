@@ -9,104 +9,125 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
             print('Error: Invalid xml file')
             return
 
-    name, value, parameters, children, children_indexes, output, comment_start = '', '', '', [], [], [], None
-    duplicate_name_counter = 0
+    name, value, attributes, children, children_indexes, grandchildren, output = '', '', '', [], [], [], []
+    child, child_attributes, child_value = '', '', ''
+    check_for_value, check_child_value = False, False
+    duplicate_name_count, duplicate_child_count = 0, 0
+    comment_start = None
     for i, tag_index in enumerate(tag_indexes):
         if comment_start:
             if not xml_string[comment_start:tag_index + 1].endswith('-->'):
                 continue
-            children_indexes.extend([comment_start, tag_index])
+            comment = xml_string[comment_start + 1: tag_index]
+            if child == '':
+                children.append([comment, '', '', []])
+            else:
+                grandchildren.append([comment, '', '', []])
             comment_start = None
         if i % 2 != 0:
             continue
-        tag = xml_string[tag_index:tag_indexes[i + 1] + 1]
         tag_name = xml_string[tag_index + 1:tag_indexes[i + 1]]
+        if tag_name.startswith('!--'):
+            comment_start = tag_index
+            continue
+        if check_for_value:
+            check_for_value = False
+            if tag_name == '/' + name:
+                value = xml_string[tag_indexes[i - 1] + 1:tag_index]
+                output.append([name, value, attributes, children])
+                name, value, attributes, children = '', '', '', []
+                continue
+        if name != '' and tag_name == name:
+            duplicate_name_count += 1
+        if child != '' and tag_name == child:
+            duplicate_child_count += 1
         if name == '':
             if tag_name.startswith('?'):
                 continue
             if tag_name.endswith('/'):
                 output.append([tag_name, '', '', []])
                 continue
-            if tag.startswith('<!--'):
-                if not tag.endswith('-->'):
-                    comment_start = tag_index
-                else:
-                    output.append([tag_name, '', '', []])
-                continue
             name = tag_name
             if ' ' in name:
-                parameters = name[name.index(' '):]
+                attributes = name[name.index(' '):]
                 name = name[:name.index(' ')]
-        elif name != tag_name and '/' + name != tag_name:
-            children_indexes.extend([tag_index, tag_indexes[i + 1]])
-        elif name == tag_name:
-            duplicate_name_counter += 1
-            children_indexes.extend([tag_index, tag_indexes[i + 1]])
-        elif '/' + name == tag_name:
-            if duplicate_name_counter > 0:
-                duplicate_name_counter -= 1
-                children_indexes.extend([tag_index, tag_indexes[i + 1]])
-                continue
-            if len(children_indexes) == 0:
-                value = xml_string[tag_indexes[i - 1] + 1:tag_index]
+            check_for_value = True
+        elif tag_name != '/' + name:
+            if check_child_value:
+                check_child_value = False
+                if tag_name == '/' + child:
+                    child_value = xml_string[tag_indexes[i - 1] + 1:tag_index]
+                    children.append([child, child_value, child_attributes, []])
+                    child, child_value, child_attributes = '', '', ''
+                    continue
+            if child == '':
+                if tag_name.endswith('/'):
+                    children.append([tag_name, '', '', []])
+                    continue
+                child = tag_name
+                if ' ' in child:
+                    child_attributes = child[child.index(' '):]
+                    child = child[:child.index(' ')]
+                check_child_value = True
+            elif tag_name == '/' + child:
+                if duplicate_child_count > 0:
+                    duplicate_child_count -= 1
+                    continue
+                grandchildren.extend(get_xml_data(xml_string=xml_string, tag_indexes=children_indexes))
+                children_indexes = []
+                children.append([child, child_value, child_attributes, grandchildren])
+                child, child_value, child_attributes, grandchildren = '', '', '', []
             else:
-                children = get_xml_data(tag_indexes=children_indexes, xml_string=xml_string)
-            output.append([name, value, parameters, children])
-            name, value, parameters, children = '', '', '', []
-            children_indexes = []
-        else:
-            print(''.join(['skipped: ', tag, '||', name, '||', tag_name]))
-
-    if name == '' and children_indexes:
-        for i, tag_index in enumerate(children_indexes):
-            if i % 2 != 0:
+                children_indexes.extend([tag_index, tag_indexes[i + 1]])
+        elif tag_name == '/' + name:
+            if duplicate_name_count > 0:
+                duplicate_name_count -= 1
                 continue
-            name = xml_string[tag_index + 1:children_indexes[i + 1]]
-            output.append([name, value, parameters, children])
+            output.append([name, value, attributes, children])
+            name, value, attributes, children = '', '', '', []
 
     return output
 
 
-# xml_data = ['tag_name', 'tag_value', 'tag_attributes', [children]]; Initialize with path to xml file
+# xml_data = ['name', 'value', 'attributes', [children]]; Initialize with path to xml file
 class XMLObject:
     def __init__(self, xml_path=None, xml_data=None, parents=None):
         if xml_path:
             xml_data = get_xml_data(xml_path)
         if not xml_data:
-            print('Error: No xml data', xml_data)
-            return
+            raise ValueError
+        if type(xml_data) is not list:
+            raise TypeError
         self.top_level = False
         self.children = []
         self.name, self.value = '', ''
-        if type(xml_data) is list:
-            if len(xml_data) == 4 and type(xml_data[0]) is str and type(xml_data[1]) is str and \
-                    type(xml_data[2]) is str and type(xml_data[3]) is list:
-                self.name = xml_data[0]
-                self.value = xml_data[1]
-            elif len(xml_data) > 1:
-                self.top_level = True
-                for tag in xml_data:
-                    self.children.append(XMLObject(xml_data=tag))
-            elif len(xml_data) == 1 and type(xml_data[0]) is list:
-                xml_data = xml_data[0]
-                self.name = xml_data[0]
-                self.value = xml_data[1]
-        else:
-            print('Error: Invalid xml data type')
-            return
+        if len(xml_data) == 4 and type(xml_data[0]) is str and type(xml_data[1]) is str and \
+                type(xml_data[2]) is str and type(xml_data[3]) is list:
+            self.name = xml_data[0]
+            self.value = xml_data[1]
+        elif len(xml_data) > 1:
+            self.top_level = True
+            for tag in xml_data:
+                self.children.append(XMLObject(xml_data=tag))
+        elif len(xml_data) == 1 and type(xml_data[0]) is list:
+            xml_data = xml_data[0]
+            self.name = xml_data[0]
+            self.value = xml_data[1]
         while self.value.endswith('\n'):
             self.value = self.value[:-1]
         self.parents = []
         parents_for_children = []
         if parents:
-            self.parents, parents_for_children = parents, parents
-        parents_for_children.append(self)
+            self.parents.extend(parents)
+            parents_for_children.extend(parents)
+        if xml_data[3]:
+            parents_for_children.append(self)
         self.parameters = []  # [[param_name, param_value], ...]
         self.restore_data = []  # [name, value, parameters, parents, children, self_closed, top_level, delete]
         self.self_closed, self.comment, self.delete = False, False, False
         if self.top_level:
             return
-        if self.name != '' and self.name[0] == '!':
+        if self.name != '' and self.name.startswith('!'):
             self.comment = True
             return
         if self.name.endswith('/'):
