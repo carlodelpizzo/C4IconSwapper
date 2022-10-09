@@ -170,7 +170,10 @@ class C4IconSwapper:
             self.original_name = name
             self.name_var = StringVar()
             self.name_var.set(name)
-            self.bg_color = '#FFFFFF'
+            background = light_entry_bg
+            if on_mac and is_dark_mode():
+                background = dark_entry_bg
+            self.bg_color = background
 
     class ConnectionsWin:
         class ConnectionEntry:
@@ -362,12 +365,16 @@ class C4IconSwapper:
             self.window.focus()
             self.window.protocol('WM_DELETE_WINDOW', self.uc.close_connections)
             self.window.title('Edit Driver Connections')
-            self.window.geometry('975x250')
+            if on_mac:
+                self.window.geometry('1125x250')
+                x_spacing, y_spacing = 370, 40
+            else:
+                self.window.geometry('975x250')
+                x_spacing, y_spacing = 330, 40
             self.window.geometry(f'+{self.uc.root.winfo_rootx()}+{self.uc.root.winfo_rooty()}')
             self.window.resizable(False, False)
 
             self.connections = []
-            x_spacing, y_spacing = 330, 40
             for x in range(3):
                 for y in range(6):
                     i = (x * 6) + y
@@ -643,18 +650,22 @@ class C4IconSwapper:
             self.window.focus()
             self.window.protocol('WM_DELETE_WINDOW', self.uc.close_states)
             self.window.title('Edit Driver States')
-            self.window.geometry('385x287')
+            if on_mac:
+                x_spacing, y_spacing = 190, 34
+                self.window.geometry('405x287')
+            else:
+                x_spacing, y_spacing = 200, 34
+                self.window.geometry('385x287')
             self.window.geometry(f'+{self.uc.root.winfo_rootx()}+{self.uc.root.winfo_rooty()}')
             self.window.resizable(False, False)
 
-            if on_mac:
-                x_spacing, y_spacing = 190, 34
-            else:
-                x_spacing, y_spacing = 200, 34
             self.states, self.dupes = [], []
+            x_offset, y_offset = 10, 30
+            if on_mac:
+                x_offset, y_offset = 25, 30
             for i in range(13):
                 self.states.append(self.StateEntry(self, self.uc.states[i],
-                                                   int(i / 7) * x_spacing + 10, (i % 7) * y_spacing + 30,
+                                                   int(i / 7) * x_spacing + x_offset, (i % 7) * y_spacing + y_offset,
                                                    label=''.join(['state', str(i + 1), ':'])))
 
         def refresh(self):
@@ -2554,7 +2565,7 @@ class C4IconSwapper:
         # Initialize main program
         if on_mac:
             self.root = tk.Tk()
-            self.root.geometry('1055x307')
+            self.root.geometry('1055x267')
         else:
             self.root = TkinterDnD.Tk()
             self.root.geometry('915x287')
@@ -2664,18 +2675,13 @@ class C4IconSwapper:
         # Separators
         self.separator0 = ttk.Separator(self.root, orient='vertical')
         self.separator1 = ttk.Separator(self.root, orient='vertical')
-        self.separator2 = ttk.Separator(self.root, orient='horizontal')
-        self.separator3 = ttk.Separator(self.root, orient='vertical')
         if on_mac:
             self.separator0.place(x=350, y=0, height=290)
             self.separator1.place(x=700, y=0, height=290)
-            self.separator2.place(x=0, y=290, relwidth=1)
-            self.separator3.place(x=1055, y=0, height=290)
         else:
             self.separator0.place(x=305, y=0, height=270)
             self.separator1.place(x=610, y=0, height=270)
-            self.separator2.place(x=0, y=270, relwidth=1)
-            self.separator3.place(x=915, y=0, height=270)
+
 
         # Creating window icon
         if not on_mac:
@@ -2836,6 +2842,7 @@ class C4IconSwapper:
     def end_program(self):
         if on_mac:
             shutil.rmtree(self.temp_root_dir)
+            self.root.destroy()
             return
         with open(self.temp_root_dir + 'instance', 'r', errors='ignore') as instance_file:
             current_instances = instance_file.readlines()
@@ -2899,8 +2906,11 @@ class C4IconSwapper:
 
         save_dialog = Toplevel(self.root)
         save_dialog.title('Save current project?')
-        save_dialog.geometry('239x70')
-        if on_exit:
+        if on_mac:
+            save_dialog.geometry('274x70')
+        else:
+            save_dialog.geometry('239x70')
+        if on_exit and not on_mac:
             win_x = self.root.winfo_rootx() + self.root.winfo_width() - 250
             save_dialog.geometry(f'+{win_x}+{self.root.winfo_rooty()}')
         else:
@@ -3178,6 +3188,9 @@ class C4IconSwapper:
                 self.export_panel.driver_name_entry['background'] = background
                 for state in self.states:
                     state.bg_color = background
+                if self.states_win:
+                    for state in self.states_win.states:
+                        state.refresh(bg_only=True)
                 self.wait_to_check = False
             self.root.after(150, self.dark_mode_check)
 
