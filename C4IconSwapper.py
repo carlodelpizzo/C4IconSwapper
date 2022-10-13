@@ -24,7 +24,7 @@ else:
     from tkinterdnd2 import DND_FILES, TkinterDnD
     on_mac = False
 
-version = '1.2'
+version = '1.2.1'
 label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
@@ -2668,8 +2668,10 @@ class C4IconSwapper:
         self.file = Menu(self.menu, tearoff=0)
         self.file.add_command(label='Open Project', command=self.load_project)
         self.file.add_command(label='Save Project', command=self.save_project)
+        self.file.add_separator()
         self.file.add_command(label='Open C4z', command=self.c4z_panel.load_c4z)
         self.file.add_command(label='Open Replacement Image', command=self.replacement_panel.load_replacement)
+        self.file.add_separator()
         self.file.add_command(label='Load Generic Driver', command=self.c4z_panel.load_gen_driver)
         self.file.add_command(label='Load Multi Driver', command=self.c4z_panel.load_gen_multi)
         self.edit = Menu(self.menu, tearoff=0)
