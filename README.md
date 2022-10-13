@@ -9,8 +9,8 @@ It can add/remove driver connections (such as HDMI IN/OUT),
 and has drag-and-drop support for .c4z files and image files/folders (Windows version only).
 
 It has two built-in generic drivers for quick driver creation:
-1) a two-state experience driver (Accessible by "Load Generic Driver" button)
-2) a multi-state "key-status" experience driver (Accessible by "Load Multi Driver" button)
+1) a two-state experience driver (Accessible by selecting "Load Generic Driver" in File menu)
+2) a multi-state "key-status" experience driver (Accessible by selecting "Load Multi Driver" in File menu)
 
 The program has (experimental) support for re-naming the 13 states of the multi-state driver by modifying the lua file (in addition to the xml file).
 Multi-state related uses have not been well tested but seem to work from what little testing has been done.
