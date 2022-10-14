@@ -4,8 +4,8 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
             xml_lines = xml_file.readlines()
         xml_string = ''.join(xml_lines)
         xml_string = xml_string.replace('\t', '')
-        tag_indexes = [i for i in range(len(xml_string)) if xml_string[i] == '<' or xml_string[i] == '>']
-        if len(tag_indexes) % 2 != 0:
+        tag_indexes = [i for i in range(len(xml_string)) if xml_string[i] in ['<', '>']]
+        if len(tag_indexes) % 2:
             print('Error: Invalid xml file')
             return
 
@@ -19,12 +19,12 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
             if not xml_string[comment_start:tag_index + 1].endswith('-->'):
                 continue
             comment = xml_string[comment_start + 1: tag_index]
-            if child == '':
+            if not child:
                 children.append([comment, '', '', []])
             else:
                 grandchildren.append([comment, '', '', []])
             comment_start = None
-        if i % 2 != 0:
+        if i % 2:
             continue
         tag_name = xml_string[tag_index + 1:tag_indexes[i + 1]]
         if tag_name.startswith('!--'):
@@ -32,16 +32,16 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
             continue
         if check_for_value:
             check_for_value = False
-            if tag_name == '/' + name:
+            if tag_name == f'/{name}':
                 value = xml_string[tag_indexes[i - 1] + 1:tag_index]
                 output.append([name, value, attributes, children])
                 name, value, attributes, children = '', '', '', []
                 continue
-        if name != '' and tag_name == name:
+        if name and tag_name == name:
             duplicate_name_count += 1
-        if child != '' and tag_name == child:
+        if child and tag_name == child:
             duplicate_child_count += 1
-        if name == '':
+        if not name:
             if tag_name.startswith('?'):
                 continue
             if tag_name.endswith('/'):
@@ -52,15 +52,15 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
                 attributes = name[name.index(' '):]
                 name = name[:name.index(' ')]
             check_for_value = True
-        elif tag_name != '/' + name:
+        elif tag_name != f'/{name}':
             if check_child_value:
                 check_child_value = False
-                if tag_name == '/' + child:
+                if tag_name == f'/{child}':
                     child_value = xml_string[tag_indexes[i - 1] + 1:tag_index]
                     children.append([child, child_value, child_attributes, []])
                     child, child_value, child_attributes = '', '', ''
                     continue
-            if child == '':
+            if not child:
                 if tag_name.endswith('/'):
                     children.append([tag_name, '', '', []])
                     continue
@@ -69,7 +69,7 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
                     child_attributes = child[child.index(' '):]
                     child = child[:child.index(' ')]
                 check_child_value = True
-            elif tag_name == '/' + child:
+            elif tag_name == f'/{child}':
                 if duplicate_child_count > 0:
                     duplicate_child_count -= 1
                     continue
@@ -79,7 +79,7 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
                 child, child_value, child_attributes, grandchildren = '', '', '', []
             else:
                 children_indexes.extend([tag_index, tag_indexes[i + 1]])
-        elif tag_name == '/' + name:
+        else:
             if duplicate_name_count > 0:
                 duplicate_name_count -= 1
                 continue
@@ -107,8 +107,7 @@ class XMLObject:
             self.value = xml_data[1]
         elif len(xml_data) > 1:
             self.top_level = True
-            for tag in xml_data:
-                self.children.append(XMLObject(xml_data=tag))
+            self.children.extend(XMLObject(xml_data=tag) for tag in xml_data)
         elif len(xml_data) == 1 and type(xml_data[0]) is list:
             xml_data = xml_data[0]
             self.name = xml_data[0]
@@ -127,7 +126,7 @@ class XMLObject:
         self.self_closed, self.comment, self.delete = False, False, False
         if self.top_level:
             return
-        if self.name != '' and self.name.startswith('!'):
+        if self.name and self.name.startswith('!'):
             self.comment = True
             return
         if self.name.endswith('/'):
@@ -135,7 +134,7 @@ class XMLObject:
             self.self_closed = True
 
         # Parse parameters (attributes)
-        if type(xml_data[2]) is str and xml_data[2] != '':
+        if type(xml_data[2]) is str and xml_data[2]:
             if xml_data[2].endswith('/'):
                 self.self_closed = True
             param_name, param_value, get_name, get_value, inside_attribute = '', '', False, False, False
@@ -143,8 +142,8 @@ class XMLObject:
                 if char == ' ' and not inside_attribute:
                     continue
                 if get_value:
-                    if char == '"' or char == "'":
-                        if param_value == '':
+                    if char in ['"', "'"]:
+                        if not param_value:
                             inside_attribute = True
                             continue
                         inside_attribute = False
@@ -164,8 +163,7 @@ class XMLObject:
                     param_name += char
 
         # Make children
-        for child in xml_data[3]:
-            self.children.append(XMLObject(xml_data=child, parents=parents_for_children))
+        self.children.extend(XMLObject(xml_data=child, parents=parents_for_children) for child in xml_data[3])
 
     def get_lines(self, layer=0, first_call=True):
         if self.delete:
@@ -175,15 +173,13 @@ class XMLObject:
             for child in self.children:
                 lines.extend(child.get_lines(first_call=False))
             return lines
-        tabs = ''
-        for _ in range(layer):
-            tabs += '\t'
+        tabs = ''.join('\t' for _ in range(layer))
         self.name = self.name.replace('\n', ''.join(['\n', tabs]))
         line = ''.join([tabs, '<', self.name])
         if self.comment:
             return [''.join([line, '>\n'])]
 
-        if len(self.parameters) != 0:
+        if self.parameters:
             line += ' '
             for param in self.parameters[:-1]:
                 line += param[0] + '="' + param[1] + '" '
@@ -191,17 +187,17 @@ class XMLObject:
 
         if self.self_closed:
             line += '/'
-        line += '>' + self.value
+        line += f'>{self.value}'
 
-        if len(self.children) == 0:
+        if not self.children:
             if self.self_closed or '\n' in self.value:
                 line += '\n'
             lines.append(line)
             if not self.self_closed:
                 if '\n' not in self.value:
-                    line = '</' + self.name + '>\n'
+                    line = f'</{self.name}' + '>\n'
                 else:
-                    line = tabs + '</' + self.name + '>\n'
+                    line = f'{tabs}</{self.name}' + '>\n'
                 lines.append(line)
             return lines
 
@@ -213,39 +209,28 @@ class XMLObject:
             lines.extend(child.get_lines(layer=layer+1, first_call=False))
 
         if not self.self_closed:
-            lines.append(tabs + '</' + self.name + '>\n')
-        if first_call:
-            if lines[-1].endswith('\n'):
-                lines[-1] = lines[-1][:-1]
+            lines.append(f'{tabs}</{self.name}' + '>\n')
+        if first_call and lines[-1].endswith('\n'):
+            lines[-1] = lines[-1][:-1]
         return lines
 
     def get_tag(self, tag_name: str):
-        matching_tags = []
-        for child in self.children:
-            if tag_name in child.name:
-                matching_tags.append(child)
+        matching_tags = [child for child in self.children if tag_name in child.name]
         for child in self.children:
             child_tags = child.get_tag(tag_name)
             if child_tags is None:
                 continue
             matching_tags.extend(child_tags)
-        if not matching_tags:
-            return None
-        return matching_tags
+        return matching_tags or None
 
     def get_tag_by_value(self, value: str):
-        matching_tags = []
-        for child in self.children:
-            if value in child.value:
-                matching_tags.append(child)
+        matching_tags = [child for child in self.children if value in child.value]
         for child in self.children:
             child_tags = child.get_tag_by_value(value)
             if child_tags is None:
                 continue
             matching_tags.extend(child_tags)
-        if not matching_tags:
-            return None
-        return matching_tags
+        return matching_tags or None
 
     def set_restore_point(self):
         self.restore_data = [self.name, self.value, self.parameters, self.parents,

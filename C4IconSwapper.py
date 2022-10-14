@@ -3,6 +3,8 @@ import platform
 import os
 import shutil
 import base64
+import contextlib
+import itertools
 import time
 import random
 import re
@@ -32,11 +34,7 @@ letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
 capital_letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
                    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
 numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
-valid_chars = ['_', '-', ' ']
-valid_chars.extend(letters)
-valid_chars.extend(capital_letters)
-valid_chars.extend(numbers)
-
+valid_chars = ['_', '-', ' ', *letters, *capital_letters, *numbers]
 conn_template = ['connection', '', '', [['id', '0', '', []], ['type', '0', '', []],
                                         ['connectionname', 'REPLACE', '', []],
                                         ['consumer', 'False', '', []], ['linelevel', 'True', '', []],
@@ -86,10 +84,10 @@ class C4IS:
         self.extra_icons = uc.c4z_panel.extra_icons
         self.show_extra_icons = uc.c4z_panel.show_extra_icons.get()
         if uc.driver_selected:
-            shutil.make_archive(uc.temp_dir + 'driver', 'zip', uc.temp_dir + 'driver')
-            with open(uc.temp_dir + 'driver.zip', 'rb') as driver_zip:
+            shutil.make_archive(f'{uc.temp_dir}driver', 'zip', f'{uc.temp_dir}driver')
+            with open(f'{uc.temp_dir}driver.zip', 'rb') as driver_zip:
                 self.driver_zip = driver_zip.read()
-            os.remove(uc.temp_dir + 'driver.zip')
+            os.remove(f'{uc.temp_dir}driver.zip')
         else:
             self.driver_zip = None
         self.c4z_panel = {'restore': uc.c4z_panel.restore_button['state'],
@@ -99,7 +97,7 @@ class C4IS:
 
         # Replacement Panel
         if self.replacement_selected:
-            self.replacement = Image.open(uc.temp_dir + 'replacement_icon.png')
+            self.replacement = Image.open(f'{uc.temp_dir}replacement_icon.png')
         else:
             self.replacement = None
         self.img_stack = [Image.open(img) for img in uc.replacement_panel.img_stack]
@@ -214,11 +212,10 @@ class C4IconSwapper:
                 self.add_button = tk.Button(self.window, text='Add', width=3, command=self.enable, takefocus=0)
                 if self.conn_object.enabled or self.conn_object.original:
                     self.add_button.place(x=-420, y=-420, anchor='w')
+                elif on_mac:
+                    self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
                 else:
-                    if on_mac:
-                        self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
-                    else:
-                        self.add_button.place(x=self.x, y=self.y, anchor='w')
+                    self.add_button.place(x=self.x, y=self.y, anchor='w')
                 if not self.uc.driver_selected:
                     self.add_button['state'] = DISABLED
 
@@ -285,16 +282,7 @@ class C4IconSwapper:
                     self.del_button['width'] = 4
                     self.del_button.place(x=self.del_button.winfo_x() - 6, y=self.y)
                     if len(self.conn_object.id_group) > 1:
-                        first = True
-                        last_alive = True
-                        for groupie in self.conn_object.id_group:
-                            if first:
-                                first = False
-                                continue
-                            if not groupie.delete:
-                                last_alive = False
-                                break
-                        if last_alive:
+                        if all(groupie.delete for i, groupie in enumerate(self.conn_object.id_group) if i):
                             self.conn_object.tags[0].delete = True
                         self.conn_object.tags[1].delete = True
                     return
@@ -327,16 +315,11 @@ class C4IconSwapper:
 
                 if self.conn_object.enabled or self.conn_object.original:
                     self.add_button.place(x=-420, y=-420, anchor='w')
+                elif on_mac:
+                    self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
                 else:
-                    if on_mac:
-                        self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
-                    else:
-                        self.add_button.place(x=self.x, y=self.y, anchor='w')
-                if self.uc.driver_selected:
-                    self.add_button['state'] = NORMAL
-                else:
-                    self.add_button['state'] = DISABLED
-
+                    self.add_button.place(x=self.x, y=self.y, anchor='w')
+                self.add_button['state'] = NORMAL if self.uc.driver_selected else DISABLED
                 if self.conn_object.enabled and not self.conn_object.original:
                     if on_mac:
                         self.x_button.place(x=self.x + 18, y=self.y - 3, anchor='w')
@@ -375,12 +358,11 @@ class C4IconSwapper:
             self.window.resizable(False, False)
 
             self.connections = []
-            for x in range(3):
-                for y in range(6):
-                    i = (x * 6) + y
-                    self.connections.append(self.ConnectionEntry(self, self.uc.connections[i],
-                                                                 x * x_spacing + 15,
-                                                                 (y * y_spacing) + 25))
+            for x, y in itertools.product(range(3), range(6)):
+                i = (x * 6) + y
+                self.connections.append(self.ConnectionEntry(self, self.uc.connections[i],
+                                                             x * x_spacing + 15,
+                                                             (y * y_spacing) + 25))
 
         def refresh(self):
             for conn_entry in self.connections:
@@ -404,13 +386,13 @@ class C4IconSwapper:
             self.window.resizable(False, False)
 
             # Validate driver version
-            if self.uc.export_panel.inc_driver_version.get() == 1 and self.uc.driver_version_var.get() != '' and \
-                    self.uc.driver_version_new_var.get() != '' and \
+            if self.uc.export_panel.inc_driver_version.get() and self.uc.driver_version_var.get() and \
+                    self.uc.driver_version_new_var.get() and \
                     int(self.uc.driver_version_new_var.get()) <= int(self.uc.driver_version_var.get()):
                 self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_var.get()) + 1))
 
             # Labels
-            instance_id_label = tk.Label(self.window, text='instance id: ' + self.uc.instance_id)
+            instance_id_label = tk.Label(self.window, text=f'instance id: {self.uc.instance_id}')
 
             man_y = 20
             man_arrow = tk.Label(self.window, text='\u2192', font=('', 15))
@@ -440,10 +422,7 @@ class C4IconSwapper:
                                         font=(label_font, font_size))
 
             # Entry
-            if not on_mac:
-                entry_width = 17
-            else:
-                entry_width = 16
+            entry_width = 16 if on_mac else 17
             self.uc.driver_manufac_new_var.trace('w', self.uc.validate_driver_ver)
             driver_man_entry = tk.Entry(self.window, width=entry_width,
                                         textvariable=self.uc.driver_manufac_var)
@@ -536,16 +515,17 @@ class C4IconSwapper:
                 self.uc.ask_to_save = True
                 if not self.uc.states_win:
                     return
+                self_name = self.name_var.get()
                 background_color = light_entry_bg
                 if on_mac and is_dark_mode():
                     background_color = dark_entry_bg
                 self.format_state_name()
-                if self.name_var.get() == '':
+                if not self_name:
                     self.state_object.bg_color = 'pink'
                     return
                 duplicate = False
                 for state in self.uc.states_win.states:
-                    if state is not self and state.name_var.get() == self.name_var.get():
+                    if state is not self and state.name_var.get() == self_name:
                         duplicate = True
                         for dupe_list in self.uc.state_dupes:
                             if self.state_object in dupe_list:
@@ -569,7 +549,7 @@ class C4IconSwapper:
                                 break
                         append_new_list = True
                         for dupe_list in self.uc.state_dupes:
-                            if dupe_list[0].name_var.get() == self.name_var.get():
+                            if dupe_list[0].name_var.get() == self_name:
                                 if self.state_object not in dupe_list:
                                     dupe_list.append(self.state_object)
                                 append_new_list = False
@@ -602,24 +582,15 @@ class C4IconSwapper:
                             break
                     self.state_object.bg_color = background_color
 
-                for state in self.uc.states_win.states:
-                    if state is self:
-                        continue
-                    using_existing_name = False
-                    for orig_name in self.uc.states_orig_names:
-                        if self.uc.states_win.states.index(self) == self.uc.states_orig_names.index(orig_name):
-                            continue
-                        if self.name_var.get() in orig_name:
-                            using_existing_name = True
-                            break
-                    if using_existing_name:
-                        if self.state_object.bg_color != 'pink':
-                            self.state_object.bg_color = 'cyan'
-                        break
+                self_index = self.uc.states_win.states.index(self)
+                if any(self_name in orig_name
+                       for i, orig_name in enumerate(self.uc.states_orig_names) if self_index != i) and \
+                        self.state_object.bg_color != 'pink':
+                    self.state_object.bg_color = 'cyan'
                 for state in self.uc.states_win.states:
                     state.refresh(bg_only=True)
 
-                self.state_object.name_var.set(self.name_var.get())
+                self.state_object.name_var.set(self_name)
 
             def format_state_name(self):
                 formatted_name = []
@@ -627,7 +598,7 @@ class C4IconSwapper:
                     if character == ' ' or (character not in letters and character not in capital_letters and
                                             character not in numbers):
                         continue
-                    if formatted_name == [] and character in letters:
+                    if not formatted_name and character in letters:
                         formatted_name.append(capital_letters[letters.index(character)])
                         continue
                     formatted_name.append(character)
@@ -660,13 +631,11 @@ class C4IconSwapper:
             self.window.resizable(False, False)
 
             self.states, self.dupes = [], []
-            x_offset, y_offset = 10, 30
-            if on_mac:
-                x_offset, y_offset = 25, 30
-            for i in range(13):
-                self.states.append(self.StateEntry(self, self.uc.states[i],
-                                                   int(i / 7) * x_spacing + x_offset, (i % 7) * y_spacing + y_offset,
-                                                   label=''.join(['state', str(i + 1), ':'])))
+            x_offset, y_offset = (25, 30) if on_mac else (10, 30)
+            self.states.extend(
+                self.StateEntry(self, self.uc.states[i], int(i / 7) * x_spacing + x_offset,
+                                (i % 7) * y_spacing + y_offset, label=''.join(['state', str(i + 1), ':']))
+                for i in range(13))
 
         def refresh(self):
             for state in self.states:
@@ -696,13 +665,11 @@ class C4IconSwapper:
                             size0 += char
                             continue
                         size1 += char
-                    try:
+                    with contextlib.suppress(ValueError):
                         if (size0_int := int(size0)) and (size1_int := int(size1)):
                             self.alt_format = True
                             if size0_int != size1_int:
                                 self.size_alt = (size0_int, size1_int)
-                    except ValueError:
-                        pass
 
         class Icon:
             def __init__(self, icons: list, extra=False):
@@ -793,7 +760,7 @@ class C4IconSwapper:
         def toggle_extra_icons(self, *args):
             if not self.uc.driver_selected:
                 return
-            if self.show_extra_icons.get() == 0 and self.uc.c4z_panel.icons[self.uc.c4z_panel.current_icon].extra:
+            if not self.show_extra_icons.get() and self.uc.c4z_panel.icons[self.uc.c4z_panel.current_icon].extra:
                 self.next_icon()
             self.update_icon()
 
@@ -802,7 +769,7 @@ class C4IconSwapper:
                 self.uc.ask_to_save_dialog(on_exit=False, load_gen=True)
                 return
             # Load generic two-state driver from Base64Assets
-            gen_driver_path = self.uc.temp_dir + 'generic.c4z'
+            gen_driver_path = f'{self.uc.temp_dir}generic.c4z'
             if self.file_entry_field.get() == gen_driver_path:
                 return
             if on_mac:
@@ -812,7 +779,7 @@ class C4IconSwapper:
                 with open(gen_driver_path, 'wb') as gen_driver:
                     gen_driver.write(base64.b64decode(generic_driver))
 
-            if os.path.isdir(temp_driver_path := self.uc.temp_dir + 'driver'):
+            if os.path.isdir(temp_driver_path := f'{self.uc.temp_dir}driver'):
                 shutil.rmtree(temp_driver_path)
 
             shutil.unpack_archive(gen_driver_path, temp_driver_path, 'zip')
@@ -826,7 +793,8 @@ class C4IconSwapper:
                     new_icon = resized_icon.resize(size)
                     new_icon.save(self.uc.device_icon_dir + picture.replace('1024', str(size[0])))
 
-            shutil.make_archive(gen_driver_path.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
+            shutil.make_archive(gen_driver_path.replace('.c4z', ''), 'zip', f'{self.uc.temp_dir}driver')
+
             os.rename(gen_driver_path.replace('.c4z', '.zip'), gen_driver_path)
 
             self.load_c4z(gen_driver_path)
@@ -843,10 +811,10 @@ class C4IconSwapper:
             if show_loading_image:
                 # Show loading image while driver images are created
                 if on_mac:
-                    with open(get_path(loading_img_path := self.uc.temp_dir + 'loading_icon.gif'), 'wb') as loading_img:
+                    with open(get_path(loading_img_path := f'{self.uc.temp_dir}loading_icon.gif'), 'wb') as loading_img:
                         loading_img.write(base64.b64decode(loading_icon))
                 else:
-                    with open(loading_img_path := self.uc.temp_dir + 'loading_icon.gif', 'wb') as loading_img:
+                    with open(loading_img_path := f'{self.uc.temp_dir}loading_icon.gif', 'wb') as loading_img:
                         loading_img.write(base64.b64decode(loading_icon))
                 icon_image = Image.open(loading_img_path)
                 icon = ImageTk.PhotoImage(icon_image)
@@ -855,7 +823,7 @@ class C4IconSwapper:
                 self.uc.root.after(1, self.uc.show_loading_image)
                 return
 
-            multi_driver_path = self.uc.temp_dir + 'multi generic.c4z'
+            multi_driver_path = f'{self.uc.temp_dir}multi generic.c4z'
             if self.file_entry_field.get() == multi_driver_path:
                 return
             if on_mac:
@@ -865,7 +833,7 @@ class C4IconSwapper:
                 with open(multi_driver_path, 'wb') as gen_driver:
                     gen_driver.write(base64.b64decode(generic_multi))
 
-            if os.path.isdir(temp_driver_path := self.uc.temp_dir + 'driver'):
+            if os.path.isdir(temp_driver_path := f'{self.uc.temp_dir}driver'):
                 shutil.rmtree(temp_driver_path)
 
             shutil.unpack_archive(multi_driver_path, temp_driver_path, 'zip')
@@ -879,7 +847,8 @@ class C4IconSwapper:
                     new_icon = resized_icon.resize(size)
                     new_icon.save(self.uc.device_icon_dir + picture.replace('70', str(size[0])))
 
-            shutil.make_archive(multi_driver_path.replace('.c4z', ''), 'zip', self.uc.temp_dir + 'driver')
+            shutil.make_archive(multi_driver_path.replace('.c4z', ''), 'zip', f'{self.uc.temp_dir}driver')
+
             os.rename(multi_driver_path.replace('.c4z', '.zip'), multi_driver_path)
 
             self.load_c4z(multi_driver_path)
@@ -887,10 +856,10 @@ class C4IconSwapper:
             self.uc.export_panel.driver_name_entry.insert(0, 'New Driver')
             self.uc.ask_to_save = False
             os.remove(multi_driver_path)
-            os.remove(self.uc.temp_dir + 'loading_icon.gif')
+            os.remove(f'{self.uc.temp_dir}loading_icon.gif')
 
         def update_icon(self):
-            if len(self.icons) == 0:
+            if not self.icons:
                 return
             if abs(self.current_icon) >= len(self.icons):
                 self.current_icon = abs(self.current_icon) % len(self.icons)
@@ -900,14 +869,14 @@ class C4IconSwapper:
             self.blank_image_label.configure(image=icon)
             self.blank_image_label.image = icon
 
-            if self.show_extra_icons.get() == 0 and self.extra_icons != 0:
+            if not self.show_extra_icons.get() and self.extra_icons:
                 self.icon_label.config(text=''.join(['icon: ', str(self.current_icon + 1), ' of ',
                                                      str(len(self.icons) - self.extra_icons), ' (',
                                                      str(len(self.icons)), ')']))
             else:
                 self.icon_label.config(text=''.join(['icon: ', str(self.current_icon + 1), ' of ',
                                                      str(len(self.icons))]))
-            self.icon_name_label.config(text='name: ' + self.icons[self.current_icon].name)
+            self.icon_name_label.config(text=f'name: {self.icons[self.current_icon].name}')
 
         def load_c4z(self, given_path=None, recovery=False):
             def get_icons(directory):
@@ -918,7 +887,7 @@ class C4IconSwapper:
                 path_list = os.listdir(directory)
                 path_list.sort()
                 for string in path_list:
-                    if '.bak' in string or '.orig' in string or string[0] == '.':
+                    if '.bak' in string or string[0] == '.':
                         continue
                     if '.' not in string:
                         sub_list.append(string)
@@ -958,7 +927,7 @@ class C4IconSwapper:
                         icons_out[-1].size_alt = temp_img.size
                     temp_img.close()
 
-                if len(sub_list) == 0:
+                if not sub_list:
                     return icons_out
                 sub_list.sort()
                 for sub_dir in sub_list:
@@ -995,7 +964,7 @@ class C4IconSwapper:
             if self.file_entry_field.get() == 'Invalid driver selected...':
                 self.file_entry_field['state'] = NORMAL
                 self.file_entry_field.delete(0, 'end')
-                if self.uc.restore_entry_string != '':
+                if self.uc.restore_entry_string:
                     self.file_entry_field.insert(0, self.uc.restore_entry_string)
                 else:
                     self.file_entry_field.insert(0, 'Select .c4z file...')
@@ -1007,7 +976,7 @@ class C4IconSwapper:
             # Backup existing driver data
             temp_bak = self.uc.temp_dir + 'temp_driver_backup/'
             icons_bak = None
-            if len(self.icons) != 0:
+            if self.icons:
                 icons_bak = self.icons
                 if os.path.isdir(temp_driver_path := self.uc.temp_dir + 'driver'):
                     shutil.copytree(temp_driver_path, temp_bak)
@@ -1036,11 +1005,9 @@ class C4IconSwapper:
 
             # Get all individual icons from driver
             icon_objects = []
-            try:
+            with contextlib.suppress(TypeError):
                 icon_objects.extend(get_icons(self.uc.icon_dir))
                 icon_objects.extend(get_icons(self.uc.images_dir))
-            except TypeError:
-                pass
 
             # Form icon groups
             self.icons = []
@@ -1053,12 +1020,8 @@ class C4IconSwapper:
                     if icon.alt_format:
                         alt_format_icons.append(icon)
                         continue
-                    skip = False
-                    for unique_icon in unique_icons:
-                        if icon.name == unique_icon.name and icon.root == unique_icon.root:
-                            skip = True
-                            break
-                    if skip:
+                    if any((icon.name == unique_icon.name and icon.root == unique_icon.root)
+                           for unique_icon in unique_icons):
                         continue
                     unique_icons.append(icon)
                 for unique_icon in unique_icons:
@@ -1066,8 +1029,7 @@ class C4IconSwapper:
                     for icon in icon_objects:
                         if icon is not unique_icon and icon.name == unique_icon.name and icon.root == unique_icon.root:
                             icon_group.append(icon)
-                    if 'device' not in icon_group[0].path and 'device' not in icon_group[0].root and \
-                            'device' not in icon_group[0].name:
+                    if all('device' not in x for x in [icon_group[0].path, icon_group[0].root, icon_group[0].name]):
                         self.icons.append(self.Icon(icon_group, extra=True))
                     else:
                         self.icons.append(self.Icon(icon_group))
@@ -1075,12 +1037,7 @@ class C4IconSwapper:
                 if alt_format_icons:
                     unique_icons = [alt_format_icons[0]]
                     for icon in alt_format_icons:
-                        skip = False
-                        for unique_icon in unique_icons:
-                            if icon.name == unique_icon.name:
-                                skip = True
-                                break
-                        if skip:
+                        if any(icon.name == unique_icon.name for unique_icon in unique_icons):
                             continue
                         unique_icons.append(icon)
                     for unique_icon in unique_icons:
@@ -1091,8 +1048,7 @@ class C4IconSwapper:
                         check_list = [icon_group[0].path, icon_group[0].root, icon_group[0].name]
                         added = False
                         for check_string in check_list:
-                            if 'device' not in check_string and 'branding' not in check_string and \
-                                    'icon' not in check_string:
+                            if all(string not in check_string for string in ['device', 'branding', 'icon']):
                                 self.icons.append(self.Icon(icon_group, extra=True))
                                 added = True
                                 break
@@ -1102,7 +1058,7 @@ class C4IconSwapper:
                 check_dupe_names()
 
             # Update entry fields and restore driver if necessary
-            elif len(self.icons) == 0:
+            elif not self.icons:
                 self.file_entry_field['state'] = NORMAL
                 if self.file_entry_field.get() != 'Select .c4z file...' and \
                         self.file_entry_field.get() != 'Invalid driver selected...':
@@ -1171,7 +1127,7 @@ class C4IconSwapper:
                 if orig_file_path[i] == '/':
                     self.uc.orig_file_dir = orig_file_path[0:i + 1]
                     break
-                if orig_driver_name != '':
+                if orig_driver_name:
                     orig_driver_name = orig_file_path[i] + orig_driver_name
                     continue
                 if orig_file_path[i + 1] == '.':
@@ -1179,7 +1135,7 @@ class C4IconSwapper:
             if orig_driver_name != 'generic' and orig_driver_name != 'multi generic':
                 self.uc.export_panel.driver_name_entry.delete(0, 'end')
                 self.uc.export_panel.driver_name_entry.insert(0, orig_driver_name)
-            if self.uc.export_panel.driver_name_entry.get() == '':
+            if not self.uc.export_panel.driver_name_entry.get():
                 self.uc.export_panel.driver_name_entry.insert(0, 'New Driver')
             self.uc.driver_selected = True
             self.current_icon = 0
@@ -1203,7 +1159,7 @@ class C4IconSwapper:
                         continue
                     temp_str += char
                 self.uc.driver_version_var.set(temp_str)
-                if self.uc.export_panel.inc_driver_version.get() == 1:
+                if self.uc.export_panel.inc_driver_version.get():
                     self.uc.driver_version_new_var.set(str(int(temp_str) + 1))
                 else:
                     self.uc.driver_version_new_var.set(temp_str)
@@ -1211,11 +1167,9 @@ class C4IconSwapper:
             if id_tags is not None:
                 self.uc.conn_ids = []
                 for id_tag in id_tags:
-                    try:
+                    with contextlib.suppress(ValueError):
                         if int(id_tag.value) not in self.uc.conn_ids:
                             self.uc.conn_ids.append(int(id_tag.value))
-                    except ValueError:
-                        pass
 
             # Check lua file for multi-state
             self.uc.multi_state_driver = False
@@ -1263,15 +1217,14 @@ class C4IconSwapper:
             for path in list_all_sub_directories(driver_folder):
                 files = os.listdir(path)
                 for file in files:
-                    if ('.bak' in file or '.orig' in file) and '.xml' not in file:
+                    if '.bak' in file and '.xml' not in file:
                         self.restore_all_button['state'] = NORMAL
                         done = True
                         break
                 if done:
                     break
             # Update restore current icon button in driver panel
-            if os.path.isfile(self.icons[self.current_icon].path + '.bak') or \
-                    os.path.isfile(self.icons[self.current_icon].path + '.orig'):
+            if os.path.isfile(self.icons[self.current_icon].path + '.bak'):
                 self.restore_button['state'] = NORMAL
             else:
                 self.restore_button['state'] = DISABLED
@@ -1303,12 +1256,7 @@ class C4IconSwapper:
                     shutil.copy(icon.path + '.bak', icon.path)
                     os.remove(icon.path + '.bak')
             self.restore_button['state'] = DISABLED
-            disable_all_button = True
-            for group in self.icons:
-                if os.path.isfile(group.icons[0].path + '.bak'):
-                    disable_all_button = False
-                    break
-            if disable_all_button:
+            if not any(os.path.isfile(group.icons[0].path + '.bak') for group in self.icons):
                 self.restore_all_button['state'] = DISABLED
             self.update_icon()
             self.uc.ask_to_save = True
@@ -1334,7 +1282,7 @@ class C4IconSwapper:
             else:
                 self.restore_button['state'] = DISABLED
 
-            if self.show_extra_icons.get() == 0 and self.icons[self.current_icon].extra:
+            if not self.show_extra_icons.get() and self.icons[self.current_icon].extra:
                 while self.icons[self.current_icon].extra:
                     if self.current_icon - 1 < 0:
                         self.current_icon = self.current_icon - 1 + len(self.icons)
@@ -1356,7 +1304,7 @@ class C4IconSwapper:
             else:
                 self.restore_button['state'] = DISABLED
 
-            if self.show_extra_icons.get() == 0 and self.icons[self.current_icon].extra:
+            if not self.show_extra_icons.get() and self.icons[self.current_icon].extra:
                 while self.icons[self.current_icon].extra:
                     if self.current_icon + 1 >= len(self.icons):
                         self.current_icon = self.current_icon + 1 - len(self.icons)
@@ -1392,8 +1340,7 @@ class C4IconSwapper:
                                     id_tag = child
                                 elif child_name == 'connectionname':
                                     connectionname_tag = child
-                    if id_tag is None or connection_tag is None or class_tag is None or connectionname_tag is None \
-                            or type_tag is None:
+                    if any(x is None for x in [id_tag, connection_tag, class_tag, connectionname_tag, type_tag]):
                         continue
                     connections.append([connectionname_tag.value, classname_tag.value, id_tag.value,
                                         connection_tag, class_tag, connectionname_tag, id_tag, type_tag, classname_tag])
@@ -1591,7 +1538,7 @@ class C4IconSwapper:
             self.file_entry_field['state'] = DISABLED
 
         def load_replacement(self, given_path=''):
-            if given_path == '':
+            if not given_path:
                 filename = filedialog.askopenfilenames(filetypes=[('Image', '*.png'), ('Image', '*.jpg'),
                                                                   ('Image', '*.gif'), ('Image', '*.jpeg')])
                 if len(filename) == 1:
@@ -1636,7 +1583,8 @@ class C4IconSwapper:
             self.blank_image_label.configure(image=icon)
             self.blank_image_label.image = icon
 
-            self.uc.ask_to_save = True
+            if self.uc.driver_selected:
+                self.uc.ask_to_save = True
 
         def add_to_img_stack(self, img_path: str, index=None):
             if not os.path.isfile(img_path) or not is_valid_image(img_path):
@@ -1678,7 +1626,7 @@ class C4IconSwapper:
             self.uc.ask_to_save = True
 
         def refresh_img_stack(self):
-            if len(self.img_stack) == 0:
+            if not self.img_stack:
                 return
             if on_mac:
                 stack_length = 5
@@ -1726,7 +1674,7 @@ class C4IconSwapper:
             if update_undo_history:
                 self.uc.update_undo_history()
 
-            if given_path == '':
+            if not given_path:
                 replacement_icon = Image.open(self.uc.replacement_image_path)
             else:
                 replacement_icon = Image.open(given_path)
@@ -1747,12 +1695,12 @@ class C4IconSwapper:
         def replace_all(self):
             self.uc.update_undo_history()
             for i, icon in enumerate(self.uc.c4z_panel.icons):
-                if self.uc.c4z_panel.show_extra_icons.get() == 0 and icon.extra:
+                if not self.uc.c4z_panel.show_extra_icons.get() and icon.extra:
                     continue
                 self.replace_icon(update_undo_history=False, index=i)
 
         def select_stack0(self, event):
-            if len(self.img_stack) == 0:
+            if not self.img_stack:
                 return event
             replacement_in_stack = False
             replacement_index = None
@@ -2003,13 +1951,9 @@ class C4IconSwapper:
                     export_cleanup(as_abort=False)
 
                 def export_cleanup(as_abort=True):
-                    if as_abort:
-                        # Abort from Quick Export
-                        pass
-                    else:
-                        # Export Success 2
+                    if not as_abort:
                         self.uc.driver_version_var.set(self.uc.driver_version_new_var.get())
-                        if self.inc_driver_version.get() == 1:
+                        if self.inc_driver_version.get():
                             self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_new_var.get()) + 1))
                     # Restore original xml and lua file
                     self.uc.driver_xml.restore()
@@ -2062,7 +2006,7 @@ class C4IconSwapper:
                 bak_folder = self.uc.temp_dir + 'bak_files/'
 
                 # Backup and move all .bak files if not included
-                if self.include_backups.get() == 0:
+                if not self.include_backups.get():
                     directories = list_all_sub_directories(self.uc.temp_dir + 'driver', include_root_dir=True)
                     if os.path.isdir(bak_folder):
                         shutil.rmtree(bak_folder)
@@ -2088,7 +2032,7 @@ class C4IconSwapper:
                 os.remove(driver_c4z)
 
                 # Restore .bak files
-                if self.include_backups.get() == 0:
+                if not self.include_backups.get():
                     for file in bak_files:
                         shutil.copy(bak_files_dict[file], file)
                     shutil.rmtree(bak_folder)
@@ -2103,7 +2047,7 @@ class C4IconSwapper:
             driver_name = ''.join(temp)
             self.driver_name_entry.delete(0, 'end')
             self.driver_name_entry.insert(0, driver_name)
-            if driver_name == '':
+            if not driver_name:
                 self.driver_name_entry['background'] = 'pink'
                 self.uc.counter = 7
                 self.uc.root.after(150, self.uc.blink_driver_name_entry)
@@ -2166,11 +2110,11 @@ class C4IconSwapper:
                                     character not in letters and character not in capital_letters and
                                     character not in numbers):
                                 continue
-                            if formatted_name == '' and character in letters:
+                            if not formatted_name and character in letters:
                                 formatted_name += capital_letters[letters.index(character)]
                                 continue
                             formatted_name += character
-                        if formatted_name == '':
+                        if not formatted_name:
                             formatted_name = name_change[0]
                         name_change[1] = formatted_name
                     pop_list = []
@@ -2212,8 +2156,7 @@ class C4IconSwapper:
                                 new_line = new_line.replace(name_change[2] + '=', name_change[3] + '=')
                         modified_lua_lines.append(new_line)
                     if on_mac:
-                        with open(get_path(lua_path), 'w', errors='ignore') as \
-                                driver_lua_file:
+                        with open(get_path(lua_path), 'w', errors='ignore') as driver_lua_file:
                             driver_lua_file.writelines(modified_lua_lines)
                     else:
                         with open(lua_path, 'w', errors='ignore') as driver_lua_file:
@@ -2263,8 +2206,8 @@ class C4IconSwapper:
                                         break
 
             # Check driver info variables
-            if self.uc.driver_version_new_var.get() == '' or self.uc.driver_manufac_new_var.get() == '' or \
-                    self.uc.driver_creator_new_var.get() == '':
+            if any(not x for x in [self.uc.driver_version_new_var.get(), self.uc.driver_manufac_new_var.get(),
+                                   self.uc.driver_creator_new_var.get()]):
                 missing_driver_info_pop_up = Toplevel(self.uc.root)
                 missing_driver_info_pop_up.title('Missing Driver Information')
                 label_text = 'Cannot Export: Missing driver info'
@@ -2297,7 +2240,7 @@ class C4IconSwapper:
             # Update xml with new driver name
             self.uc.driver_xml.get_tag('name')[0].value = driver_name
             modified_datestamp = str(datetime.now().strftime('%m/%d/%Y %H:%M'))
-            if self.inc_driver_version.get() == 1 and \
+            if self.inc_driver_version.get() and \
                     int(self.uc.driver_version_var.get()) >= int(self.uc.driver_version_new_var.get()):
                 self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_var.get()) + 1))
             self.uc.driver_xml.get_tag('version')[0].value = self.uc.driver_version_new_var.get()
@@ -2336,7 +2279,7 @@ class C4IconSwapper:
                 # Save As Dialog
                 out_file = filedialog.asksaveasfile(initialfile=driver_name + '.c4z',
                                                     filetypes=[('Control4 Drivers', '*.c4z')])
-                try:
+                with contextlib.suppress(AttributeError):
                     out_file_path = out_file.name
                     out_file.close()
                     flag_remove_empty_file = False
@@ -2352,7 +2295,7 @@ class C4IconSwapper:
                     bak_folder = self.uc.temp_dir + 'bak_files/'
 
                     # Backup and move all .bak files if not included
-                    if self.include_backups.get() == 0:
+                    if not self.include_backups.get():
                         directories = list_all_sub_directories(self.uc.temp_dir + '/driver', include_root_dir=True)
                         if os.path.isdir(bak_folder):
                             shutil.rmtree(bak_folder)
@@ -2378,16 +2321,13 @@ class C4IconSwapper:
                     os.remove(driver_c4z)
 
                     # Restore .bak files
-                    if self.include_backups.get() == 0:
+                    if not self.include_backups.get():
                         for file in bak_files:
                             shutil.copy(bak_files_dict[file], file)
                         shutil.rmtree(bak_folder)
 
                     if flag_remove_empty_file:
                         os.remove(out_file_path.replace('.c4z', ''))
-                except AttributeError:
-                    # Save As Abort
-                    pass
             else:
                 # Call export functions
                 if quick_export:
@@ -2399,7 +2339,7 @@ class C4IconSwapper:
                     # Save As Dialog
                     out_file = filedialog.asksaveasfile(initialfile=driver_name + '.c4z',
                                                         filetypes=[('Control4 Drivers', '*.c4z')])
-                    try:
+                    with contextlib.suppress(AttributeError):
                         out_file_path = out_file.name
                         out_file.close()
                         flag_remove_empty_file = False
@@ -2412,13 +2352,10 @@ class C4IconSwapper:
                         self.export_file(driver_name, path=out_file_path)
                         if flag_remove_empty_file:
                             os.remove(out_file_path.replace('.c4z', ''))
-                    except AttributeError:
-                        # Save As Abort
-                        pass
 
             # Restore original xml and lua
             self.uc.driver_version_var.set(self.uc.driver_version_new_var.get())
-            if self.inc_driver_version.get() == 1:
+            if self.inc_driver_version.get():
                 self.uc.driver_version_new_var.set(str(int(self.uc.driver_version_new_var.get()) + 1))
             self.uc.driver_xml.restore()
             if os.path.isfile(lua_bak_path := self.uc.temp_dir + 'driver/driver.lua.bak'):
@@ -2447,9 +2384,9 @@ class C4IconSwapper:
         def update_driver_version(self, *args):
             self.uc.ask_to_save = True
             # Update driver version if 'increment driver' is selected and new version value is <= last version value
-            if self.inc_driver_version.get() == 0:
+            if not self.inc_driver_version.get():
                 return
-            if self.uc.driver_version_new_var.get() == '' or self.uc.driver_version_var.get() == '':
+            if not self.uc.driver_version_new_var.get() or not self.uc.driver_version_var.get():
                 return
 
             if int(self.uc.driver_version_var.get()) >= int(self.uc.driver_version_new_var.get()):
@@ -2479,7 +2416,7 @@ class C4IconSwapper:
                 else:
                     with open(instance_path, 'r', errors='ignore') as instance_file:
                         current_instances = instance_file.readlines()
-                if len(current_instances) > 0:
+                if current_instances:
                     if not os.path.isdir(check_in_path := self.temp_root_dir + 'check_in'):
                         os.mkdir(check_in_path)
                     waiting = True
@@ -2500,8 +2437,7 @@ class C4IconSwapper:
                     if not os.path.isdir(self.temp_root_dir + failed_to_check_in[0]):
                         # Hack to deal with bug cause by crash during recovery
                         failed_to_check_in = []
-                    if len(failed_to_check_in) >= 1 and \
-                            len(os.listdir(self.temp_root_dir + failed_to_check_in[0])) != 0:
+                    if failed_to_check_in and os.listdir(self.temp_root_dir + failed_to_check_in[0]):
                         def win_close():
                             self.recovery_wait = False
                             recovery_win.destroy()
@@ -2548,7 +2484,7 @@ class C4IconSwapper:
                 else:
                     with open(instance_path, 'w', errors='ignore') as out_file:
                         out_file.writelines(current_instances)
-                if self.recover_instance != '' and os.path.isdir(self.temp_root_dir + self.recover_instance):
+                if self.recover_instance and os.path.isdir(self.temp_root_dir + self.recover_instance):
                     os.rename(self.temp_root_dir + self.recover_instance, self.temp_dir)
             else:
                 shutil.rmtree(self.temp_root_dir)
@@ -2567,7 +2503,7 @@ class C4IconSwapper:
             else:
                 with open(self.temp_root_dir + 'instance', 'w', errors='ignore') as out_file:
                     out_file.writelines(self.instance_id + '\n')
-        if self.recover_instance == '':
+        if not self.recover_instance:
             os.mkdir(self.temp_dir)
         # Initialize main program
         if on_mac:
@@ -2579,7 +2515,7 @@ class C4IconSwapper:
         self.root.bind('<KeyRelease>', self.key_release)
 
         # Root window properties
-        if len(checked_in_instances) > 0:
+        if checked_in_instances:
             self.root.title(''.join(['C4 Icon Swapper (', self.instance_id, ')']))
         else:
             self.root.title('C4 Icon Swapper')
@@ -2706,7 +2642,7 @@ class C4IconSwapper:
             os.remove(temp_icon_file)
 
         # Do recovery if necessary
-        if self.recover_instance != '':
+        if self.recover_instance:
             # Recover Driver
             self.c4z_panel.load_c4z(recovery=True)
             # Recover replacement images; Need to make this more efficient
@@ -2753,7 +2689,7 @@ class C4IconSwapper:
         self.root.mainloop()
 
     def restore_entry_text(self):
-        if self.schedule_entry_restore and self.restore_entry_string != '':
+        if self.schedule_entry_restore and self.restore_entry_string:
             self.c4z_panel.file_entry_field['state'] = NORMAL
             self.c4z_panel.file_entry_field.delete(0, 'end')
             self.c4z_panel.file_entry_field.insert(0, self.restore_entry_string)
@@ -2761,7 +2697,7 @@ class C4IconSwapper:
             self.restore_entry_string = ''
             self.schedule_entry_restore = False
             return
-        elif self.schedule_entry_restore and self.restore_entry_string == '':
+        elif self.schedule_entry_restore and not self.restore_entry_string:
             self.schedule_entry_restore = False
 
     def key_release(self, event):
@@ -2833,7 +2769,7 @@ class C4IconSwapper:
         self.c4z_panel.load_gen_multi(show_loading_image=False)
 
     def blink_driver_name_entry(self):
-        if self.counter > 0:
+        if self.counter:
             self.counter -= 1
             if on_mac and not no_dark_mode and is_dark_mode():
                 if self.export_panel.driver_name_entry['background'] != dark_entry_bg:
@@ -2889,7 +2825,7 @@ class C4IconSwapper:
             for instance_id in os.listdir(check_in_path):
                 current_instances.append(instance_id + '\n')
             shutil.rmtree(check_in_path)
-            if len(current_instances) > 0:
+            if current_instances:
                 with open(instance_path, 'w', errors='ignore') as out_file:
                     out_file.writelines(current_instances)
                 shutil.rmtree(self.temp_dir)
@@ -2956,18 +2892,18 @@ class C4IconSwapper:
     def close_driver_info(self):
         if self.driver_info_win is None:
             return
-        if self.driver_version_new_var.get() == '':
+        if not self.driver_version_new_var.get():
             self.driver_version_new_var.set('0')
-        if self.driver_creator_new_var.get() == '':
+        if not self.driver_creator_new_var.get():
             self.driver_creator_new_var.set('C4IconSwapper')
-        if self.driver_manufac_new_var.get() == '':
+        if not self.driver_manufac_new_var.get():
             self.driver_manufac_new_var.set('C4IconSwapper')
-        if self.driver_version_new_var.get() == '':
-            if self.driver_version_var.get() != '':
+        if not self.driver_version_new_var.get():
+            if self.driver_version_var.get():
                 self.driver_version_new_var.set(str(int(self.driver_version_var.get()) + 1))
             else:
                 self.driver_version_new_var.set('1')
-        if self.export_panel.inc_driver_version.get() == 1 and self.driver_version_var.get() != '' and \
+        if self.export_panel.inc_driver_version.get() and self.driver_version_var.get() and \
                 int(self.driver_version_new_var.get()) <= int(self.driver_version_var.get()):
             self.driver_version_new_var.set(str(int(self.driver_version_var.get()) + 1))
         self.driver_info_win.window.destroy()
@@ -2989,11 +2925,11 @@ class C4IconSwapper:
         for char in version_str:
             if char not in numbers:
                 continue
-            if version_compare == [] and char == '0':
+            if not version_compare and char == '0':
                 continue
             version_compare.append(char)
         str_diff = len(version_str) - len(version_compare)
-        if self.driver_info_win and str_diff > 0:
+        if self.driver_info_win and str_diff:
             cursor_pos = self.driver_info_win.driver_ver_new_entry.index(INSERT)
             self.driver_info_win.driver_ver_new_entry.icursor(cursor_pos - str_diff)
         self.driver_version_new_var.set(''.join(version_compare))
@@ -3009,7 +2945,7 @@ class C4IconSwapper:
             if char in valid_chars:
                 name_compare.append(char)
         str_diff = len(name) - len(name_compare)
-        if self.driver_info_win and str_diff > 0:
+        if self.driver_info_win and str_diff:
             cursor_pos = self.driver_info_win.driver_man_new_entry.index(INSERT)
             self.driver_info_win.driver_man_new_entry.icursor(cursor_pos - str_diff)
         self.driver_manufac_new_var.set(''.join(name_compare))
@@ -3021,7 +2957,7 @@ class C4IconSwapper:
             if char in valid_chars:
                 name_compare.append(char)
         str_diff = len(name) - len(name_compare)
-        if self.driver_info_win and str_diff > 0:
+        if self.driver_info_win and str_diff:
             cursor_pos = self.driver_info_win.driver_creator_new_entry.index(INSERT)
             self.driver_info_win.driver_creator_new_entry.icursor(cursor_pos - str_diff)
         self.driver_creator_new_var.set(''.join(name_compare))
@@ -3237,14 +3173,14 @@ class C4IconSwapper:
     # noinspection PyUnusedLocal
     def easter(self, *args, decay=False):
         if decay:
-            if self.easter_counter > 0:
+            if self.easter_counter:
                 self.easter_counter -= 1
             else:
                 self.easter_counter = 0
                 return
             self.root.after(2000, self.easter_decay)
             return
-        if self.easter_counter == 0:
+        if not self.easter_counter:
             self.root.after(2000, self.easter_decay)
         self.easter_counter += 1
 
@@ -3257,7 +3193,7 @@ def list_all_sub_directories(directory: str, include_root_dir=False):
     for dir_name in os.listdir(directory):
         if '.' not in dir_name:
             subs.append(''.join([directory, '/', dir_name]))
-    if len(subs) != 0:
+    if subs:
         new_subs = []
         for sub_dir in subs:
             new_subs.extend(list_all_sub_directories(sub_dir))
@@ -3280,8 +3216,7 @@ def find_valid_id(id_seed: int, list_of_ids: list, inc_up=True, inc_count=0):
 
 
 def is_valid_image(file_path: str):
-    if file_path.endswith('.png') or file_path.endswith('.jpg') or file_path.endswith('.gif') or \
-            file_path.endswith('.jpeg'):
+    if any(file_path.endswith(x) for x in ['.png', '.jpg', '.gif', '.jpeg']):
         return True
     return False
 
