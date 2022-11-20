@@ -5,8 +5,8 @@ In addition to swapping icons, the program modifies the driver xml (driver manuf
 There is no option to prevent xml modification,
 but the exported driver will have a .bak file of the original driver.xml if you want to restore it manually (must have 'include backup files' selected).
 
-It can add/remove driver connections (such as HDMI IN/OUT),
-and has drag-and-drop support for .c4z files and image files/folders (Windows version only).
+It can add/remove driver connections (e.g. HDMI IN/OUT),
+and has (Windows version only) drag-and-drop support for .c4z files and image files/folders.
 
 It has two built-in generic drivers for quick driver creation:
 1) a two-state experience driver (Accessible by selecting "Load Generic Driver" in File menu)
