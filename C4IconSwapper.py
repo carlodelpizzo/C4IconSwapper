@@ -39,6 +39,10 @@ conn_template = ['connection', '', '', [['id', '0', '', []], ['type', '0', '', [
                                         ['connectionname', 'REPLACE', '', []],
                                         ['consumer', 'False', '', []], ['linelevel', 'True', '', []],
                                         ['classes', '', '', [['class', '', '', [['classname', 'REPLACE', '', []]]]]]]]
+selectable_connections = ['HDMI IN', 'HDMI OUT', 'COMPOSITE IN', 'COMPOSITE OUT', 'VGA IN', 'VGA OUT', 'COMPONENT IN',
+                          'COMPONENT OUT', 'DVI IN', 'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
+                          'DIGITAL_OPTICAL OUT', 'IR_OUT']
+
 if on_mac:
     no_dark_mode = None
 
@@ -47,8 +51,8 @@ class C4IS:
     def __init__(self, uc: object):
         if type(uc) is not C4IconSwapper:
             raise TypeError
-        if not uc:
-            uc = C4IconSwapper()  # For IDE UnresolvedReferences errors
+        if not uc:  # For IDE UnresolvedReferences errors
+            uc = C4IconSwapper()
         # Root class
         self.driver_xml = uc.driver_xml
         self.driver_manufac_var = uc.driver_manufac_var.get()
@@ -120,12 +124,10 @@ class C4IconSwapper:
             self.name_entry_var.set('Connection Name...')
             self.type.set('HDMI IN')
 
-        def update_id(self, *args, refresh=False):
+        def update_id(self, *_, refresh=False):
             if not self.tags:
                 return
             self.uc.ask_to_save = True
-            if not args:
-                args = [self.type]
             if self.original:
                 for conn in self.uc.connections:
                     if conn is not self and conn.original and conn.id == self.id:
@@ -133,7 +135,7 @@ class C4IconSwapper:
                         return
                 self.in_id_group = False
                 return
-            if not refresh and args[0] != str(self.type):
+            if not refresh:
                 return
             conn_type = self.type.get()
             valid_id = []
@@ -196,10 +198,7 @@ class C4IconSwapper:
 
                 # Dropdown
                 self.type = conn_obj.type
-                self.type_menu = OptionMenu(self.window, self.type, 'HDMI IN', 'HDMI OUT', 'COMPOSITE IN',
-                                            'COMPOSITE OUT', 'VGA IN', 'VGA OUT', 'COMPONENT IN', 'COMPONENT OUT',
-                                            'DVI IN', 'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
-                                            'DIGITAL_OPTICAL OUT', 'IR_OUT')
+                self.type_menu = OptionMenu(self.window, self.type, *selectable_connections)
                 if on_mac:
                     self.type_menu.place(x=self.x + 207, y=self.y, anchor='w')
                 else:
@@ -299,8 +298,7 @@ class C4IconSwapper:
                 self.del_button['width'] = 3
                 self.del_button.place(x=self.del_button.winfo_x() + 6, y=self.y)
 
-            # noinspection PyUnusedLocal
-            def name_update(self, *args):
+            def name_update(self, *_):
                 self.uc.ask_to_save = True
 
             def refresh(self):
@@ -362,7 +360,7 @@ class C4IconSwapper:
                 i = (x * 6) + y
                 self.connections.append(self.ConnectionEntry(self, self.uc.connections[i],
                                                              x * x_spacing + 15,
-                                                             (y * y_spacing) + 25))
+                                                             y * y_spacing + 25))
 
         def refresh(self):
             for conn_entry in self.connections:
@@ -510,8 +508,7 @@ class C4IconSwapper:
                 if not self.uc.multi_state_driver:
                     self.name_entry['state'] = DISABLED
 
-            # noinspection PyUnusedLocal
-            def validate_state(self, *args):
+            def validate_state(self, *_):
                 self.uc.ask_to_save = True
                 if not self.uc.states_win:
                     return
@@ -523,6 +520,7 @@ class C4IconSwapper:
                 if not self_name:
                     self.state_object.bg_color = 'pink'
                     return
+                # I need to rewrite this! lol
                 duplicate = False
                 for state in self.uc.states_win.states:
                     if state is not self and state.name_var.get() == self_name:
@@ -685,9 +683,7 @@ class C4IconSwapper:
             self.current_icon, self.extra_icons = 0, 0
             self.icons = []
             self.valid_connections = ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI', 'STEREO', 'DIGITAL_OPTICAL',
-                                      'IR_OUT', 'HDMI IN', 'COMPOSITE IN', 'VGA IN', 'COMPONENT IN', 'DVI IN',
-                                      'STEREO IN', 'DIGITAL_OPTICAL IN', 'HDMI OUT', 'COMPOSITE OUT', 'VGA OUT',
-                                      'COMPONENT OUT', 'DVI OUT', 'STEREO OUT', 'DIGITAL_OPTICAL OUT']
+                                      *selectable_connections]
 
             # Buttons
             self.open_file_button = tk.Button(self.uc.root, text='Open', width=10, command=self.load_c4z, takefocus=0)
@@ -756,8 +752,7 @@ class C4IconSwapper:
                 self.blank_image_label.drop_target_register(DND_FILES)
                 self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
-        # noinspection PyUnusedLocal
-        def toggle_extra_icons(self, *args):
+        def toggle_extra_icons(self, *_):
             if not self.uc.driver_selected:
                 return
             if not self.show_extra_icons.get() and self.uc.c4z_panel.icons[self.uc.c4z_panel.current_icon].extra:
@@ -810,11 +805,12 @@ class C4IconSwapper:
             # Load generic multi-state driver from Base64Assets
             if show_loading_image:
                 # Show loading image while driver images are created
+                loading_img_path = f'{self.uc.temp_dir}loading_icon.gif'
                 if on_mac:
-                    with open(get_path(loading_img_path := f'{self.uc.temp_dir}loading_icon.gif'), 'wb') as loading_img:
+                    with open(get_path(loading_img_path), 'wb') as loading_img:
                         loading_img.write(base64.b64decode(loading_icon))
                 else:
-                    with open(loading_img_path := f'{self.uc.temp_dir}loading_icon.gif', 'wb') as loading_img:
+                    with open(loading_img_path, 'wb') as loading_img:
                         loading_img.write(base64.b64decode(loading_icon))
                 icon_image = Image.open(loading_img_path)
                 icon = ImageTk.PhotoImage(icon_image)
@@ -1364,9 +1360,7 @@ class C4IconSwapper:
                 self.uc.connections[i].name_entry_var.set(connections[i][0])
                 self.uc.connections[i].type.set(connections[i][1])
                 self.uc.connections[i].id = connections[i][2]
-                self.uc.connections[i].tags = [connections[i][3], connections[i][4],
-                                               connections[i][5], connections[i][6],
-                                               connections[i][7], connections[i][8]]
+                self.uc.connections[i].tags = connections[i][3:]
                 self.uc.connections[i].original = True
 
             # Fill in remaining empty connections
@@ -2364,8 +2358,7 @@ class C4IconSwapper:
             os.remove(xml_path := self.uc.temp_dir + 'driver/driver.xml')
             os.rename(self.uc.temp_dir + 'driver/driver.xml.bak', xml_path)
 
-        # noinspection PyUnusedLocal
-        def validate_driver_name(self, *args):
+        def validate_driver_name(self, *_):
             if on_mac:
                 if no_dark_mode or not is_dark_mode():
                     self.driver_name_entry['background'] = light_entry_bg
@@ -2380,8 +2373,7 @@ class C4IconSwapper:
 
             self.uc.ask_to_save = True
 
-        # noinspection PyUnusedLocal
-        def update_driver_version(self, *args):
+        def update_driver_version(self, *_):
             self.uc.ask_to_save = True
             # Update driver version if 'increment driver' is selected and new version value is <= last version value
             if not self.inc_driver_version.get():
@@ -2918,8 +2910,7 @@ class C4IconSwapper:
         del self.states_win
         self.states_win = None
 
-    # noinspection PyUnusedLocal
-    def validate_driver_ver(self, *args):
+    def validate_driver_ver(self, *_):
         version_str = self.driver_version_new_var.get()
         version_compare = []
         for char in version_str:
@@ -2936,8 +2927,7 @@ class C4IconSwapper:
 
         self.ask_to_save = True
 
-    # noinspection PyUnusedLocal
-    def validate_man_and_creator(self, *args):
+    def validate_man_and_creator(self, *_):
         # Check manufacturer variable
         name = self.driver_manufac_new_var.get()
         name_compare = []
@@ -2964,8 +2954,7 @@ class C4IconSwapper:
 
         self.ask_to_save = True
 
-    # noinspection PyUnusedLocal
-    def save_project(self, *args):
+    def save_project(self, *_):
         out_file = filedialog.asksaveasfile(initialfile=self.export_panel.driver_name_var.get() + '.c4is',
                                             filetypes=[('C4IconSwapper Project', '*.c4is')])
         if not out_file:
@@ -2977,8 +2966,7 @@ class C4IconSwapper:
             pickle.dump(C4IS(self), output)
         self.ask_to_save = False
 
-    # noinspection PyUnusedLocal
-    def load_project(self, *args):
+    def load_project(self, *_):
         filename = filedialog.askopenfilename(filetypes=[('C4IconSwapper Project', '*.c4is')])
         if not filename:
             return
@@ -3111,8 +3099,7 @@ class C4IconSwapper:
             return
         self.states_win = self.StatesWin(self)
 
-    # noinspection PyUnusedLocal
-    def undo(self, *args):
+    def undo(self, *_):
         # I'm doing this bootleg af... too lazy to make this efficient
         if not os.path.isfile(file_path := self.temp_dir + 'undo_history.c4is'):
             return
@@ -3170,8 +3157,7 @@ class C4IconSwapper:
                 self.wait_to_check = False
             self.root.after(150, self.dark_mode_check)
 
-    # noinspection PyUnusedLocal
-    def easter(self, *args, decay=False):
+    def easter(self, *_, decay=False):
         if decay:
             if self.easter_counter:
                 self.easter_counter -= 1
@@ -3189,19 +3175,10 @@ class C4IconSwapper:
 
 
 def list_all_sub_directories(directory: str, include_root_dir=False):
-    subs = []
-    for dir_name in os.listdir(directory):
-        if '.' not in dir_name:
-            subs.append(''.join([directory, '/', dir_name]))
-    if subs:
-        new_subs = []
-        for sub_dir in subs:
-            new_subs.extend(list_all_sub_directories(sub_dir))
-        subs.extend(new_subs)
-    subs.sort()
-    if include_root_dir:
-        subs.insert(0, directory)
-    return subs
+    subs = [path for dir_name in os.listdir(directory) if os.path.isdir(path := ''.join([directory, '/', dir_name]))]
+    for sub_sub in [list_all_sub_directories(sub_dir) for sub_dir in [*subs]]:
+        subs.extend(sub_sub)
+    return [directory, *sorted(subs)] if include_root_dir else sorted(subs)  # I don't remember why I used sort here
 
 
 def find_valid_id(id_seed: int, list_of_ids: list, inc_up=True, inc_count=0):
@@ -3216,7 +3193,7 @@ def find_valid_id(id_seed: int, list_of_ids: list, inc_up=True, inc_count=0):
 
 
 def is_valid_image(file_path: str):
-    if any(file_path.endswith(x) for x in ['.png', '.jpg', '.gif', '.jpeg']):
+    if any(file_path.endswith(ext) for ext in ['.png', '.jpg', '.gif', '.jpeg']):
         return True
     return False
 
