@@ -421,19 +421,21 @@ class C4IconSwapper:
 
             # Entry
             entry_width = 16 if on_mac else 17
-            self.uc.driver_manufac_new_var.trace('w', self.uc.validate_driver_ver)
             driver_man_entry = tk.Entry(self.window, width=entry_width,
                                         textvariable=self.uc.driver_manufac_var)
             driver_man_entry['state'] = DISABLED
             self.driver_man_new_entry = tk.Entry(self.window, width=entry_width,
                                                  textvariable=self.uc.driver_manufac_new_var)
+            self.uc.driver_manufac_new_var.trace('w', lambda name, index, mode: self.uc.validate_man_and_creator(
+                string_var=self.uc.driver_manufac_new_var, entry=self.driver_man_new_entry))
 
-            self.uc.driver_creator_new_var.trace('w', self.uc.validate_man_and_creator)
             driver_creator_entry = tk.Entry(self.window, width=entry_width,
                                             textvariable=self.uc.driver_creator_var)
             driver_creator_entry['state'] = DISABLED
             self.driver_creator_new_entry = tk.Entry(self.window, width=entry_width,
                                                      textvariable=self.uc.driver_creator_new_var)
+            self.uc.driver_creator_new_var.trace('w', lambda name, index, mode: self.uc.validate_man_and_creator(
+                string_var=self.uc.driver_creator_new_var, entry=self.driver_creator_new_entry))
 
             driver_ver_entry = tk.Entry(self.window, width=entry_width,
                                         textvariable=self.uc.driver_version_var)
@@ -441,7 +443,7 @@ class C4IconSwapper:
             self.driver_ver_new_entry = tk.Entry(self.window, width=entry_width,
                                                  textvariable=self.uc.driver_version_new_var)
             self.driver_ver_new_entry.bind('<FocusOut>', self.uc.export_panel.update_driver_version)
-            self.uc.driver_version_new_var.trace('w', self.uc.validate_man_and_creator)
+            self.uc.driver_version_new_var.trace('w', self.uc.validate_driver_ver)
             driver_ver_orig_entry = tk.Entry(self.window, width=6, textvariable=self.uc.driver_ver_orig)
             driver_ver_orig_entry['state'] = DISABLED
             if not on_mac:
@@ -802,23 +804,10 @@ class C4IconSwapper:
             if self.uc.ask_to_save:
                 self.uc.ask_to_save_dialog(on_exit=False, load_multi=True)
                 return
-            # Load generic multi-state driver from Base64Assets
+            # Shows loading image then recalls function with show_loading_image=False
             if show_loading_image:
-                # Show loading image while driver images are created
-                loading_img_path = f'{self.uc.temp_dir}loading_icon.gif'
-                if on_mac:
-                    with open(get_path(loading_img_path), 'wb') as loading_img:
-                        loading_img.write(base64.b64decode(loading_icon))
-                else:
-                    with open(loading_img_path, 'wb') as loading_img:
-                        loading_img.write(base64.b64decode(loading_icon))
-                icon_image = Image.open(loading_img_path)
-                icon = ImageTk.PhotoImage(icon_image)
-                self.blank_image_label.configure(image=icon)
-                self.blank_image_label.image = icon
-                self.uc.root.after(1, self.uc.show_loading_image)
-                return
-
+                return self.show_loading_image()
+            # Load generic multi-state driver from Base64Assets
             multi_driver_path = f'{self.uc.temp_dir}multi generic.c4z'
             if self.file_entry_field.get() == multi_driver_path:
                 return
@@ -853,6 +842,20 @@ class C4IconSwapper:
             self.uc.ask_to_save = False
             os.remove(multi_driver_path)
             os.remove(f'{self.uc.temp_dir}loading_icon.gif')
+
+        def show_loading_image(self):
+            loading_img_path = f'{self.uc.temp_dir}loading_icon.gif'
+            if on_mac:
+                with open(get_path(loading_img_path), 'wb') as loading_img:
+                    loading_img.write(base64.b64decode(loading_icon))
+            else:
+                with open(loading_img_path, 'wb') as loading_img:
+                    loading_img.write(base64.b64decode(loading_icon))
+            icon_image = Image.open(loading_img_path)
+            icon = ImageTk.PhotoImage(icon_image)
+            self.blank_image_label.configure(image=icon)
+            self.blank_image_label.image = icon
+            self.uc.root.after(1, self.uc.recall_load_gen_multi)
 
         def update_icon(self):
             if not self.icons:
@@ -2757,7 +2760,7 @@ class C4IconSwapper:
             self.states[i].name_var.set(state_name)
             self.states[i].original_name = state_name
 
-    def show_loading_image(self):
+    def recall_load_gen_multi(self):
         self.c4z_panel.load_gen_multi(show_loading_image=False)
 
     def blink_driver_name_entry(self):
@@ -2912,13 +2915,7 @@ class C4IconSwapper:
 
     def validate_driver_ver(self, *_):
         version_str = self.driver_version_new_var.get()
-        version_compare = []
-        for char in version_str:
-            if char not in numbers:
-                continue
-            if not version_compare and char == '0':
-                continue
-            version_compare.append(char)
+        version_compare = [char for char in version_str.lstrip('0') if char in numbers]
         str_diff = len(version_str) - len(version_compare)
         if self.driver_info_win and str_diff:
             cursor_pos = self.driver_info_win.driver_ver_new_entry.index(INSERT)
@@ -2927,30 +2924,16 @@ class C4IconSwapper:
 
         self.ask_to_save = True
 
-    def validate_man_and_creator(self, *_):
-        # Check manufacturer variable
-        name = self.driver_manufac_new_var.get()
-        name_compare = []
-        for char in self.driver_manufac_new_var.get():
-            if char in valid_chars:
-                name_compare.append(char)
+    def validate_man_and_creator(self, string_var=None, entry=None):
+        if not string_var or not entry:
+            return
+        name = string_var.get()
+        name_compare = [char for char in name if char in valid_chars]
         str_diff = len(name) - len(name_compare)
         if self.driver_info_win and str_diff:
-            cursor_pos = self.driver_info_win.driver_man_new_entry.index(INSERT)
-            self.driver_info_win.driver_man_new_entry.icursor(cursor_pos - str_diff)
-        self.driver_manufac_new_var.set(''.join(name_compare))
-
-        # Check creator variable
-        name = self.driver_creator_new_var.get()
-        name_compare = []
-        for char in self.driver_creator_new_var.get():
-            if char in valid_chars:
-                name_compare.append(char)
-        str_diff = len(name) - len(name_compare)
-        if self.driver_info_win and str_diff:
-            cursor_pos = self.driver_info_win.driver_creator_new_entry.index(INSERT)
-            self.driver_info_win.driver_creator_new_entry.icursor(cursor_pos - str_diff)
-        self.driver_creator_new_var.set(''.join(name_compare))
+            cursor_pos = entry.index(INSERT)
+            entry.icursor(cursor_pos - str_diff)
+        string_var.set(''.join(name_compare))
 
         self.ask_to_save = True
 
