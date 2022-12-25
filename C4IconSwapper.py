@@ -481,7 +481,7 @@ class C4IconSwapper:
 
     class StatesWin:
         class StateEntry:
-            def __init__(self, upper_class, state_obj, x_pos: int, y_pos: int, label='State69:'):
+            def __init__(self, upper_class, state_obj, x_pos: int, y_pos: int, label='State#:'):
                 # Initialize Driver State UI Object
                 self.uc = upper_class.uc
                 self.window = upper_class.window
@@ -507,92 +507,69 @@ class C4IconSwapper:
                 if not self.uc.multi_state_driver:
                     self.name_entry['state'] = DISABLED
 
-            # I need to rewrite this! lol
             def validate_state(self, *_):
+                def state_object(obj_index):
+                    return self.uc.states_win.states[obj_index]
+
+                def original_name_check(obj_index):
+                    orig_name_check = [*self.uc.states_orig_names]
+                    orig_name_check.pop(obj_index)
+                    if state_object(obj_index).state_object.bg_color != 'pink' and \
+                            state_object(obj_index).name_var.get() in orig_name_check:
+                        state_object(obj_index).state_object.bg_color = 'cyan'
+
                 self.uc.ask_to_save = True
                 if not self.uc.states_win:
                     return
-                self_name = self.name_var.get()
+                self.format_state_name()
+                self_index = self.uc.states_win.states.index(self)
                 background_color = light_entry_bg
                 if on_mac and is_dark_mode():
                     background_color = dark_entry_bg
-                self.format_state_name()
-                if not self_name:
+                in_dupe_list = False
+                if not (self_name := self.name_var.get()):
                     self.state_object.bg_color = 'pink'
-                    return
-                duplicate = False
-                for state in self.uc.states_win.states:
-                    if state is not self and state.name_var.get() == self_name:
-                        duplicate = True
-                        for dupe_list in self.uc.state_dupes:
-                            if self.state_object in dupe_list:
-                                if len(dupe_list) == 2:
-                                    dupe_list[0].bg_color = background_color
-                                    dupe_list[1].bg_color = background_color
-                                    to_validate = None
-                                    if dupe_list[0] is not self.state_object:
-                                        to_validate = dupe_list[0]
-                                    if dupe_list[1] is not self.state_object:
-                                        to_validate = dupe_list[1]
-                                    self.uc.state_dupes.pop(self.uc.state_dupes.index(dupe_list))
-                                    if to_validate:
-                                        for state0 in self.uc.states_win.states:
-                                            if state0.state_object is to_validate:
-                                                to_validate = state0
-                                                break
-                                        to_validate.validate_state()
-                                    break
-                                dupe_list.pop(dupe_list.index(self.state_object))
-                                break
-                        append_new_list = True
-                        for dupe_list in self.uc.state_dupes:
-                            if dupe_list[0].name_var.get() == self_name:
-                                if self.state_object not in dupe_list:
-                                    dupe_list.append(self.state_object)
-                                append_new_list = False
-                                break
-                        if append_new_list:
-                            self.uc.state_dupes.append([self.state_object, state.state_object])
+                    in_dupe_list = True
+                for dupe_list in self.uc.state_dupes:
+                    if self_index in dupe_list and \
+                            ((dupe_list[0] is not self_index and state_object(dupe_list[0]).name_var.get() != self_name)
+                             or state_object(dupe_list[-1]).name_var.get() != self_name):
+                        self.state_object.bg_color = background_color
+                        dupe_list.pop(dupe_list.index(self_index))
+                        if len(dupe_list) == 1:
+                            state_object(dupe_list[0]).state_object.bg_color = background_color
+                            original_name_check(dupe_list[0])
+                            self.uc.state_dupes.pop(self.uc.state_dupes.index(dupe_list))
+                    elif self_index in dupe_list:
+                        in_dupe_list = True
+                    elif state_object(dupe_list[0]).name_var.get() == self_name and self_index not in dupe_list:
+                        dupe_list.append(self_index)
                         self.state_object.bg_color = 'pink'
-                        state.state_object.bg_color = 'pink'
-                        break
-                if not duplicate:
-                    for dupe_list in self.uc.state_dupes:
-                        if self.state_object in dupe_list:
-                            if len(dupe_list) == 2:
-                                dupe_list[0].bg_color = background_color
-                                dupe_list[1].bg_color = background_color
-                                to_validate = None
-                                if dupe_list[0] is not self.state_object:
-                                    to_validate = dupe_list[0]
-                                if dupe_list[1] is not self.state_object:
-                                    to_validate = dupe_list[1]
-                                self.uc.state_dupes.pop(self.uc.state_dupes.index(dupe_list))
-                                if to_validate:
-                                    for state in self.uc.states_win.states:
-                                        if state.state_object is to_validate:
-                                            to_validate = state
-                                            break
-                                    to_validate.validate_state()
-                                break
-                            dupe_list.pop(dupe_list.index(self.state_object))
-                            break
-                    self.state_object.bg_color = background_color
+                        in_dupe_list = True
+                if not in_dupe_list:
+                    state_names = [state.name_var.get() for state in self.uc.states_win.states if state is not self]
+                    if self_name in state_names:
+                        dupe_list = [self.uc.states_win.states.index(state)
+                                     for state in self.uc.states_win.states if state.name_var.get() == self_name]
+                        for state_index in dupe_list:
+                            state_object(state_index).state_object.bg_color = 'pink'
+                        self.uc.state_dupes.append(dupe_list)
+                    else:
+                        self.state_object.bg_color = background_color
 
-                self_index = self.uc.states_win.states.index(self)
-                if any(self_name in orig_name
-                       for i, orig_name in enumerate(self.uc.states_orig_names) if self_index != i) and \
-                        self.state_object.bg_color != 'pink':
-                    self.state_object.bg_color = 'cyan'
+                original_name_check(self_index)
+
                 for state in self.uc.states_win.states:
                     state.refresh(bg_only=True)
-
                 self.state_object.name_var.set(self_name)
 
             def format_state_name(self):
                 name = self.name_var.get()
                 formatted_name = [char for char in name if char != ' ' and (
                         char in letters or char in capital_letters or char in numbers)]
+                if not formatted_name:
+                    self.name_var.set('')
+                    return
                 if formatted_name[0] in letters:
                     formatted_name[0] = capital_letters[letters.index(formatted_name[0])]
                 if str_diff := len(name) - len(formatted_name):
@@ -623,7 +600,7 @@ class C4IconSwapper:
             self.window.geometry(f'+{self.uc.root.winfo_rootx()}+{self.uc.root.winfo_rooty()}')
             self.window.resizable(False, False)
 
-            self.states, self.dupes = [], []
+            self.states = []
             x_offset, y_offset = (25, 30) if on_mac else (10, 30)
             self.states.extend(
                 self.StateEntry(self, self.uc.states[i], int(i / 7) * x_spacing + x_offset,
@@ -2667,9 +2644,8 @@ class C4IconSwapper:
             self.easter_counter = -1
 
     def get_states(self, lua_file):
-        state_names = []
-        find_names = False
         self.states_orig_names = []
+        find_names = False
         for line in lua_file:
             if '_OPTIONS = {' in line or find_names:
                 find_names = True
@@ -2682,18 +2658,7 @@ class C4IconSwapper:
                             continue
                         if character == '=':
                             working_name = working_name[0:-1]
-                            state_names.append(working_name)
-                            self.states_orig_names.append([working_name])
-                            if self.states_orig_names[-1][0][0] in capital_letters:
-                                self.states_orig_names[-1].append(
-                                    self.states_orig_names[-1][0].replace(
-                                        self.states_orig_names[-1][0][0],
-                                        letters[capital_letters.index(self.states_orig_names[-1][0][0])]))
-                            else:
-                                self.states_orig_names[-1].insert(
-                                    0, self.states_orig_names[-1][0].replace(
-                                        self.states_orig_names[-1][0][0],
-                                        capital_letters[letters.index(self.states_orig_names[-1][0][0])]))
+                            self.states_orig_names.append(working_name)
                             working_name = ''
                             build_name = False
                             continue
@@ -2707,8 +2672,7 @@ class C4IconSwapper:
                         working_name = ''
             if 'States, LED = {},' in line or 'States = {}' in line:
                 break
-
-        for i, state_name in enumerate(state_names):
+        for i, state_name in enumerate(self.states_orig_names):
             if self.states_win:
                 self.states_win.states[i].name_entry['state'] = NORMAL
             self.states[i].name_var.set(state_name)
