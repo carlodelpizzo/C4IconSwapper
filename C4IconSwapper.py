@@ -1002,9 +1002,8 @@ class C4IconSwapper:
                 if alt_format_icons:
                     unique_icons = [alt_format_icons[0]]
                     for icon in alt_format_icons:
-                        if any(icon.name == unique_icon.name for unique_icon in unique_icons):
-                            continue
-                        unique_icons.append(icon)
+                        if all(icon.name != unique_icon.name for unique_icon in unique_icons):
+                            unique_icons.append(icon)
                     for unique_icon in unique_icons:
                         icon_group = [unique_icon]
                         for icon in alt_format_icons:
@@ -1298,10 +1297,10 @@ class C4IconSwapper:
                                     id_tag = child
                                 elif child_name == 'connectionname':
                                     connectionname_tag = child
-                    if any(x is None for x in [id_tag, connection_tag, class_tag, connectionname_tag, type_tag]):
-                        continue
-                    connections.append([connectionname_tag.value, classname_tag.value, id_tag.value,
-                                        connection_tag, class_tag, connectionname_tag, id_tag, type_tag, classname_tag])
+                    if all(x is not None for x in [id_tag, connection_tag, class_tag, connectionname_tag, type_tag]):
+                        connections.append([connectionname_tag.value, classname_tag.value, id_tag.value,
+                                            connection_tag, class_tag, connectionname_tag, id_tag, type_tag,
+                                            classname_tag])
 
             # Check that number of connections does not exceed maximum
             if len(connections) > len(self.uc.connections):
@@ -2127,8 +2126,8 @@ class C4IconSwapper:
                                         break
 
             # Check driver info variables
-            if any(not x for x in [self.uc.driver_version_new_var.get(), self.uc.driver_manufac_new_var.get(),
-                                   self.uc.driver_creator_new_var.get()]):
+            if not all([self.uc.driver_version_new_var.get(), self.uc.driver_manufac_new_var.get(),
+                        self.uc.driver_creator_new_var.get()]):
                 missing_driver_info_pop_up = Toplevel(self.uc.root)
                 missing_driver_info_pop_up.title('Missing Driver Information')
                 label_text = 'Cannot Export: Missing driver info'
@@ -3005,24 +3004,22 @@ class C4IconSwapper:
             self.root.after(150, self.instance_check)
     else:
         def dark_mode_check(self):
-            if self.wait_to_check:
-                return
-            dark_mode_status = is_dark_mode()
-            if self.dark_mode != dark_mode_status:
-                self.wait_to_check = True
-                self.dark_mode = dark_mode_status
-                background = dark_entry_bg if dark_mode_status else light_entry_bg
-                if self.connections_win:
-                    for entry in self.connections_win.connections:
-                        entry.name_entry['background'] = background
-                self.export_panel.driver_name_entry['background'] = background
-                for state in self.states:
-                    state.bg_color = background
-                if self.states_win:
-                    for state in self.states_win.states:
-                        state.refresh(bg_only=True)
-                self.wait_to_check = False
             self.root.after(150, self.dark_mode_check)
+            if self.wait_to_check or self.dark_mode == (dark_mode_status := is_dark_mode()):
+                return
+            self.wait_to_check = True
+            self.dark_mode = dark_mode_status
+            background = dark_entry_bg if self.dark_mode else light_entry_bg
+            if self.connections_win:
+                for entry in self.connections_win.connections:
+                    entry.name_entry['background'] = background
+            self.export_panel.driver_name_entry['background'] = background
+            for state in self.states:
+                state.bg_color = background
+            if self.states_win:
+                for state in self.states_win.states:
+                    state.refresh(bg_only=True)
+            self.wait_to_check = False
 
     def easter(self, *_, decay=False):
         if self.easter_counter < 0:
