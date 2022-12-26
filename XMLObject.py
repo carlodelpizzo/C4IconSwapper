@@ -174,16 +174,16 @@ class XMLObject:
                 lines.extend(child.get_lines(first_call=False))
             return lines
         tabs = ''.join('\t' for _ in range(layer))
-        self.name = self.name.replace('\n', ''.join(['\n', tabs]))
+        self.name = self.name.replace('\n', f'\n{tabs}')
         line = ''.join([tabs, '<', self.name])
         if self.comment:
-            return [''.join([line, '>\n'])]
+            return [f'{line}>\n']
 
         if self.parameters:
             line += ' '
             for param in self.parameters[:-1]:
-                line += param[0] + '="' + param[1] + '" '
-            line += self.parameters[-1][0] + '="' + self.parameters[-1][1] + '"'
+                line += ''.join([param[0], '="', param[1], '" '])
+            line += ''.join([self.parameters[-1][0], '="', self.parameters[-1][1], '"'])
 
         if self.self_closed:
             line += '/'
@@ -209,7 +209,7 @@ class XMLObject:
             lines.extend(child.get_lines(layer=layer+1, first_call=False))
 
         if not self.self_closed:
-            lines.append(f'{tabs}</{self.name}' + '>\n')
+            lines.append(''.join([tabs, '</', self.name, '>\n']))
         if first_call and lines[-1].endswith('\n'):
             lines[-1] = lines[-1][:-1]
         return lines

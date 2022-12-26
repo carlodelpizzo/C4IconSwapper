@@ -848,7 +848,6 @@ class C4IconSwapper:
             self.icon_name_label.config(text=f'name: {self.icons[self.current_icon].name}')
 
         def load_c4z(self, given_path=None, recovery=False):
-            # sourcery skip: invert-any-all, reintroduce-else, remove-redundant-continue
             # Could improve this
             def get_icons(directory):
                 if not os.path.isdir(directory):
@@ -1274,7 +1273,6 @@ class C4IconSwapper:
             self.update_icon()
 
         def get_connections(self):
-            # sourcery skip: invert-any-all, reintroduce-else, remove-redundant-continue
             if not os.path.isfile(f'{self.uc.temp_dir}driver/driver.xml') or not self.uc.driver_selected:
                 return
             for conn in self.uc.connections:
@@ -1961,7 +1959,6 @@ class C4IconSwapper:
                     shutil.rmtree(bak_folder)
 
         def do_export(self, quick_export=False):
-            # sourcery skip: invert-any-all-body
             # Format driver name
             driver_name = self.driver_name_var.get()
             temp = []
