@@ -3015,7 +3015,8 @@ class C4IconSwapper:
                     entry.name_entry['background'] = background
             self.export_panel.driver_name_entry['background'] = background
             for state in self.states:
-                state.bg_color = background
+                if state.bg_color not in ['pink', 'cyan']:
+                    state.bg_color = background
             if self.states_win:
                 for state in self.states_win.states:
                     state.refresh(bg_only=True)
