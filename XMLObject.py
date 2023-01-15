@@ -5,6 +5,7 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
         xml_string = ''.join(xml_lines)
         xml_string = xml_string.replace('\t', '')
         tag_indexes = [i for i in range(len(xml_string)) if xml_string[i] in ['<', '>']]
+        # Need to handle case of odd number of characters used in comments
         if len(tag_indexes) % 2:
             print('Error: Invalid xml file')
             return
@@ -214,19 +215,29 @@ class XMLObject:
             lines[-1] = lines[-1][:-1]
         return lines
 
-    def get_tag(self, tag_name: str):
-        matching_tags = [child for child in self.children if tag_name in child.name]
+    def get_tag(self, tag_name: str, match_exact=True, include_comments=False):
+        if include_comments:
+            matching_tags = ([child for child in self.children if tag_name == child.name] if match_exact else
+                             [child for child in self.children if tag_name in child.name])
+        else:
+            matching_tags = ([child for child in self.children if tag_name == child.name and not child.comment]
+                             if match_exact else
+                             [child for child in self.children if tag_name in child.name and not child.comment])
         for child in self.children:
-            child_tags = child.get_tag(tag_name)
-            if child_tags is None:
-                continue
-            matching_tags.extend(child_tags)
+            if child_tags := child.get_tag(tag_name, match_exact=match_exact, include_comments=include_comments):
+                matching_tags.extend(child_tags)
         return matching_tags or None
 
-    def get_tag_by_value(self, value: str):
-        matching_tags = [child for child in self.children if value in child.value]
+    def get_tag_by_value(self, value: str, match_exact=True, include_comments=False):
+        if include_comments:
+            matching_tags = ([child for child in self.children if value == child.value] if match_exact else
+                             [child for child in self.children if value in child.value])
+        else:
+            matching_tags = ([child for child in self.children if value == child.value and not child.comment]
+                             if match_exact else
+                             [child for child in self.children if value in child.value and not child.comment])
         for child in self.children:
-            child_tags = child.get_tag_by_value(value)
+            child_tags = child.get_tag_by_value(value, match_exact=match_exact, include_comments=include_comments)
             if child_tags is None:
                 continue
             matching_tags.extend(child_tags)
