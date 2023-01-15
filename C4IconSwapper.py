@@ -733,7 +733,7 @@ class C4IconSwapper:
 
         def load_gen_driver(self):
             if self.uc.ask_to_save:
-                self.uc.ask_to_save_dialog(on_exit=False, load_gen=True)
+                self.uc.ask_to_save_dialog(on_exit=False, return_to='generic')
                 return
             # Load generic two-state driver from Base64Assets
             gen_driver_path = f'{self.uc.temp_dir}generic.c4z'
@@ -772,7 +772,7 @@ class C4IconSwapper:
 
         def load_gen_multi(self, show_loading_image=True):
             if self.uc.ask_to_save:
-                self.uc.ask_to_save_dialog(on_exit=False, load_multi=True)
+                self.uc.ask_to_save_dialog(on_exit=False, return_to='multi')
                 return
             # Shows loading image then recalls function with show_loading_image=False
             if show_loading_image:
@@ -930,6 +930,10 @@ class C4IconSwapper:
                             break
                 if recall:
                     check_dupe_names(recalled=True)
+
+            if self.uc.ask_to_save:
+                self.uc.ask_to_save_dialog(given_path, recovery, on_exit=False, return_to='load_c4z')
+                return
 
             if self.file_entry_field.get() == 'Invalid driver selected...':
                 self.file_entry_field['state'] = NORMAL
@@ -1116,13 +1120,17 @@ class C4IconSwapper:
                     if char not in numbers:
                         continue
                     temp_str += char
-                self.uc.driver_version_var.set(temp_str)
-                if self.uc.export_panel.inc_driver_version.get():
-                    self.uc.driver_version_new_var.set(str(int(temp_str) + 1))
+                if temp_str:
+                    self.uc.driver_version_var.set(temp_str)
+                    if self.uc.export_panel.inc_driver_version.get():
+                        self.uc.driver_version_new_var.set(str(int(temp_str) + 1))
+                    else:
+                        self.uc.driver_version_new_var.set(temp_str)
                 else:
-                    self.uc.driver_version_new_var.set(temp_str)
+                    self.uc.driver_version_var.set('0')
+                    self.uc.driver_version_new_var.set('1')
             id_tags = self.uc.driver_xml.get_tag('id')
-            if id_tags is not None:
+            if id_tags:
                 self.uc.conn_ids = []
                 for id_tag in id_tags:
                     with contextlib.suppress(ValueError):
@@ -1297,7 +1305,7 @@ class C4IconSwapper:
                                     id_tag = child
                                 elif child_name == 'connectionname':
                                     connectionname_tag = child
-                    if all(x is not None for x in [id_tag, connection_tag, class_tag, connectionname_tag, type_tag]):
+                    if all([id_tag, connection_tag, class_tag, connectionname_tag, type_tag]):
                         connections.append([connectionname_tag.value, classname_tag.value, id_tag.value,
                                             connection_tag, class_tag, connectionname_tag, id_tag, type_tag,
                                             classname_tag])
@@ -2728,7 +2736,7 @@ class C4IconSwapper:
 
         self.root.destroy()
 
-    def ask_to_save_dialog(self, on_exit=True, root_destroy=False, load_gen=False, load_multi=False):
+    def ask_to_save_dialog(self, *return_args, on_exit=True, root_destroy=False, return_to=''):
         def cancel_dialog():
             self.ask_to_save = True
             save_dialog.destroy()
@@ -2737,10 +2745,15 @@ class C4IconSwapper:
             save_dialog.destroy()
             if root_destroy:
                 self.end_program()
-            elif load_gen:
+            elif return_to == 'generic':
                 self.c4z_panel.load_gen_driver()
-            elif load_multi:
+            elif return_to == 'multi':
                 self.c4z_panel.load_gen_multi()
+            elif return_to == 'load_c4z':
+                if return_args:
+                    self.c4z_panel.load_c4z(given_path=return_args[0], recovery=return_args[1])
+                    return
+                self.c4z_panel.load_c4z()
 
         def do_project_save():
             self.save_project()
