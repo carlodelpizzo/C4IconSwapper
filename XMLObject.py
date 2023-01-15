@@ -237,10 +237,8 @@ class XMLObject:
                              if match_exact else
                              [child for child in self.children if value in child.value and not child.comment])
         for child in self.children:
-            child_tags = child.get_tag_by_value(value, match_exact=match_exact, include_comments=include_comments)
-            if child_tags is None:
-                continue
-            matching_tags.extend(child_tags)
+            if child_tags := child.get_tag_by_value(value, match_exact=match_exact, include_comments=include_comments):
+                matching_tags.extend(child_tags)
         return matching_tags or None
 
     def set_restore_point(self):
