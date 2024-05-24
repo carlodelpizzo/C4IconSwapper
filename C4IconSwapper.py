@@ -26,7 +26,7 @@ else:
     from tkinterdnd2 import DND_FILES, TkinterDnD
     on_mac = False
 
-version = '1.2.2'
+version = '1.2.3'
 label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
@@ -2975,6 +2975,7 @@ class C4IconSwapper:
 
     def open_edit_win(self, window, win_type: str):
         if window:
+            window.window.deiconify()
             window.window.focus()
             return
         if win_type == 'conn':
