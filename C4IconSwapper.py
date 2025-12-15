@@ -1,5 +1,4 @@
 import filecmp
-import platform
 import os
 import shutil
 import base64
@@ -17,16 +16,9 @@ from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
 from XMLObject import XMLObject
-if platform.system() == 'Darwin':
-    import subprocess
-    # noinspection PyUnresolvedReferences
-    from AppKit import NSBundle
-    on_mac = True
-else:
-    from tkinterdnd2 import DND_FILES, TkinterDnD
-    on_mac = False
+from tkinterdnd2 import DND_FILES, TkinterDnD
 
-version = '1.2.2'
+version = '1.3'
 label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
 
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
@@ -42,9 +34,6 @@ conn_template = ['connection', '', '', [['id', '0', '', []], ['type', '0', '', [
 selectable_connections = ['HDMI IN', 'HDMI OUT', 'COMPOSITE IN', 'COMPOSITE OUT', 'VGA IN', 'VGA OUT', 'COMPONENT IN',
                           'COMPONENT OUT', 'DVI IN', 'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
                           'DIGITAL_OPTICAL OUT', 'IR_OUT']
-
-if on_mac:
-    no_dark_mode = None
 
 
 class C4IS:
@@ -85,6 +74,7 @@ class C4IS:
         self.include_backups = main.export_panel.include_backups.get()
 
         # C4z Panel
+        # self.icons = main.c4z_panel.icons
         self.extra_icons = main.c4z_panel.extra_icons
         self.show_extra_icons = main.c4z_panel.show_extra_icons.get()
         if main.driver_selected:
@@ -171,8 +161,6 @@ class C4IconSwapper:
             self.name_var = StringVar()
             self.name_var.set(name)
             background = light_entry_bg
-            if on_mac and is_dark_mode():
-                background = dark_entry_bg
             self.bg_color = background
 
     class ConnectionsWin:
@@ -187,22 +175,15 @@ class C4IconSwapper:
                 # Entry
                 self.name_entry_var = conn_obj.name_entry_var
                 self.name_entry_var.trace('w', self.name_update)
-                if on_mac:
-                    self.name_entry = tk.Entry(self.window, width=15, textvariable=self.name_entry_var)
-                    self.name_entry.place(x=self.x + 60, y=self.y, anchor='w')
-                else:
-                    self.name_entry = tk.Entry(self.window, width=20, textvariable=self.name_entry_var)
-                    self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+                self.name_entry = tk.Entry(self.window, width=20, textvariable=self.name_entry_var)
+                self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
                 if not self.conn_object.enabled:
                     self.name_entry['state'] = DISABLED
 
                 # Dropdown
                 self.type = conn_obj.type
                 self.type_menu = OptionMenu(self.window, self.type, *selectable_connections)
-                if on_mac:
-                    self.type_menu.place(x=self.x + 207, y=self.y, anchor='w')
-                else:
-                    self.type_menu.place(x=self.x + 160, y=self.y, anchor='w')
+                self.type_menu.place(x=self.x + 160, y=self.y, anchor='w')
                 self.type.trace('w', self.conn_object.update_id)
                 if not self.conn_object.enabled:
                     self.type_menu['state'] = DISABLED
@@ -211,8 +192,6 @@ class C4IconSwapper:
                 self.add_button = tk.Button(self.window, text='Add', width=3, command=self.enable, takefocus=0)
                 if self.conn_object.enabled or self.conn_object.original:
                     self.add_button.place(x=-420, y=-420, anchor='w')
-                elif on_mac:
-                    self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
                 else:
                     self.add_button.place(x=self.x, y=self.y, anchor='w')
                 if not self.main.driver_selected:
@@ -220,19 +199,13 @@ class C4IconSwapper:
 
                 self.x_button = tk.Button(self.window, text='x', width=1, command=self.disable, takefocus=0)
                 if self.conn_object.enabled and not self.conn_object.original:
-                    if on_mac:
-                        self.x_button.place(x=self.x + 18, y=self.y - 3, anchor='w')
-                    else:
-                        self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
+                    self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
                 else:
                     self.x_button.place(x=-420, y=-420, anchor='w')
 
                 self.del_button = tk.Button(self.window, text='Del', width=3, command=self.flag_delete, takefocus=0)
                 if self.conn_object.original:
-                    if on_mac:
-                        self.del_button.place(x=self.x, y=self.y - 3, anchor='w')
-                    else:
-                        self.del_button.place(x=self.x, y=self.y, anchor='w')
+                    self.del_button.place(x=self.x, y=self.y, anchor='w')
                 else:
                     self.del_button.place(x=-420, y=-420, anchor='w')
                 if self.conn_object.delete:
@@ -245,10 +218,7 @@ class C4IconSwapper:
                 self.name_entry['state'] = NORMAL
                 self.type_menu['state'] = NORMAL
                 self.add_button.place(x=-420, y=-420, anchor='w')
-                if on_mac:
-                    self.x_button.place(x=self.x + 18, y=self.y - 3, anchor='w')
-                else:
-                    self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
+                self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
                 if self.conn_object.tags:
                     self.conn_object.tags[0].delete = False
                 self.name_entry['takefocus'] = 1
@@ -257,10 +227,7 @@ class C4IconSwapper:
                 self.conn_object.enabled = False
                 self.name_entry['state'] = DISABLED
                 self.type_menu['state'] = DISABLED
-                if on_mac:
-                    self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
-                else:
-                    self.add_button.place(x=self.x, y=self.y, anchor='w')
+                self.add_button.place(x=self.x, y=self.y, anchor='w')
                 self.x_button.place(x=-420, y=-420, anchor='w')
                 if self.conn_object.tags:
                     self.conn_object.tags[0].delete = True
@@ -313,24 +280,15 @@ class C4IconSwapper:
 
                 if self.conn_object.enabled or self.conn_object.original:
                     self.add_button.place(x=-420, y=-420, anchor='w')
-                elif on_mac:
-                    self.add_button.place(x=self.x, y=self.y - 3, anchor='w')
-                else:
-                    self.add_button.place(x=self.x, y=self.y, anchor='w')
+                self.add_button.place(x=self.x, y=self.y, anchor='w')
                 self.add_button['state'] = NORMAL if self.main.driver_selected else DISABLED
                 if self.conn_object.enabled and not self.conn_object.original:
-                    if on_mac:
-                        self.x_button.place(x=self.x + 18, y=self.y - 3, anchor='w')
-                    else:
-                        self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
+                    self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
                 else:
                     self.x_button.place(x=-420, y=-420, anchor='w')
 
                 if self.conn_object.original:
-                    if on_mac:
-                        self.del_button.place(x=self.x, y=self.y - 3, anchor='w')
-                    else:
-                        self.del_button.place(x=self.x, y=self.y, anchor='w')
+                    self.del_button.place(x=self.x, y=self.y, anchor='w')
                 else:
                     self.del_button.place(x=-420, y=-420, anchor='w')
                 if self.conn_object.delete:
@@ -346,12 +304,8 @@ class C4IconSwapper:
             self.window.focus()
             self.window.protocol('WM_DELETE_WINDOW', self.main.close_connections)
             self.window.title('Edit Driver Connections')
-            if on_mac:
-                self.window.geometry('1125x250')
-                x_spacing, y_spacing = 370, 40
-            else:
-                self.window.geometry('975x250')
-                x_spacing, y_spacing = 330, 40
+            self.window.geometry('975x250')
+            x_spacing, y_spacing = 330, 40
             self.window.geometry(f'+{self.main.root.winfo_rootx()}+{self.main.root.winfo_rooty()}')
             self.window.resizable(False, False)
 
@@ -372,10 +326,7 @@ class C4IconSwapper:
             self.window.focus()
             self.window.protocol('WM_DELETE_WINDOW', self.main.close_driver_info)
             self.window.title('Edit Driver Info')
-            if not on_mac:
-                self.window.geometry('255x240')
-            else:
-                self.window.geometry('347x240')
+            self.window.geometry('255x240')
             self.window.geometry(f'+{self.main.root.winfo_rootx() + self.main.export_panel.x}+'
                                  f'{self.main.root.winfo_rooty()}')
             self.window.resizable(False, False)
@@ -398,14 +349,9 @@ class C4IconSwapper:
             version_y = creator_y + 55
             version_arrow = tk.Label(self.window, text='\u2192', font=('', 15))
 
-            if not on_mac:
-                font_size = 10
-                driver_ver_orig_label = tk.Label(self.window, text='Original Version:',
-                                                 font=(label_font, 8))
-            else:
-                font_size = 13
-                driver_ver_orig_label = tk.Label(self.window, text='Original Version:',
-                                                 font=(label_font, 11))
+            font_size = 10
+            driver_ver_orig_label = tk.Label(self.window, text='Original Version:',
+                                             font=(label_font, 8))
 
             driver_man_label = tk.Label(self.window, text='Driver Manufacturer',
                                         font=(label_font, font_size))
@@ -417,7 +363,7 @@ class C4IconSwapper:
                                         font=(label_font, font_size))
 
             # Entry
-            entry_width = 16 if on_mac else 17
+            entry_width = 17
             driver_man_entry = tk.Entry(self.window, width=entry_width,
                                         textvariable=self.main.driver_manufac_var)
             driver_man_entry['state'] = DISABLED
@@ -443,41 +389,21 @@ class C4IconSwapper:
             self.main.driver_version_new_var.trace('w', self.main.validate_driver_ver)
             driver_ver_orig_entry = tk.Entry(self.window, width=6, textvariable=self.main.driver_ver_orig)
             driver_ver_orig_entry['state'] = DISABLED
-            if not on_mac:
-                instance_id_label.place(x=127, y=220, anchor='n')
-                man_arrow.place(x=115, y=man_y, anchor='nw')
-                creator_arrow.place(x=115, y=creator_y, anchor='nw')
-                version_arrow.place(x=115, y=version_y, anchor='nw')
-                driver_man_label.place(x=127, y=man_y - 15, anchor='n')
-                driver_creator_label.place(x=127, y=creator_y - 15, anchor='n')
-                driver_ver_label.place(x=127, y=version_y - 15, anchor='n')
-                driver_ver_orig_label.place(x=110, y=version_y + 30, anchor='ne')
-                driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
-                self.driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
-                driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
-                self.driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
-                driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
-                self.driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
-                driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
-            else:
-                instance_id_label.place(x=173, y=220, anchor='n')
-
-                man_arrow.place(x=163, y=man_y + 7, anchor='nw')
-                creator_arrow.place(x=163, y=creator_y + 7, anchor='nw')
-                version_arrow.place(x=163, y=version_y + 7, anchor='nw')
-
-                driver_man_label.place(x=173, y=man_y - 15, anchor='n')
-                driver_creator_label.place(x=173, y=creator_y - 15, anchor='n')
-                driver_ver_label.place(x=173, y=version_y - 15, anchor='n')
-                driver_ver_orig_label.place(x=140, y=version_y + 35, anchor='ne')
-
-                driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
-                self.driver_man_new_entry.place(x=180, y=man_y + 7, anchor='nw')
-                driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
-                self.driver_creator_new_entry.place(x=180, y=creator_y + 7, anchor='nw')
-                driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
-                self.driver_ver_new_entry.place(x=180, y=version_y + 7, anchor='nw')
-                driver_ver_orig_entry.place(x=140, y=version_y + 35, anchor='nw')
+            instance_id_label.place(x=127, y=220, anchor='n')
+            man_arrow.place(x=115, y=man_y, anchor='nw')
+            creator_arrow.place(x=115, y=creator_y, anchor='nw')
+            version_arrow.place(x=115, y=version_y, anchor='nw')
+            driver_man_label.place(x=127, y=man_y - 15, anchor='n')
+            driver_creator_label.place(x=127, y=creator_y - 15, anchor='n')
+            driver_ver_label.place(x=127, y=version_y - 15, anchor='n')
+            driver_ver_orig_label.place(x=110, y=version_y + 30, anchor='ne')
+            driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
+            self.driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
+            driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
+            self.driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
+            driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
+            self.driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
+            driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
 
     class StatesWin:
         class StateEntry:
@@ -497,12 +423,8 @@ class C4IconSwapper:
                 self.name_var = StringVar()
                 self.name_var.set(state_obj.name_var.get())
                 self.name_var.trace('w', self.validate_state)
-                if on_mac:
-                    self.name_entry = tk.Entry(self.window, width=13, textvariable=self.name_var)
-                    self.name_entry.place(x=self.x + 36, y=self.y, anchor='w')
-                else:
-                    self.name_entry = tk.Entry(self.window, width=20, textvariable=self.name_var)
-                    self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+                self.name_entry = tk.Entry(self.window, width=20, textvariable=self.name_var)
+                self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
                 self.name_entry['background'] = state_obj.bg_color
                 if not self.main.multi_state_driver:
                     self.name_entry['state'] = DISABLED
@@ -524,8 +446,6 @@ class C4IconSwapper:
                 self.format_state_name()
                 self_index = self.main.states_win.states.index(self)
                 background_color = light_entry_bg
-                if on_mac and is_dark_mode():
-                    background_color = dark_entry_bg
                 in_dupe_list = False
                 if not (self_name := self.name_var.get()):
                     self.state_object.bg_color = 'pink'
@@ -591,17 +511,13 @@ class C4IconSwapper:
             self.window.focus()
             self.window.protocol('WM_DELETE_WINDOW', self.main.close_states)
             self.window.title('Edit Driver States')
-            if on_mac:
-                x_spacing, y_spacing = 190, 34
-                self.window.geometry('405x287')
-            else:
-                x_spacing, y_spacing = 200, 34
-                self.window.geometry('385x287')
+            x_spacing, y_spacing = 200, 34
+            self.window.geometry('385x287')
             self.window.geometry(f'+{self.main.root.winfo_rootx()}+{self.main.root.winfo_rooty()}')
             self.window.resizable(False, False)
 
             self.states = []
-            x_offset, y_offset = (25, 30) if on_mac else (10, 30)
+            x_offset, y_offset = (10, 30)
             self.states.extend(
                 self.StateEntry(self, self.main.states[i], int(i / 7) * x_spacing + x_offset,
                                 (i % 7) * y_spacing + y_offset, label=''.join(['state', str(i + 1), ':']))
@@ -673,28 +589,17 @@ class C4IconSwapper:
             self.next_icon_button = tk.Button(self.main.root, text='Next', command=self.next_icon, width=5, takefocus=0)
             self.next_icon_button['state'] = DISABLED
 
-            if on_mac:
-                self.open_file_button.place(x=203 + self.x, y=27 + self.y, anchor='w')
-                self.restore_button.place(x=258 + self.x, y=91 + self.y, anchor='n')
-                self.restore_all_button.place(x=258 + self.x, y=58 + self.y, anchor='n')
-                self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
-                self.next_icon_button.place(x=260 + self.x, y=146 + self.y)
-            else:
-                self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
-                self.restore_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
-                self.restore_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
-                self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
-                self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
+            self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
+            self.restore_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
+            self.restore_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
+            self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
+            self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
 
             # Entry
-            if on_mac:
-                self.file_entry_field = tk.Entry(self.main.root, width=22, takefocus=0)
-                self.file_entry_field.place(x=101 + self.x, y=15 + self.y, anchor='n')
-            else:
-                self.file_entry_field = tk.Entry(self.main.root, width=25, takefocus=0)
-                self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
-                self.file_entry_field.drop_target_register(DND_FILES)
-                self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_c4z)
+            self.file_entry_field = tk.Entry(self.main.root, width=25, takefocus=0)
+            self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
+            self.file_entry_field.drop_target_register(DND_FILES)
+            self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_c4z)
             self.file_entry_field.insert(0, 'Select .c4z file...')
             self.file_entry_field['state'] = DISABLED
 
@@ -718,12 +623,9 @@ class C4IconSwapper:
             self.icon_name_label = tk.Label(self.main.root, text='icon name')
             self.icon_name_label.place(x=108 + self.x, y=193 + self.y, anchor='n')
 
-            if on_mac:
-                self.panel_label.place(x=165 + self.x, y=-20 + self.y, anchor='n')
-            else:
-                self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
-                self.blank_image_label.drop_target_register(DND_FILES)
-                self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
+            self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
+            self.blank_image_label.drop_target_register(DND_FILES)
+            self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
         def toggle_extra_icons(self, *_):
             if not self.main.driver_selected:
@@ -734,18 +636,13 @@ class C4IconSwapper:
 
         def load_gen_driver(self):
             if self.main.ask_to_save:
-                self.main.ask_to_save_dialog(on_exit=False, return_to='generic')
-                return
+                self.main.root.wait_window(self.main.ask_to_save_dialog(on_exit=False))
             # Load generic two-state driver from Base64Assets
             gen_driver_path = f'{self.main.temp_dir}generic.c4z'
             if self.file_entry_field.get() == gen_driver_path:
                 return
-            if on_mac:
-                with open(get_path(gen_driver_path), 'wb') as gen_driver:
-                    gen_driver.write(base64.b64decode(generic_driver))
-            else:
-                with open(gen_driver_path, 'wb') as gen_driver:
-                    gen_driver.write(base64.b64decode(generic_driver))
+            with open(gen_driver_path, 'wb') as gen_driver:
+                gen_driver.write(base64.b64decode(generic_driver))
 
             if os.path.isdir(temp_driver_path := f'{self.main.temp_dir}driver'):
                 shutil.rmtree(temp_driver_path)
@@ -773,8 +670,7 @@ class C4IconSwapper:
 
         def load_gen_multi(self, show_loading_image=True):
             if self.main.ask_to_save:
-                self.main.ask_to_save_dialog(on_exit=False, return_to='multi')
-                return
+                self.main.root.wait_window(self.main.ask_to_save_dialog(on_exit=False))
             # Shows loading image then recalls function with show_loading_image=False
             if show_loading_image:
                 return self.show_loading_image()
@@ -782,12 +678,8 @@ class C4IconSwapper:
             multi_driver_path = f'{self.main.temp_dir}multi generic.c4z'
             if self.file_entry_field.get() == multi_driver_path:
                 return
-            if on_mac:
-                with open(get_path(multi_driver_path), 'wb') as gen_driver:
-                    gen_driver.write(base64.b64decode(generic_multi))
-            else:
-                with open(multi_driver_path, 'wb') as gen_driver:
-                    gen_driver.write(base64.b64decode(generic_multi))
+            with open(multi_driver_path, 'wb') as gen_driver:
+                gen_driver.write(base64.b64decode(generic_multi))
 
             if os.path.isdir(temp_driver_path := f'{self.main.temp_dir}driver'):
                 shutil.rmtree(temp_driver_path)
@@ -816,12 +708,8 @@ class C4IconSwapper:
 
         def show_loading_image(self):
             loading_img_path = f'{self.main.temp_dir}loading_icon.gif'
-            if on_mac:
-                with open(get_path(loading_img_path), 'wb') as loading_img:
-                    loading_img.write(base64.b64decode(loading_icon))
-            else:
-                with open(loading_img_path, 'wb') as loading_img:
-                    loading_img.write(base64.b64decode(loading_icon))
+            with open(loading_img_path, 'wb') as loading_img:
+                loading_img.write(base64.b64decode(loading_icon))
             icon_image = Image.open(loading_img_path)
             icon = ImageTk.PhotoImage(icon_image)
             self.blank_image_label.configure(image=icon)
@@ -933,8 +821,7 @@ class C4IconSwapper:
                     check_dupe_names(recalled=True)
 
             if self.main.ask_to_save:
-                self.main.ask_to_save_dialog(given_path, recovery, on_exit=False, return_to='load_c4z')
-                return
+                self.main.root.wait_window(self.main.ask_to_save_dialog(on_exit=False))
 
             if self.file_entry_field.get() == 'Invalid driver selected...':
                 self.file_entry_field['state'] = NORMAL
@@ -1142,12 +1029,8 @@ class C4IconSwapper:
             self.main.multi_state_driver = False
             self.main.edit.entryconfig(self.main.states_pos, state=DISABLED)
             if os.path.isfile(lua_path := f'{self.main.temp_dir}driver/driver.lua'):
-                if on_mac:
-                    with open(get_path(lua_path), errors='ignore') as driver_lua_file:
-                        driver_lua_lines = driver_lua_file.readlines()
-                else:
-                    with open(lua_path, errors='ignore') as driver_lua_file:
-                        driver_lua_lines = driver_lua_file.readlines()
+                with open(lua_path, errors='ignore') as driver_lua_file:
+                    driver_lua_lines = driver_lua_file.readlines()
                 for line in driver_lua_lines:
                     if '_OPTIONS = { {' in line:
                         self.main.get_states(driver_lua_lines)
@@ -1175,8 +1058,7 @@ class C4IconSwapper:
                 self.main.replacement_panel.replace_all_button['state'] = DISABLED
             # Update Export button(s)
             if self.main.driver_selected:
-                if not on_mac:
-                    self.main.export_panel.export_button['state'] = NORMAL
+                self.main.export_panel.export_button['state'] = NORMAL
                 self.main.export_panel.export_as_button['state'] = NORMAL
             # Update 'Restore All' button in driver panel
             done = False
@@ -1361,38 +1243,37 @@ class C4IconSwapper:
             for conn in self.main.connections:
                 conn.update_id()
 
-        if not on_mac:
-            def drop_in_c4z(self, event):
-                dropped_path = event.data.replace('{', '').replace('}', '')
-                multi_file_drop = []
-                running_str = ''
-                for char in dropped_path:
-                    if char == ' ' and is_valid_image(running_str):
-                        multi_file_drop.append(running_str)
-                        running_str = ''
-                        continue
-                    running_str += char
-                if is_valid_image(running_str):
+        def drop_in_c4z(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            multi_file_drop = []
+            running_str = ''
+            for char in dropped_path:
+                if char == ' ' and is_valid_image(running_str):
                     multi_file_drop.append(running_str)
-                if multi_file_drop:
-                    for file in multi_file_drop:
-                        self.main.replacement_panel.load_replacement(given_path=file)
-                    return
+                    running_str = ''
+                    continue
+                running_str += char
+            if is_valid_image(running_str):
+                multi_file_drop.append(running_str)
+            if multi_file_drop:
+                for file in multi_file_drop:
+                    self.main.replacement_panel.load_replacement(given_path=file)
+                return
 
-                if dropped_path.endswith('.c4z'):
-                    self.load_c4z(given_path=dropped_path)
-                elif is_valid_image(dropped_path):
-                    self.main.replacement_panel.load_replacement(given_path=dropped_path)
-                elif '.' not in dropped_path:
-                    image_paths = os.listdir(dropped_path)
-                    for new_img_path in image_paths:
-                        self.main.replacement_panel.load_replacement(given_path=f'{dropped_path}/{new_img_path}')
+            if dropped_path.endswith('.c4z'):
+                self.load_c4z(given_path=dropped_path)
+            elif is_valid_image(dropped_path):
+                self.main.replacement_panel.load_replacement(given_path=dropped_path)
+            elif '.' not in dropped_path:
+                image_paths = os.listdir(dropped_path)
+                for new_img_path in image_paths:
+                    self.main.replacement_panel.load_replacement(given_path=f'{dropped_path}/{new_img_path}')
 
     class ReplacementPanel:
         def __init__(self, main):
             # Initialize Replacement Panel
             self.main = main
-            self.x, self.y = (355, 20) if on_mac else (303, 20)
+            self.x, self.y = (303, 20)
             self.img_stack, self.stack_labels = [], []
 
             # Labels
@@ -1404,52 +1285,34 @@ class C4IconSwapper:
             self.stack_labels.append(tk.Label(self.main.root, image=self.main.stack_blank))
             self.stack_labels[-1].image = self.main.stack_blank
             self.stack_labels[-1].bind('<Button-1>', self.select_stack0)
-            if on_mac:
-                self.stack_labels[-1].place(x=18 + self.x, y=176 + self.y, anchor='nw')
-            else:
-                self.stack_labels[-1].place(x=31 + self.x, y=176 + self.y, anchor='nw')
-                self.stack_labels[-1].drop_target_register(DND_FILES)
-                self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack0)
+            self.stack_labels[-1].place(x=31 + self.x, y=176 + self.y, anchor='nw')
+            self.stack_labels[-1].drop_target_register(DND_FILES)
+            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack0)
 
             self.stack_labels.append(tk.Label(self.main.root, image=self.main.stack_blank))
             self.stack_labels[-1].image = self.main.stack_blank
             self.stack_labels[-1].bind('<Button-1>', self.select_stack1)
-            if on_mac:
-                self.stack_labels[-1].place(x=79 + self.x, y=176 + self.y, anchor='nw')
-            else:
-                self.stack_labels[-1].place(x=92 + self.x, y=176 + self.y, anchor='nw')
-                self.stack_labels[-1].drop_target_register(DND_FILES)
-                self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack1)
+            self.stack_labels[-1].place(x=92 + self.x, y=176 + self.y, anchor='nw')
+            self.stack_labels[-1].drop_target_register(DND_FILES)
+            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack1)
 
             self.stack_labels.append(tk.Label(self.main.root, image=self.main.stack_blank))
             self.stack_labels[-1].image = self.main.stack_blank
             self.stack_labels[-1].bind('<Button-1>', self.select_stack2)
-            if on_mac:
-                self.stack_labels[-1].place(x=140 + self.x, y=176 + self.y, anchor='nw')
-            else:
-                self.stack_labels[-1].place(x=153 + self.x, y=176 + self.y, anchor='nw')
-                self.stack_labels[-1].drop_target_register(DND_FILES)
-                self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack2)
+            self.stack_labels[-1].place(x=153 + self.x, y=176 + self.y, anchor='nw')
+            self.stack_labels[-1].drop_target_register(DND_FILES)
+            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack2)
 
             self.stack_labels.append(tk.Label(self.main.root, image=self.main.stack_blank))
             self.stack_labels[-1].image = self.main.stack_blank
             self.stack_labels[-1].bind('<Button-1>', self.select_stack3)
-            if on_mac:
-                self.stack_labels[-1].place(x=201 + self.x, y=176 + self.y, anchor='nw')
-                self.stack_labels.append(tk.Label(self.main.root, image=self.main.stack_blank))
-                self.stack_labels[-1].image = self.main.stack_blank
-                self.stack_labels[-1].place(x=262 + self.x, y=176 + self.y, anchor='nw')
-                self.stack_labels[-1].bind('<Button-1>', self.select_stack4)
-                self.panel_label.place(x=165 + self.x, y=-20 + self.y, anchor='n')
-                self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
-            else:
-                self.stack_labels[-1].place(x=214 + self.x, y=176 + self.y, anchor='nw')
-                self.stack_labels[-1].drop_target_register(DND_FILES)
-                self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack3)
-                self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
-                self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
-                self.blank_image_label.drop_target_register(DND_FILES)
-                self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_replacement)
+            self.stack_labels[-1].place(x=214 + self.x, y=176 + self.y, anchor='nw')
+            self.stack_labels[-1].drop_target_register(DND_FILES)
+            self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack3)
+            self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
+            self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+            self.blank_image_label.drop_target_register(DND_FILES)
+            self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_replacement)
 
             # Buttons
             self.open_file_button = tk.Button(self.main.root, text='Open', width=10, command=self.load_replacement,
@@ -1471,28 +1334,17 @@ class C4IconSwapper:
                                               takefocus=0)
             self.next_icon_button['state'] = DISABLED
 
-            if on_mac:
-                self.open_file_button.place(x=205 + self.x, y=27 + self.y, anchor='w')
-                self.replace_all_button.place(x=258 + self.x, y=58 + self.y, anchor='n')
-                self.replace_button.place(x=258 + self.x, y=91 + self.y, anchor='n')
-                self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
-                self.next_icon_button.place(x=260 + self.x, y=146 + self.y)
-            else:
-                self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
-                self.replace_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
-                self.replace_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
-                self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
-                self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
+            self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
+            self.replace_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
+            self.replace_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
+            self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
+            self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
 
             # Entry
-            if on_mac:
-                self.file_entry_field = tk.Entry(self.main.root, width=22, takefocus=0)
-                self.file_entry_field.place(x=103 + self.x, y=15 + self.y, anchor='n')
-            else:
-                self.file_entry_field = tk.Entry(self.main.root, width=25, takefocus=0)
-                self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
-                self.file_entry_field.drop_target_register(DND_FILES)
-                self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_replacement)
+            self.file_entry_field = tk.Entry(self.main.root, width=25, takefocus=0)
+            self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
+            self.file_entry_field.drop_target_register(DND_FILES)
+            self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_replacement)
             self.file_entry_field.insert(0, 'Select image file...')
             self.file_entry_field['state'] = DISABLED
 
@@ -1552,7 +1404,7 @@ class C4IconSwapper:
                 if filecmp.cmp(img, img_path):
                     return
 
-            stack_length = 5 if on_mac else 4
+            stack_length = 4
 
             new_img_path = ''.join([self.main.temp_dir, 'stack', str(len(self.img_stack)), '.png'])
             if 'replacement_icon.png' in img_path:
@@ -1582,7 +1434,7 @@ class C4IconSwapper:
         def refresh_img_stack(self):
             if not self.img_stack:
                 return
-            stack_length = 5 if on_mac else 4
+            stack_length = 4
             for i, image in enumerate(self.img_stack):
                 if i == stack_length:
                     break
@@ -1593,7 +1445,7 @@ class C4IconSwapper:
                 self.stack_labels[i].image = icon
 
         def dec_img_stack(self):
-            stack_length = 5 if on_mac else 4
+            stack_length = 4
             if len(self.img_stack) <= stack_length:
                 return
             temp = self.img_stack[0]
@@ -1602,7 +1454,7 @@ class C4IconSwapper:
             self.refresh_img_stack()
 
         def inc_img_stack(self):
-            stack_length = 5 if on_mac else 4
+            stack_length = 4
             if len(self.img_stack) <= stack_length:
                 return
             temp = self.img_stack[-1]
@@ -1658,7 +1510,7 @@ class C4IconSwapper:
                 self.add_to_img_stack(self.main.replacement_image_path, index=0)
                 self.load_replacement(given_path=self.img_stack[-1])
                 return
-            stack_length = 5 if on_mac else 4
+            stack_length = 4
             if len(self.img_stack) > stack_length and replacement_index > 3:
                 self.load_replacement(given_path=self.img_stack[0])
                 temp = self.img_stack[0]
@@ -1685,7 +1537,7 @@ class C4IconSwapper:
                 self.add_to_img_stack(self.main.replacement_image_path, index=1)
                 self.load_replacement(given_path=self.img_stack[-1])
                 return
-            stack_length = 5 if on_mac else 4
+            stack_length = 4
             if len(self.img_stack) > stack_length and replacement_index > 3:
                 self.load_replacement(given_path=self.img_stack[1])
                 temp = self.img_stack[1]
@@ -1712,7 +1564,7 @@ class C4IconSwapper:
                 self.add_to_img_stack(self.main.replacement_image_path, index=2)
                 self.load_replacement(given_path=self.img_stack[-1])
                 return
-            stack_length = 5 if on_mac else 4
+            stack_length = 4
             if len(self.img_stack) > stack_length and replacement_index > 3:
                 self.load_replacement(given_path=self.img_stack[2])
                 temp = self.img_stack[2]
@@ -1739,7 +1591,7 @@ class C4IconSwapper:
                 self.add_to_img_stack(self.main.replacement_image_path, index=3)
                 self.load_replacement(given_path=self.img_stack[-1])
                 return
-            stack_length = 5 if on_mac else 4
+            stack_length = 4
             if len(self.img_stack) > stack_length and replacement_index > 3:
                 self.load_replacement(given_path=self.img_stack[3])
                 temp = self.img_stack[3]
@@ -1752,79 +1604,52 @@ class C4IconSwapper:
                 return
             self.load_replacement(given_path=self.img_stack[3])
 
-        if on_mac:
-            def select_stack4(self, event):
-                if len(self.img_stack) <= 4:
-                    return event
-                replacement_in_stack = False
-                replacement_index = None
-                for img in self.img_stack:
-                    if filecmp.cmp(img, self.main.replacement_image_path):
-                        replacement_in_stack = True
-                        replacement_index = self.img_stack.index(img)
-                        break
-                if not replacement_in_stack:
-                    self.add_to_img_stack(self.main.replacement_image_path, index=4)
-                    self.load_replacement(given_path=self.img_stack[-1])
-                    return
-                if len(self.img_stack) > 5 and replacement_index > 4:
-                    self.load_replacement(given_path=self.img_stack[4])
-                    temp = self.img_stack[4]
-                    temp_r = self.img_stack[replacement_index]
-                    self.img_stack.pop(replacement_index)
-                    self.img_stack.pop(4)
-                    self.img_stack.insert(4, temp_r)
-                    self.img_stack.insert(replacement_index, temp)
-                    self.refresh_img_stack()
-                    return
-                self.load_replacement(given_path=self.img_stack[4])
-        else:
-            def drop_in_replacement(self, event):
-                img_path = event.data.replace('{', '').replace('}', '')
-                multi_file_drop = []
-                running_str = ''
-                for char in img_path:
-                    if char == ' ' and is_valid_image(running_str):
-                        multi_file_drop.append(running_str)
-                        running_str = ''
-                        continue
-                    running_str += char
-                if is_valid_image(running_str):
+        def drop_in_replacement(self, event):
+            img_path = event.data.replace('{', '').replace('}', '')
+            multi_file_drop = []
+            running_str = ''
+            for char in img_path:
+                if char == ' ' and is_valid_image(running_str):
                     multi_file_drop.append(running_str)
-                if multi_file_drop:
-                    for file in multi_file_drop:
-                        self.load_replacement(given_path=file)
-                    return
-                if '.' not in img_path:
-                    image_paths = os.listdir(img_path)
-                    for new_img_path in image_paths:
-                        self.load_replacement(given_path=''.join([img_path, '/', new_img_path]))
-                    return
-                if not is_valid_image(img_path):
-                    return
-                self.load_replacement(given_path=img_path)
+                    running_str = ''
+                    continue
+                running_str += char
+            if is_valid_image(running_str):
+                multi_file_drop.append(running_str)
+            if multi_file_drop:
+                for file in multi_file_drop:
+                    self.load_replacement(given_path=file)
+                return
+            if '.' not in img_path:
+                image_paths = os.listdir(img_path)
+                for new_img_path in image_paths:
+                    self.load_replacement(given_path=''.join([img_path, '/', new_img_path]))
+                return
+            if not is_valid_image(img_path):
+                return
+            self.load_replacement(given_path=img_path)
 
-            def drop_stack0(self, event):
-                dropped_path = event.data.replace('{', '').replace('}', '')
-                self.add_to_img_stack(dropped_path, index=0)
+        def drop_stack0(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            self.add_to_img_stack(dropped_path, index=0)
 
-            def drop_stack1(self, event):
-                dropped_path = event.data.replace('{', '').replace('}', '')
-                self.add_to_img_stack(dropped_path, index=1)
+        def drop_stack1(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            self.add_to_img_stack(dropped_path, index=1)
 
-            def drop_stack2(self, event):
-                dropped_path = event.data.replace('{', '').replace('}', '')
-                self.add_to_img_stack(dropped_path, index=2)
+        def drop_stack2(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            self.add_to_img_stack(dropped_path, index=2)
 
-            def drop_stack3(self, event):
-                dropped_path = event.data.replace('{', '').replace('}', '')
-                self.add_to_img_stack(dropped_path, index=3)
+        def drop_stack3(self, event):
+            dropped_path = event.data.replace('{', '').replace('}', '')
+            self.add_to_img_stack(dropped_path, index=3)
 
     class ExportPanel:
         def __init__(self, main):
             # Initialize Export Panel
             self.main = main
-            self.x, self.y = (730, -50) if on_mac else (615, -50)
+            self.x, self.y = (615, -50)
             self.abort = False
 
             # Labels
@@ -1839,14 +1664,11 @@ class C4IconSwapper:
                                               command=self.do_export, takefocus=0)
             self.export_as_button['state'] = DISABLED
 
-            if not on_mac:
-                self.export_as_button.place(x=145 + self.x, y=250 + self.y, anchor='n')
-                self.export_button = tk.Button(self.main.root, text='Quick Export', width=20,
-                                               command=self.quick_export, takefocus=0)
-                self.export_button.place(x=145 + self.x, y=220 + self.y, anchor='n')
-                self.export_button['state'] = DISABLED
-            else:
-                self.export_as_button.place(x=145 + self.x, y=220 + self.y, anchor='n')
+            self.export_as_button.place(x=145 + self.x, y=250 + self.y, anchor='n')
+            self.export_button = tk.Button(self.main.root, text='Quick Export', width=20,
+                                           command=self.quick_export, takefocus=0)
+            self.export_button.place(x=145 + self.x, y=220 + self.y, anchor='n')
+            self.export_button['state'] = DISABLED
 
             # Entry
             self.driver_name_var = StringVar()
@@ -1867,106 +1689,105 @@ class C4IconSwapper:
                                                      variable=self.include_backups, takefocus=0)
             self.include_backups_check.place(x=63 + self.x, y=130 + self.y, anchor='w')
 
-        if not on_mac:
-            def quick_export(self, first_call=True, driver_name=''):
-                if first_call:
-                    self.do_export(quick_export=True)
-                    return
+        def quick_export(self, first_call=True, driver_name=''):
+            if first_call:
+                self.do_export(quick_export=True)
+                return
 
-                def confirm_overwrite():
-                    # Remove old driver
-                    if os.path.isfile(driver_path := ''.join([self.main.cur_dir, driver_name, '.c4z'])):
-                        os.remove(driver_path)
-                    self.export_file(driver_name)
-                    export_cleanup(as_abort=False)
-
-                def export_cleanup(as_abort=True):
-                    if not as_abort:
-                        self.main.driver_version_var.set(self.main.driver_version_new_var.get())
-                        if self.inc_driver_version.get():
-                            self.main.driver_version_new_var.set(str(int(self.main.driver_version_new_var.get()) + 1))
-                    # Restore original xml and lua file
-                    self.main.driver_xml.restore()
-                    if os.path.isfile(lua_bak_path := f'{self.main.temp_dir}driver/driver.lua.bak'):
-                        os.remove(lua_path := f'{self.main.temp_dir}driver/driver.lua')
-                        os.rename(lua_bak_path, lua_path)
-                    os.remove(xml_path := f'{self.main.temp_dir}driver/driver.xml')
-                    os.rename(f'{self.main.temp_dir}driver/driver.xml.bak', xml_path)
-
-                    overwrite_pop_up.destroy()
-
-                # Overwrite file popup
-                if os.path.isfile(f'{self.main.cur_dir}{driver_name}.c4z'):
-                    overwrite_pop_up = Toplevel(self.main.root)
-                    overwrite_pop_up.title('Overwrite')
-                    overwrite_pop_up.geometry('239x70')
-                    overwrite_pop_up.geometry(f'+{self.main.root.winfo_rootx() + self.x}+'
-                                              f'{self.main.root.winfo_rooty()}')
-                    overwrite_pop_up.protocol('WM_DELETE_WINDOW', export_cleanup)
-                    overwrite_pop_up.grab_set()
-                    overwrite_pop_up.focus()
-                    overwrite_pop_up.transient(self.main.root)
-                    overwrite_pop_up.resizable(False, False)
-
-                    confirm_label = Label(overwrite_pop_up, text='Would you like to overwrite the existing file?')
-                    confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
-
-                    yes_button = tk.Button(overwrite_pop_up, text='Yes', width='10', command=confirm_overwrite)
-                    yes_button.grid(row=2, column=0, sticky='e', padx=5)
-
-                    no_button = tk.Button(overwrite_pop_up, text='No', width='10', command=export_cleanup)
-                    no_button.grid(row=2, column=1, sticky='w', padx=5)
-                    self.abort = True
-                    return
+            def confirm_overwrite():
+                # Remove old driver
+                if os.path.isfile(driver_path := ''.join([self.main.cur_dir, driver_name, '.c4z'])):
+                    os.remove(driver_path)
                 self.export_file(driver_name)
+                export_cleanup(as_abort=False)
 
-            def export_file(self, driver_name: str, path=None):
-                random_tags = []
+            def export_cleanup(as_abort=True):
+                if not as_abort:
+                    self.main.driver_version_var.set(self.main.driver_version_new_var.get())
+                    if self.inc_driver_version.get():
+                        self.main.driver_version_new_var.set(str(int(self.main.driver_version_new_var.get()) + 1))
+                # Restore original xml and lua file
+                self.main.driver_xml.restore()
+                if os.path.isfile(lua_bak_path := f'{self.main.temp_dir}driver/driver.lua.bak'):
+                    os.remove(lua_path := f'{self.main.temp_dir}driver/driver.lua')
+                    os.rename(lua_bak_path, lua_path)
+                os.remove(xml_path := f'{self.main.temp_dir}driver/driver.xml')
+                os.rename(f'{self.main.temp_dir}driver/driver.xml.bak', xml_path)
 
-                def get_random_string():
-                    random_string = str(random.randint(1111111, 9999999))
-                    if random_string not in random_tags:
-                        random_tags.append(random_string)
-                        return random_string
-                    get_random_string()
+                overwrite_pop_up.destroy()
 
-                if path is None:
-                    path = ''.join([self.main.cur_dir, driver_name, '.c4z'])
-                bak_files_dict = {}
-                bak_files = []
-                bak_folder = f'{self.main.temp_dir}bak_files/'
+            # Overwrite file popup
+            if os.path.isfile(f'{self.main.cur_dir}{driver_name}.c4z'):
+                overwrite_pop_up = Toplevel(self.main.root)
+                overwrite_pop_up.title('Overwrite')
+                overwrite_pop_up.geometry('239x70')
+                overwrite_pop_up.geometry(f'+{self.main.root.winfo_rootx() + self.x}+'
+                                          f'{self.main.root.winfo_rooty()}')
+                overwrite_pop_up.protocol('WM_DELETE_WINDOW', export_cleanup)
+                overwrite_pop_up.grab_set()
+                overwrite_pop_up.focus()
+                overwrite_pop_up.transient(self.main.root)
+                overwrite_pop_up.resizable(False, False)
 
-                # Backup and move all .bak files if not included
-                if not self.include_backups.get():
-                    directories = list_all_sub_directories(f'{self.main.temp_dir}driver', include_root_dir=True)
-                    if os.path.isdir(bak_folder):
-                        shutil.rmtree(bak_folder)
-                    os.mkdir(bak_folder)
-                    for directory in directories:
-                        for file in os.listdir(directory):
-                            if file.endswith('.bak'):
-                                random_tag = get_random_string()
-                                current_path = ''.join([directory, '/', file])
-                                new_path = ''.join([bak_folder, file, random_tag])
-                                bak_files.append(current_path)
-                                bak_files_dict[current_path] = new_path
-                                shutil.copy(current_path, new_path)
-                                os.remove(current_path)
+                confirm_label = Label(overwrite_pop_up, text='Would you like to overwrite the existing file?')
+                confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
 
-                # Create .c4z file
-                driver_zip = ''.join([self.main.temp_dir, driver_name, '.zip'])
-                driver_c4z = ''.join([self.main.temp_dir, driver_name, '.c4z'])
-                shutil.make_archive(self.main.temp_dir + driver_name, 'zip', f'{self.main.temp_dir}driver')
-                base = os.path.splitext(driver_zip)[0]
-                os.rename(driver_zip, f'{base}.c4z')
-                shutil.copy(driver_c4z, path)
-                os.remove(driver_c4z)
+                yes_button = tk.Button(overwrite_pop_up, text='Yes', width='10', command=confirm_overwrite)
+                yes_button.grid(row=2, column=0, sticky='e', padx=5)
 
-                # Restore .bak files
-                if not self.include_backups.get():
-                    for file in bak_files:
-                        shutil.copy(bak_files_dict[file], file)
+                no_button = tk.Button(overwrite_pop_up, text='No', width='10', command=export_cleanup)
+                no_button.grid(row=2, column=1, sticky='w', padx=5)
+                self.abort = True
+                return
+            self.export_file(driver_name)
+
+        def export_file(self, driver_name: str, path=None):
+            random_tags = []
+
+            def get_random_string():
+                random_string = str(random.randint(1111111, 9999999))
+                if random_string not in random_tags:
+                    random_tags.append(random_string)
+                    return random_string
+                get_random_string()
+
+            if path is None:
+                path = ''.join([self.main.cur_dir, driver_name, '.c4z'])
+            bak_files_dict = {}
+            bak_files = []
+            bak_folder = f'{self.main.temp_dir}bak_files/'
+
+            # Backup and move all .bak files if not included
+            if not self.include_backups.get():
+                directories = list_all_sub_directories(f'{self.main.temp_dir}driver', include_root_dir=True)
+                if os.path.isdir(bak_folder):
                     shutil.rmtree(bak_folder)
+                os.mkdir(bak_folder)
+                for directory in directories:
+                    for file in os.listdir(directory):
+                        if file.endswith('.bak'):
+                            random_tag = get_random_string()
+                            current_path = ''.join([directory, '/', file])
+                            new_path = ''.join([bak_folder, file, random_tag])
+                            bak_files.append(current_path)
+                            bak_files_dict[current_path] = new_path
+                            shutil.copy(current_path, new_path)
+                            os.remove(current_path)
+
+            # Create .c4z file
+            driver_zip = ''.join([self.main.temp_dir, driver_name, '.zip'])
+            driver_c4z = ''.join([self.main.temp_dir, driver_name, '.c4z'])
+            shutil.make_archive(self.main.temp_dir + driver_name, 'zip', f'{self.main.temp_dir}driver')
+            base = os.path.splitext(driver_zip)[0]
+            os.rename(driver_zip, f'{base}.c4z')
+            shutil.copy(driver_c4z, path)
+            os.remove(driver_c4z)
+
+            # Restore .bak files
+            if not self.include_backups.get():
+                for file in bak_files:
+                    shutil.copy(bak_files_dict[file], file)
+                shutil.rmtree(bak_folder)
 
         def do_export(self, quick_export=False):
             # Format driver name
@@ -2064,12 +1885,8 @@ class C4IconSwapper:
 
                     # Modify lua file
                     modified_lua_lines = []
-                    if on_mac:
-                        with open(get_path(lua_path), errors='ignore') as driver_lua_file:
-                            driver_lua_lines = driver_lua_file.readlines()
-                    else:
-                        with open(lua_path, errors='ignore') as driver_lua_file:
-                            driver_lua_lines = driver_lua_file.readlines()
+                    with open(lua_path, errors='ignore') as driver_lua_file:
+                        driver_lua_lines = driver_lua_file.readlines()
                     for line in driver_lua_lines:
                         new_line = line
                         for name_change in state_name_changes:
@@ -2086,12 +1903,8 @@ class C4IconSwapper:
                                 new_line = new_line.replace(f'{name_change[0]}=', f'{name_change[1]}=')
                                 new_line = new_line.replace(f'{name_change[2]}=', f'{name_change[3]}=')
                         modified_lua_lines.append(new_line)
-                    if on_mac:
-                        with open(get_path(lua_path), 'w', errors='ignore') as driver_lua_file:
-                            driver_lua_file.writelines(modified_lua_lines)
-                    else:
-                        with open(lua_path, 'w', errors='ignore') as driver_lua_file:
-                            driver_lua_file.writelines(modified_lua_lines)
+                    with open(lua_path, 'w', errors='ignore') as driver_lua_file:
+                        driver_lua_file.writelines(modified_lua_lines)
 
                 # Do multi-state related changes in xml
                 if state_name_changes:
@@ -2191,22 +2004,15 @@ class C4IconSwapper:
             if os.path.isfile(xml_bak_path := f'{self.main.temp_dir}driver/driver.xml.bak'):
                 os.remove(xml_bak_path)
             os.rename(xml_path := f'{self.main.temp_dir}driver/driver.xml', xml_bak_path)
-            if on_mac:
-                with open(get_path(xml_path), 'w', errors='ignore') as out_file:
-                    out_file.writelines(self.main.driver_xml.get_lines())
+            with open(xml_path, 'w', errors='ignore') as out_file:
+                out_file.writelines(self.main.driver_xml.get_lines())
+            # Call export functions
+            if quick_export:
+                self.quick_export(first_call=False, driver_name=driver_name)
+                if self.abort:
+                    self.abort = False
+                    return
             else:
-                with open(xml_path, 'w', errors='ignore') as out_file:
-                    out_file.writelines(self.main.driver_xml.get_lines())
-            if on_mac:
-                random_tags = []
-
-                def get_random_string():
-                    random_string = str(random.randint(1111111, 9999999))
-                    if random_string not in random_tags:
-                        random_tags.append(random_string)
-                        return random_string
-                    get_random_string()
-
                 # Save As Dialog
                 out_file = filedialog.asksaveasfile(initialfile=f'{driver_name}.c4z',
                                                     filetypes=[('Control4 Drivers', '*.c4z')])
@@ -2217,72 +2023,12 @@ class C4IconSwapper:
                     if '.c4z' not in out_file_path:
                         flag_remove_empty_file = True
                         out_file_path += '.c4z'
-
                     # Export file
                     if os.path.isfile(out_file_path):
                         os.remove(out_file_path)
-                    bak_files_dict = {}
-                    bak_files = []
-                    bak_folder = f'{self.main.temp_dir}bak_files/'
-
-                    # Backup and move all .bak files if not included
-                    if not self.include_backups.get():
-                        directories = list_all_sub_directories(f'{self.main.temp_dir}/driver', include_root_dir=True)
-                        if os.path.isdir(bak_folder):
-                            shutil.rmtree(bak_folder)
-                        os.mkdir(bak_folder)
-                        for directory in directories:
-                            for file in os.listdir(directory):
-                                if file.endswith('.bak'):
-                                    random_tag = get_random_string()
-                                    current_path = ''.join([directory, '/', file])
-                                    new_path = ''.join([bak_folder, file, random_tag])
-                                    bak_files.append(current_path)
-                                    bak_files_dict[current_path] = new_path
-                                    shutil.copy(current_path, new_path)
-                                    os.remove(current_path)
-
-                    # Create .c4z file
-                    driver_zip = ''.join([self.main.temp_dir, driver_name, '.zip'])
-                    driver_c4z = ''.join([self.main.temp_dir, driver_name, '.c4z'])
-                    shutil.make_archive(self.main.temp_dir + driver_name, 'zip', f'{self.main.temp_dir}driver')
-                    base = os.path.splitext(driver_zip)[0]
-                    os.rename(driver_zip, f'{base}.c4z')
-                    shutil.copy(driver_c4z, out_file_path)
-                    os.remove(driver_c4z)
-
-                    # Restore .bak files
-                    if not self.include_backups.get():
-                        for file in bak_files:
-                            shutil.copy(bak_files_dict[file], file)
-                        shutil.rmtree(bak_folder)
-
+                    self.export_file(driver_name, path=out_file_path)
                     if flag_remove_empty_file:
                         os.remove(out_file_path.replace('.c4z', ''))
-            else:
-                # Call export functions
-                if quick_export:
-                    self.quick_export(first_call=False, driver_name=driver_name)
-                    if self.abort:
-                        self.abort = False
-                        return
-                else:
-                    # Save As Dialog
-                    out_file = filedialog.asksaveasfile(initialfile=f'{driver_name}.c4z',
-                                                        filetypes=[('Control4 Drivers', '*.c4z')])
-                    with contextlib.suppress(AttributeError):
-                        out_file_path = out_file.name
-                        out_file.close()
-                        flag_remove_empty_file = False
-                        if '.c4z' not in out_file_path:
-                            flag_remove_empty_file = True
-                            out_file_path += '.c4z'
-                        # Export file
-                        if os.path.isfile(out_file_path):
-                            os.remove(out_file_path)
-                        self.export_file(driver_name, path=out_file_path)
-                        if flag_remove_empty_file:
-                            os.remove(out_file_path.replace('.c4z', ''))
 
             # Restore original xml and lua
             self.main.driver_version_var.set(self.main.driver_version_new_var.get())
@@ -2296,12 +2042,6 @@ class C4IconSwapper:
             os.rename(f'{self.main.temp_dir}driver/driver.xml.bak', xml_path)
 
         def validate_driver_name(self, *_):
-            if on_mac:
-                if no_dark_mode or not is_dark_mode():
-                    self.driver_name_entry['background'] = light_entry_bg
-                else:
-                    self.driver_name_entry['background'] = dark_entry_bg
-
             self.driver_name_var.set(''.join([char for char in self.driver_name_var.get() if char in valid_chars]))
 
             self.main.ask_to_save = True
@@ -2325,22 +2065,14 @@ class C4IconSwapper:
             return valid_id
         # Create temporary directory
         self.instance_id = str(random.randint(111111, 999999))
-        if on_mac:
-            is_dark_mode()
-            self.cur_dir = ''.join([get_path('/tmp'), '/'])
-        else:
-            self.cur_dir = f'{os.getcwd()}/'
+        self.cur_dir = f'{os.getcwd()}/'
         self.temp_root_dir = f'{self.cur_dir}C4IconSwapperTemp/'
         self.temp_dir = ''.join([self.temp_root_dir, self.instance_id, '/'])
         self.checked_in, self.recovery_wait, self.recover_instance, checked_in_instances = False, False, '', []
         if os.path.isdir(self.temp_root_dir):
             if os.path.isfile(instance_path := f'{self.temp_root_dir}instance'):
-                if on_mac:
-                    with open(get_path(instance_path), 'r', errors='ignore') as instance_file:
-                        current_instances = instance_file.readlines()
-                else:
-                    with open(instance_path, 'r', errors='ignore') as instance_file:
-                        current_instances = instance_file.readlines()
+                with open(instance_path, 'r', errors='ignore') as instance_file:
+                    current_instances = instance_file.readlines()
                 if current_instances:
                     if not os.path.isdir(check_in_path := f'{self.temp_root_dir}check_in'):
                         os.mkdir(check_in_path)
@@ -2403,40 +2135,24 @@ class C4IconSwapper:
                 if f'{self.instance_id}\n' in current_instances:
                     self.instance_id = valid_instance_id(current_instances)
                 current_instances.append(f'{self.instance_id}\n')
-                if on_mac:
-                    with open(get_path(instance_path), 'w', errors='ignore') as out_file:
-                        out_file.writelines(current_instances)
-                else:
-                    with open(instance_path, 'w', errors='ignore') as out_file:
-                        out_file.writelines(current_instances)
+                with open(instance_path, 'w', errors='ignore') as out_file:
+                    out_file.writelines(current_instances)
                 if self.recover_instance and os.path.isdir(self.temp_root_dir + self.recover_instance):
                     os.rename(self.temp_root_dir + self.recover_instance, self.temp_dir)
             else:
                 shutil.rmtree(self.temp_root_dir)
                 os.mkdir(self.temp_root_dir)
-                if on_mac:
-                    with open(get_path(instance_path), 'w', errors='ignore') as out_file:
-                        out_file.writelines(f'{self.instance_id}\n')
-                else:
-                    with open(instance_path, 'w', errors='ignore') as out_file:
-                        out_file.writelines(f'{self.instance_id}\n')
+                with open(instance_path, 'w', errors='ignore') as out_file:
+                    out_file.writelines(f'{self.instance_id}\n')
         else:
             os.mkdir(self.temp_root_dir)
-            if on_mac:
-                with open(get_path(f'{self.temp_root_dir}instance'), 'w', errors='ignore') as out_file:
-                    out_file.writelines(f'{self.instance_id}\n')
-            else:
-                with open(f'{self.temp_root_dir}instance', 'w', errors='ignore') as out_file:
-                    out_file.writelines(f'{self.instance_id}\n')
+            with open(f'{self.temp_root_dir}instance', 'w', errors='ignore') as out_file:
+                out_file.writelines(f'{self.instance_id}\n')
         if not self.recover_instance:
             os.mkdir(self.temp_dir)
         # Initialize main program
-        if on_mac:
-            self.root = tk.Tk()
-            self.root.geometry('1055x267')
-        else:
-            self.root = TkinterDnD.Tk()
-            self.root.geometry('915x287')
+        self.root = TkinterDnD.Tk()
+        self.root.geometry('915x287')
         self.root.bind('<KeyRelease>', self.key_release)
 
         # Root window properties
@@ -2499,12 +2215,8 @@ class C4IconSwapper:
 
         # Panels; Creating blank image for panels
         temp_image_file = f'{self.temp_root_dir}blank.gif'
-        if on_mac:
-            with open(get_path(temp_image_file), 'wb') as blank_img_file:
-                blank_img_file.write(base64.b64decode(blank_img_b64))
-        else:
-            with open(temp_image_file, 'wb') as blank_img_file:
-                blank_img_file.write(base64.b64decode(blank_img_b64))
+        with open(temp_image_file, 'wb') as blank_img_file:
+            blank_img_file.write(base64.b64decode(blank_img_b64))
         blank_image = Image.open(temp_image_file)
         blank = blank_image.resize((128, 128))
         self.blank = ImageTk.PhotoImage(blank)
@@ -2551,20 +2263,15 @@ class C4IconSwapper:
         # Separators
         self.separator0 = ttk.Separator(self.root, orient='vertical')
         self.separator1 = ttk.Separator(self.root, orient='vertical')
-        if on_mac:
-            self.separator0.place(x=350, y=0, height=290)
-            self.separator1.place(x=700, y=0, height=290)
-        else:
-            self.separator0.place(x=305, y=0, height=270)
-            self.separator1.place(x=610, y=0, height=270)
+        self.separator0.place(x=305, y=0, height=270)
+        self.separator1.place(x=610, y=0, height=270)
 
         # Creating window icon
-        if not on_mac:
-            temp_icon_file = f'{self.temp_root_dir}icon.ico'
-            with open(temp_icon_file, 'wb') as icon_file:
-                icon_file.write(base64.b64decode(win_icon))
-            self.root.wm_iconbitmap(temp_icon_file)
-            os.remove(temp_icon_file)
+        temp_icon_file = f'{self.temp_root_dir}icon.ico'
+        with open(temp_icon_file, 'wb') as icon_file:
+            icon_file.write(base64.b64decode(win_icon))
+        self.root.wm_iconbitmap(temp_icon_file)
+        os.remove(temp_icon_file)
 
         # Do recovery if necessary
         if self.recover_instance:
@@ -2582,7 +2289,7 @@ class C4IconSwapper:
             if not first_time:
                 multi_images = False
                 multi_check = 0
-                stack_size = 5 if on_mac else 4
+                stack_size = 4
                 for file in os.listdir(f'{self.temp_dir}img_recovery'):
                     self.replacement_panel.load_replacement(given_path=''.join([self.temp_dir, 'img_recovery/', file]))
                     if multi_check > stack_size + 1:
@@ -2600,13 +2307,7 @@ class C4IconSwapper:
 
         # Main Loop
         self.root.config(menu=self.menu)
-        if not on_mac:
-            self.root.after(150, self.instance_check)
-        else:
-            self.dark_mode = is_dark_mode()
-            self.wait_to_check = False
-            if not no_dark_mode:
-                self.root.after(150, self.dark_mode_check)
+        self.root.after(150, self.instance_check)
         self.root.protocol('WM_DELETE_WINDOW', self.on_program_exit)
         self.root.mainloop()
 
@@ -2631,10 +2332,7 @@ class C4IconSwapper:
             self.replacement_panel.dec_img_stack()
         elif event.keysym == 'c' and self.easter_counter >= 10:
             self.version_label.config(text='\u262D', font=('Arial', 25))
-            if on_mac:
-                self.version_label.place(relx=0.9999, rely=1.01, anchor='se')
-            else:
-                self.version_label.place(relx=1.005, rely=1.02, anchor='se')
+            self.version_label.place(relx=1.005, rely=1.02, anchor='se')
             self.easter_counter = -1
 
     def get_states(self, lua_file):
@@ -2679,10 +2377,7 @@ class C4IconSwapper:
         if not self.counter:
             return
         self.counter -= 1
-        if on_mac and not no_dark_mode and is_dark_mode():
-            self.export_panel.driver_name_entry['background'] = dark_entry_bg \
-                if self.export_panel.driver_name_entry['background'] != dark_entry_bg else 'pink'
-        elif self.export_panel.driver_name_entry['background'] != light_entry_bg:
+        if self.export_panel.driver_name_entry['background'] != light_entry_bg:
             self.export_panel.driver_name_entry['background'] = light_entry_bg
         else:
             self.export_panel.driver_name_entry['background'] = 'pink'
@@ -2695,10 +2390,6 @@ class C4IconSwapper:
         self.end_program()
 
     def end_program(self):
-        if on_mac:
-            shutil.rmtree(self.temp_root_dir)
-            self.root.destroy()
-            return
         with open(instance_path := f'{self.temp_root_dir}instance', 'r', errors='ignore') as instance_file:
             current_instances = instance_file.readlines()
         if len(current_instances) > 1:
@@ -2739,7 +2430,7 @@ class C4IconSwapper:
 
         self.root.destroy()
 
-    def ask_to_save_dialog(self, *return_args, on_exit=True, root_destroy=False, return_to=''):
+    def ask_to_save_dialog(self, on_exit=True, root_destroy=False):
         def cancel_dialog():
             self.ask_to_save = True
             save_dialog.destroy()
@@ -2748,15 +2439,6 @@ class C4IconSwapper:
             save_dialog.destroy()
             if root_destroy:
                 self.end_program()
-            elif return_to == 'generic':
-                self.c4z_panel.load_gen_driver()
-            elif return_to == 'multi':
-                self.c4z_panel.load_gen_multi()
-            elif return_to == 'load_c4z':
-                if return_args:
-                    self.c4z_panel.load_c4z(given_path=return_args[0], recovery=return_args[1])
-                    return
-                self.c4z_panel.load_c4z()
 
         def do_project_save():
             self.save_project()
@@ -2764,11 +2446,8 @@ class C4IconSwapper:
 
         save_dialog = Toplevel(self.root)
         save_dialog.title('Save current project?')
-        if on_mac:
-            save_dialog.geometry('274x70')
-        else:
-            save_dialog.geometry('239x70')
-        if on_exit and not on_mac:
+        save_dialog.geometry('239x70')
+        if on_exit:
             win_x = self.root.winfo_rootx() + self.root.winfo_width() - 250
             save_dialog.geometry(f'+{win_x}+{self.root.winfo_rooty()}')
         else:
@@ -2789,6 +2468,7 @@ class C4IconSwapper:
         no_button.grid(row=2, column=1, sticky='w', padx=5)
 
         self.ask_to_save = False
+        return save_dialog
 
     def close_connections(self):
         if self.connections_win is None:
@@ -2884,14 +2564,12 @@ class C4IconSwapper:
             self.c4z_panel.load_c4z(saved_driver_path)
             os.remove(saved_driver_path)
             self.export_panel.export_button['state'] = NORMAL
-            if not on_mac:
-                self.export_panel.export_as_button['state'] = NORMAL
+            self.export_panel.export_as_button['state'] = NORMAL
             if os.path.isfile(f'{self.c4z_panel.icons[self.c4z_panel.current_icon].path}.bak'):
                 self.c4z_panel.restore_button['state'] = NORMAL
         else:
             self.export_panel.export_button['state'] = DISABLED
-            if not on_mac:
-                self.export_panel.export_as_button['state'] = DISABLED
+            self.export_panel.export_as_button['state'] = DISABLED
             self.c4z_panel.icon_name_label.config(text='icon name')
             self.c4z_panel.icon_label.config(text='0 of 0')
         self.driver_selected = save_state.driver_selected
@@ -2989,6 +2667,8 @@ class C4IconSwapper:
         if not os.path.isfile(file_path := f'{self.temp_dir}undo_history.c4is'):
             return
         current_icon = self.c4z_panel.current_icon
+        ask_to_save = self.ask_to_save
+        self.ask_to_save = False
         self.load_c4is(file_path)
         self.c4z_panel.current_icon = current_icon
         self.c4z_panel.update_icon()
@@ -2999,6 +2679,7 @@ class C4IconSwapper:
 
         os.remove(file_path)
         self.edit.entryconfig(self.undo_pos, state=DISABLED)
+        self.ask_to_save = ask_to_save
 
     def update_undo_history(self):
         with open(f'{self.temp_dir}undo_history.c4is', 'wb') as output:
@@ -3006,37 +2687,17 @@ class C4IconSwapper:
 
         self.edit.entryconfig(self.undo_pos, state=NORMAL)
 
-    if not on_mac:
-        def instance_check(self):
-            if self.checked_in and not os.path.isdir(f'{self.temp_root_dir}check_in'):
-                self.checked_in = False
-            elif not self.checked_in and os.path.isdir(f'{self.temp_root_dir}check_in'):
-                with open(''.join([self.temp_root_dir, 'check_in/', self.instance_id]), 'w',
-                          errors='ignore') as check_in_file:
-                    check_in_file.writelines('')
-                self.checked_in = True
-                self.root.title(''.join(['C4 Icon Swapper (', self.instance_id, ')']))
+    def instance_check(self):
+        if self.checked_in and not os.path.isdir(f'{self.temp_root_dir}check_in'):
+            self.checked_in = False
+        elif not self.checked_in and os.path.isdir(f'{self.temp_root_dir}check_in'):
+            with open(''.join([self.temp_root_dir, 'check_in/', self.instance_id]), 'w',
+                      errors='ignore') as check_in_file:
+                check_in_file.writelines('')
+            self.checked_in = True
+            self.root.title(''.join(['C4 Icon Swapper (', self.instance_id, ')']))
 
-            self.root.after(150, self.instance_check)
-    else:
-        def dark_mode_check(self):
-            self.root.after(150, self.dark_mode_check)
-            if self.wait_to_check or self.dark_mode == (dark_mode_status := is_dark_mode()):
-                return
-            self.wait_to_check = True
-            self.dark_mode = dark_mode_status
-            background = dark_entry_bg if self.dark_mode else light_entry_bg
-            if self.connections_win:
-                for entry in self.connections_win.connections:
-                    entry.name_entry['background'] = background
-            self.export_panel.driver_name_entry['background'] = background
-            for state in self.states:
-                if state.bg_color not in ['pink', 'cyan']:
-                    state.bg_color = background
-            if self.states_win:
-                for state in self.states_win.states:
-                    state.refresh(bg_only=True)
-            self.wait_to_check = False
+        self.root.after(150, self.instance_check)
 
     def easter(self, *_, decay=False):
         if self.easter_counter < 0:
@@ -3070,40 +2731,6 @@ def is_valid_image(file_path: str):
 
 def natural_key(string: str):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
-
-
-if on_mac:
-    def is_dark_mode():
-        global no_dark_mode
-
-        if no_dark_mode:
-            return False
-
-        if no_dark_mode is None:
-            mac_ver_temp = platform.mac_ver()
-            mac_ver = mac_ver_temp[0]
-            ver_check = ''
-            one_point = False
-            for char in mac_ver:
-                if char == '.':
-                    if one_point:
-                        break
-                    one_point = True
-                ver_check += char
-            if float(ver_check) < 10.14:
-                no_dark_mode = True
-                return False
-            no_dark_mode = False
-        cmd = 'defaults read -g AppleInterfaceStyle'
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-        return bool(p.communicate()[0])
-
-
-    def get_path(filename: str):
-        name = os.path.splitext(filename)[0]
-        ext = os.path.splitext(filename)[1]
-        file = NSBundle.mainBundle().pathForResource_ofType_(name, ext)
-        return file or os.path.realpath(filename)
 
 
 if __name__ == '__main__':
