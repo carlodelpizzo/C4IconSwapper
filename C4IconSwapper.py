@@ -2653,6 +2653,7 @@ class C4IconSwapper:
 
     def open_edit_win(self, window, win_type: str):
         if window:
+            window.window.deiconify()
             window.window.focus()
             return
         if win_type == 'conn':
