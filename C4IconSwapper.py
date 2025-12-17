@@ -21,16 +21,16 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 version = '1.3'
 label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
 
-letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
-           'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
-capital_letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-                   'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
-numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+letters = ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+           'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z')
+capital_letters = ('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+                   'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z')
+numbers = ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
 valid_chars = ['_', '-', ' ', *letters, *capital_letters, *numbers]
-conn_template = ['connection', '', '', [['id', '0', '', []], ['type', '0', '', []],
+conn_template = ('connection', '', '', [['id', '0', '', []], ['type', '0', '', []],
                                         ['connectionname', 'REPLACE', '', []],
                                         ['consumer', 'False', '', []], ['linelevel', 'True', '', []],
-                                        ['classes', '', '', [['class', '', '', [['classname', 'REPLACE', '', []]]]]]]]
+                                        ['classes', '', '', [['class', '', '', [['classname', 'REPLACE', '', []]]]]]])
 selectable_connections = ['HDMI IN', 'HDMI OUT', 'COMPOSITE IN', 'COMPOSITE OUT', 'VGA IN', 'VGA OUT', 'COMPONENT IN',
                           'COMPONENT OUT', 'DVI IN', 'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
                           'DIGITAL_OPTICAL OUT', 'IR_OUT']
@@ -677,7 +677,7 @@ class C4IconSwapper:
             # Load generic multi-state driver from Base64Assets
             multi_driver_path = f'{self.main.temp_dir}multi generic.c4z'
             if self.file_entry_field.get() == multi_driver_path:
-                return
+                return None
             with open(multi_driver_path, 'wb') as gen_driver:
                 gen_driver.write(base64.b64decode(generic_multi))
 
@@ -705,6 +705,7 @@ class C4IconSwapper:
             self.main.ask_to_save = False
             os.remove(multi_driver_path)
             os.remove(f'{self.main.temp_dir}loading_icon.gif')
+            return None
 
         def show_loading_image(self):
             loading_img_path = f'{self.main.temp_dir}loading_icon.gif'
@@ -740,7 +741,7 @@ class C4IconSwapper:
             # Could improve this
             def get_icons(directory):
                 if not os.path.isdir(directory):
-                    return
+                    return None
                 icons_out = []
                 sub_list = []
                 path_list = os.listdir(directory)
@@ -1509,7 +1510,7 @@ class C4IconSwapper:
             if not replacement_in_stack:
                 self.add_to_img_stack(self.main.replacement_image_path, index=0)
                 self.load_replacement(given_path=self.img_stack[-1])
-                return
+                return None
             stack_length = 4
             if len(self.img_stack) > stack_length and replacement_index > 3:
                 self.load_replacement(given_path=self.img_stack[0])
@@ -1520,8 +1521,9 @@ class C4IconSwapper:
                 self.img_stack.insert(0, temp_r)
                 self.img_stack.insert(replacement_index, temp)
                 self.refresh_img_stack()
-                return
+                return None
             self.load_replacement(given_path=self.img_stack[0])
+            return None
 
         def select_stack1(self, event):
             if len(self.img_stack) <= 1:
@@ -1536,7 +1538,7 @@ class C4IconSwapper:
             if not replacement_in_stack:
                 self.add_to_img_stack(self.main.replacement_image_path, index=1)
                 self.load_replacement(given_path=self.img_stack[-1])
-                return
+                return None
             stack_length = 4
             if len(self.img_stack) > stack_length and replacement_index > 3:
                 self.load_replacement(given_path=self.img_stack[1])
@@ -1547,8 +1549,9 @@ class C4IconSwapper:
                 self.img_stack.insert(1, temp_r)
                 self.img_stack.insert(replacement_index, temp)
                 self.refresh_img_stack()
-                return
+                return None
             self.load_replacement(given_path=self.img_stack[1])
+            return None
 
         def select_stack2(self, event):
             if len(self.img_stack) <= 2:
@@ -1563,7 +1566,7 @@ class C4IconSwapper:
             if not replacement_in_stack:
                 self.add_to_img_stack(self.main.replacement_image_path, index=2)
                 self.load_replacement(given_path=self.img_stack[-1])
-                return
+                return None
             stack_length = 4
             if len(self.img_stack) > stack_length and replacement_index > 3:
                 self.load_replacement(given_path=self.img_stack[2])
@@ -1574,8 +1577,9 @@ class C4IconSwapper:
                 self.img_stack.insert(2, temp_r)
                 self.img_stack.insert(replacement_index, temp)
                 self.refresh_img_stack()
-                return
+                return None
             self.load_replacement(given_path=self.img_stack[2])
+            return None
 
         def select_stack3(self, event):
             if len(self.img_stack) <= 3:
@@ -1590,7 +1594,7 @@ class C4IconSwapper:
             if not replacement_in_stack:
                 self.add_to_img_stack(self.main.replacement_image_path, index=3)
                 self.load_replacement(given_path=self.img_stack[-1])
-                return
+                return None
             stack_length = 4
             if len(self.img_stack) > stack_length and replacement_index > 3:
                 self.load_replacement(given_path=self.img_stack[3])
@@ -1601,8 +1605,9 @@ class C4IconSwapper:
                 self.img_stack.insert(3, temp_r)
                 self.img_stack.insert(replacement_index, temp)
                 self.refresh_img_stack()
-                return
+                return None
             self.load_replacement(given_path=self.img_stack[3])
+            return None
 
         def drop_in_replacement(self, event):
             img_path = event.data.replace('{', '').replace('}', '')
@@ -1750,6 +1755,7 @@ class C4IconSwapper:
                     random_tags.append(random_string)
                     return random_string
                 get_random_string()
+                return None
 
             if path is None:
                 path = ''.join([self.main.cur_dir, driver_name, '.c4z'])

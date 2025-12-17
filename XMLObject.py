@@ -4,14 +4,14 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
             xml_lines = xml_file.readlines()
         xml_string = ''.join(xml_lines)
         xml_string = xml_string.replace('\t', '')
-        tag_indexes = [i for i in range(len(xml_string)) if xml_string[i] in ['<', '>']]
-        # Need to handle case of odd number of characters used in comments
-        if len(tag_indexes) % 2:
-            print('Error: Invalid xml file')
-            return
+        tag_indexes = [i for i in range(len(xml_string)) if xml_string[i] in ('<', '>')]
+        # TODO: Need to handle case of odd number of brackets in comment
+        # if len(tag_indexes) % 2:
+        #     print('Error: Invalid xml file')
+        #     return None
 
     name, value, attributes, children, children_indexes, grandchildren, output = '', '', '', [], [], [], []
-    child, child_attributes, child_value = '', '', ''
+    child, child_attributes, child_value, comment = '', '', '', ''
     check_for_value, check_child_value = False, False
     duplicate_name_count, duplicate_child_count = 0, 0
     comment_start = None
@@ -19,6 +19,7 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
         if comment_start:
             if not xml_string[comment_start:tag_index + 1].endswith('-->'):
                 continue
+            # comments.append(xml_string[comment_start + 1: tag_index])
             comment = xml_string[comment_start + 1: tag_index]
             if not child:
                 children.append([comment, '', '', []])
@@ -31,6 +32,14 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
         if tag_name.startswith('!--'):
             comment_start = tag_index
             continue
+        # if comments:
+        #     if not child:
+        #         for comment in comments:
+        #             children.append([comment, '', '', []])
+        #     else:
+        #         for comment in comments:
+        #             grandchildren.append([comment, '', '', []])
+        # comments = []
         if check_for_value:
             check_for_value = False
             if tag_name == f'/{name}':
@@ -97,7 +106,7 @@ class XMLObject:
             xml_data = get_xml_data(xml_path)
         if not xml_data:
             raise ValueError
-        if type(xml_data) is not list:
+        if type(xml_data) is not list and not tuple:
             raise TypeError
         self.top_level = False
         self.children = []
@@ -109,7 +118,7 @@ class XMLObject:
         elif len(xml_data) > 1:
             self.top_level = True
             self.children.extend(XMLObject(xml_data=tag) for tag in xml_data)
-        elif len(xml_data) == 1 and type(xml_data[0]) is list:
+        elif len(xml_data) == 1 and type(xml_data[0]) is list or tuple:
             xml_data = xml_data[0]
             self.name = xml_data[0]
             self.value = xml_data[1]
@@ -261,3 +270,8 @@ class XMLObject:
         self.restore_data = []
         for child in self.children:
             child.restore()
+
+
+with open('compare_driver.xml', 'w', errors='ignore') as out_file:
+    out_file.writelines(XMLObject('test_driver.xml').get_lines())
+    
