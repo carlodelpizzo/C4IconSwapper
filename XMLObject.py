@@ -276,46 +276,53 @@ class XMLObjectOld:
 
 
 class XMLTag:
-    def __init__(self, name: str, elements=None, attributes=None, parent=None, indent=0, has_comment=None,
-                 closing_comment=None, is_comment=False, is_self_closing=False, is_prolog=False):
+    def __init__(self, name: str, elements=None, attributes=None, parent=None, indent=0, comments=None,
+                 closing_comments=None, is_comment=False, is_self_closing=False, is_prolog=False):
         self.name = name
         self.elements = [] if not elements else elements
         self.attributes = {} if not attributes else attributes
         self.parent = parent
         self.indent = indent
-        self.has_comment = has_comment
-        self.closing_comment = closing_comment
+        self.comments = comments if comments else []
+        self.closing_comments = closing_comments if closing_comments else []
         self.is_comment = is_comment
         self.is_self_closing = is_self_closing
         self.is_prolog = is_prolog
 
     def get_lines(self):
-        output = ''
-        if self.has_comment:
-            output = f'{self.has_comment.get_lines()}\n'
+        if self.is_comment:
+            return f'<!--{self.name}-->\n'
+        if self.is_prolog:
+            return f'<?{self.name}?>\n'
+
         attributes = ''
         for attribute in self.attributes:
             attributes += f'{attribute}="{self.attributes[attribute]}" '
-        if self.is_comment:
-            output += f'<!--{self.name}-->'
-            return output
-        elif self.is_prolog:
-            output += f'<?{self.name}?>'
-            return output
+
+        indent = '\t' * self.indent
+        output = ''
+        if self.comments:
+            for comment in self.comments:
+                output += f'{indent}{comment.get_lines().rstrip()}\n'
+        if self.is_self_closing:
+            output += f'{indent}<{self.name} {attributes}'
+            return f'{output[:-1]} />\n'
         else:
-            output += f'<{self.name} {attributes}'
+            output += f'{indent}<{self.name} {attributes}'
             output = output[:-1]
-            output += '>' if len(self.elements) < 2 else f'>\n'
+            output += f'>\n'
         for element in self.elements:
             if type(element) is str:
-                output += element if len(self.elements) < 2 else f'{element}\n'
+                if element:
+                    output += f'{indent}\t{element}\n{indent}'
+                else:
+                    output += f'{indent}'
                 continue
-            output += f'{element.get_lines()}\n'
-        if self.closing_comment:
-            output += f'{self.closing_comment.get_lines()}\n'
-        if self.is_self_closing:
-            return f'{output[:-1]} />'
-        output += f'</{self.name}>'
+            output += f'{element.get_lines().rstrip()}\n{indent}'
+        if self.closing_comments:
+            for comment in self.closing_comments:
+                output += f'{comment.get_lines().rstrip()}\n{indent}'
+        output += f'</{self.name}>\n'
         return output
 
 
@@ -327,7 +334,7 @@ class XMLObject:
             xml_string = ''.join(xml_file.readlines())
 
         self.tags = []
-        comment = None
+        comments = []
         tag_stack = deque()
         tag_start = None
         tag_end = None
@@ -340,20 +347,17 @@ class XMLObject:
 
             # Identify comment
             if data.startswith('!'):
-                if not comment:
-                    comment = XMLTag(data[3:-2], is_comment=True)
-                else:
-                    comment = XMLTag(data[3:-2], is_comment=True, has_comment=comment)
+                comments.append(XMLTag(data[3:-2], is_comment=True))
                 continue
 
             # Identify prolog
             if data.startswith('?') and data.endswith('?'):
                 if tag_stack:
                     tag_stack[-1].elements.append(XMLTag(data[1:-1], parent=tag_stack[-1], indent=len(tag_stack),
-                                                         is_prolog=True, has_comment=comment))
+                                                         is_prolog=True, comments=comments))
                 else:
-                    self.tags.append(XMLTag(data[1:-1], is_prolog=True, has_comment=comment))
-                comment = None
+                    self.tags.append(XMLTag(data[1:-1], is_prolog=True, comments=comments))
+                comments = []
                 continue
 
             # Handle self-closing tags
@@ -362,11 +366,11 @@ class XMLObject:
                 if tag_stack:
                     tag_stack[-1].elements.append(XMLTag(data, attributes=attributes, is_self_closing=True,
                                                          indent=len(tag_stack), parent=tag_stack[-1],
-                                                         has_comment=comment))
+                                                         comments=comments))
                     attributes = {}
                 else:
-                    self.tags.append(XMLTag(data, attributes=attributes, is_self_closing=True, has_comment=comment))
-                comment = None
+                    self.tags.append(XMLTag(data, attributes=attributes, is_self_closing=True, comments=comments))
+                comments = []
                 continue
 
             # Parse tag attributes
@@ -399,16 +403,19 @@ class XMLObject:
             # Handle closing tag, Pull off stack
             if tag_stack and tag_stack[-1].name == data[1:]:
                 if tag_end:
-                    tag_stack[-1].elements.append(xml_string[tag_end:tag_start])
+                    tag_stack[-1].elements.append(xml_string[tag_end:tag_start].lstrip().rstrip())
                     tag_end = None
-                if comment:
+                if comments:
+                    pop_list = []
                     for el in tag_stack[-1].elements:
-                        if type(el) is str and comment.get_lines() in el:
-                            comment = None
-                            break
-                    if comment:
-                        tag_stack[-1].closing_comment = comment
-                        comment = None
+                        for comment in comments:
+                            if type(el) is str and comment.get_lines().replace('\t', '') in el:
+                                pop_list.append(comments.index(comment))
+                    for x in sorted(pop_list, reverse=True):
+                        comments.pop(x)
+                    if comments:
+                        tag_stack[-1].closing_comments = comments
+                        comments = []
                 temp_tag = tag_stack.pop()
                 if tag_stack:
                     tag_stack[-1].elements.append(temp_tag)
@@ -417,14 +424,14 @@ class XMLObject:
                 continue
 
             # Push tag on stack to wait for closing tag
-            tag_stack.append(XMLTag(data, attributes=attributes, has_comment=comment, indent=len(tag_stack),))
+            tag_stack.append(XMLTag(data, attributes=attributes, comments=comments, indent=len(tag_stack)))
             tag_end = i + 1
             attributes = {}
-            comment = None
+            comments = []
 
     def get_lines(self):
-        for tag in self.tags:
-            print(tag.get_lines())
+        lines = ''.join([s.get_lines() for s in self.tags])
+        print(lines)
 
 
 # with open('compare_driver.xml', 'w', errors='ignore') as out_file:
