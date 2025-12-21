@@ -290,6 +290,8 @@ class XMLTag:
         self.is_prolog = is_prolog
 
     def get_lines(self):
+        if self.name == 'tag69':
+            pass
         if self.is_comment:
             return f'<!--{self.name}-->\n'
         if self.is_prolog:
@@ -314,15 +316,13 @@ class XMLTag:
         for element in self.elements:
             if type(element) is str:
                 if element:
-                    output += f'{indent}\t{element}\n{indent}'
-                else:
-                    output += f'{indent}'
+                    output += f'{indent}\t{element}\n'
                 continue
-            output += f'{element.get_lines().rstrip()}\n{indent}'
+            output += f'{element.get_lines().rstrip()}\n'
         if self.closing_comments:
             for comment in self.closing_comments:
-                output += f'{comment.get_lines().rstrip()}\n{indent}'
-        output += f'</{self.name}>\n'
+                output += f'{indent}{comment.get_lines().rstrip()}\n'
+        output += f'{indent}</{self.name}>\n'
         return output
 
 
@@ -409,7 +409,7 @@ class XMLObject:
                     pop_list = []
                     for el in tag_stack[-1].elements:
                         for comment in comments:
-                            if type(el) is str and comment.get_lines().replace('\t', '') in el:
+                            if type(el) is str and comment.get_lines().rstrip().lstrip() in el:
                                 pop_list.append(comments.index(comment))
                     for x in sorted(pop_list, reverse=True):
                         comments.pop(x)
