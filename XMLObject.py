@@ -1,6 +1,7 @@
 import copy
 from collections import deque
 
+# TODO Remove before commit
 # def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
 #     if xml_path:
 #         with open(xml_path, errors='ignore') as xml_file:
@@ -532,7 +533,3 @@ class XMLObject:
         if not self.restore:
             return
         self.tags = self.restore_point.tags
-
-
-# with open('compare_driver.xml', 'w', errors='ignore') as out_file:
-#     out_file.writelines(XMLObject('test_driver.xml').get_lines())

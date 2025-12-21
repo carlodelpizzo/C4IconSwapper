@@ -2032,6 +2032,7 @@ class C4IconSwapper:
             os.rename(xml_path := f'{self.main.temp_dir}driver/driver.xml', xml_bak_path)
             with open(xml_path, 'w', errors='ignore') as out_file:
                 out_file.writelines(self.main.driver_xml.get_lines())
+            # TODO: Remove before commit
             with open('driver.xml', 'w', errors='ignore') as out_file:
                 out_file.writelines(self.main.driver_xml.get_lines())
             # Call export functions
