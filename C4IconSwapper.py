@@ -27,10 +27,20 @@ capital_letters = ('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', '
                    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z')
 numbers = ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
 valid_chars = ['_', '-', ' ', *letters, *capital_letters, *numbers]
-conn_template = ('connection', '', '', [['id', '0', '', []], ['type', '0', '', []],
-                                        ['connectionname', 'REPLACE', '', []],
-                                        ['consumer', 'False', '', []], ['linelevel', 'True', '', []],
-                                        ['classes', '', '', [['class', '', '', [['classname', 'REPLACE', '', []]]]]]])
+conn_template = """
+<connection>
+<id>0</id>
+<type>0</type>
+<connectionname>REPLACE</connectionname>
+<consumer>False</consumer>
+<linelevel>True</linelevel>
+<classes>
+<class>
+<classname>REPLACE</classname>
+</class>
+</classes>
+</connection>
+"""
 selectable_connections = ['HDMI IN', 'HDMI OUT', 'COMPOSITE IN', 'COMPOSITE OUT', 'VGA IN', 'VGA OUT', 'COMPONENT IN',
                           'COMPONENT OUT', 'DVI IN', 'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
                           'DIGITAL_OPTICAL OUT', 'IR_OUT']
@@ -994,18 +1004,18 @@ class C4IconSwapper:
 
             # Read driver.xml and update variables
             self.main.driver_xml = XMLObject(f'{self.main.temp_dir}driver/driver.xml')
-            man_tag = self.main.driver_xml.get_tag('manufacturer')
+            man_tag = self.main.driver_xml.get_tags('manufacturer')
             if man_tag:
-                self.main.driver_manufac_var.set(man_tag[0].value)
-            creator_tag = self.main.driver_xml.get_tag('creator')
+                self.main.driver_manufac_var.set(man_tag[0].value())
+            creator_tag = self.main.driver_xml.get_tags('creator')
             if creator_tag:
-                self.main.driver_creator_var.set(creator_tag[0].value)
+                self.main.driver_creator_var.set(creator_tag[0].value())
             self.main.driver_version_count = 1
-            version_tag = self.main.driver_xml.get_tag('version')
+            version_tag = self.main.driver_xml.get_tags('version')
             if version_tag:
-                self.main.driver_ver_orig.set(version_tag[0].value)
+                self.main.driver_ver_orig.set(version_tag[0].value())
                 temp_str = ''
-                for char in version_tag[0].value:
+                for char in version_tag[0].value():
                     if char not in numbers:
                         continue
                     temp_str += char
@@ -1018,13 +1028,13 @@ class C4IconSwapper:
                 else:
                     self.main.driver_version_var.set('0')
                     self.main.driver_version_new_var.set('1')
-            id_tags = self.main.driver_xml.get_tag('id')
+            id_tags = self.main.driver_xml.get_tags('id')
             if id_tags:
                 self.main.conn_ids = []
                 for id_tag in id_tags:
                     with contextlib.suppress(ValueError):
-                        if int(id_tag.value) not in self.main.conn_ids:
-                            self.main.conn_ids.append(int(id_tag.value))
+                        if int(id_tag.value()) not in self.main.conn_ids:
+                            self.main.conn_ids.append(int(id_tag.value()))
 
             # Check lua file for multi-state
             self.main.multi_state_driver = False
@@ -1170,10 +1180,11 @@ class C4IconSwapper:
                 conn.__init__(self.main)
 
             # Get connections from xml object
+            # TODO: Update for new XML object
             connections = []
-            if classname_tags := self.main.driver_xml.get_tag('classname'):
+            if classname_tags := self.main.driver_xml.get_tags('classname'):
                 for classname_tag in reversed(classname_tags):
-                    if classname_tag.value not in self.valid_connections:
+                    if classname_tag.value() not in self.valid_connections:
                         classname_tags.pop(classname_tags.index(classname_tag))
                 for classname_tag in classname_tags:
                     class_tag, connection_tag, connectionname_tag, id_tag, type_tag = None, None, None, None, None
@@ -1220,16 +1231,16 @@ class C4IconSwapper:
             for conn in self.main.connections:
                 if conn.original:
                     continue
-                new_conn = XMLObject(xml_data=conn_template)
-                name_tag = new_conn.get_tag('connectionname')[0]
-                class_tag = new_conn.get_tag('class')[0]
-                classname_tag = new_conn.get_tag('classname')[0]
-                id_tag = new_conn.get_tag('id')[0]
-                type_tag = new_conn.get_tag('type')[0]
+                new_conn = XMLObject(xml_string=conn_template).tags[0]
+                name_tag = new_conn.get('connectionname')[0]
+                class_tag = new_conn.get('class')[0]
+                classname_tag = new_conn.get('classname')[0]
+                id_tag = new_conn.get('id')[0]
+                type_tag = new_conn.get('type')[0]
                 name_tag.value = 'Connection Name...'
-                new_conn.get_tag('classname')[0].value = 'HDMI IN'
+                new_conn.get('classname')[0].set_value('HDMI IN')
                 new_conn.delete = True
-                self.main.driver_xml.get_tag('connections')[0].children.append(new_conn)
+                self.main.driver_xml.get_tags('connections')[0].add_element(new_conn)
                 conn.tags = [new_conn, class_tag, name_tag, id_tag, type_tag, classname_tag]
 
             # Form id groups
@@ -1914,45 +1925,45 @@ class C4IconSwapper:
 
                 # Do multi-state related changes in xml
                 if state_name_changes:
-                    for item_tag in self.main.driver_xml.get_tag('item'):
+                    for item_tag in self.main.driver_xml.get_tags('item'):
                         for state_name_change in state_name_changes:
-                            if state_name_change[0] == item_tag.value:
-                                item_tag.value = state_name_change[1]
+                            if state_name_change[0] == item_tag.value():
+                                item_tag.set_value(state_name_change[1])
                                 break
-                            if state_name_change[2] == item_tag.value:
-                                item_tag.value = state_name_change[3]
+                            if state_name_change[2] == item_tag.value():
+                                item_tag.set_value(state_name_change[3])
                                 break
-                    for name_tag in self.main.driver_xml.get_tag('name'):
+                    for name_tag in self.main.driver_xml.get_tags('name'):
                         for state_name_change in state_name_changes:
-                            if state_name_change[0] == name_tag.value or name_tag.value.endswith(
+                            if state_name_change[0] == name_tag.value() or name_tag.value().endswith(
                                     state_name_change[0]):
-                                name_tag.value = name_tag.value.replace(state_name_change[0],
-                                                                        state_name_change[1])
+                                name_tag.set_value(name_tag.value.replace(state_name_change[0],
+                                                                          state_name_change[1]))
                                 break
-                            if state_name_change[2] == name_tag.value or name_tag.value.endswith(
+                            if state_name_change[2] == name_tag.value() or name_tag.value().endswith(
                                     state_name_change[2]):
-                                name_tag.value = name_tag.value.replace(state_name_change[2],
-                                                                        state_name_change[3])
+                                name_tag.set_value(name_tag.value().replace(state_name_change[2],
+                                                                            state_name_change[3]))
                                 break
-                    for description_tag in self.main.driver_xml.get_tag('description'):
+                    for description_tag in self.main.driver_xml.get_tags('description'):
                         for state_name_change in state_name_changes:
-                            if f'{state_name_change[0]} ' in description_tag.value:
-                                description_tag.value = description_tag.value.replace(state_name_change[0],
-                                                                                      state_name_change[1])
+                            if f'{state_name_change[0]} ' in description_tag.value():
+                                description_tag.set_value(description_tag.value().replace(state_name_change[0],
+                                                                                          state_name_change[1]))
                                 break
-                            if f'{state_name_change[2]} ' in description_tag.value:
-                                description_tag.value = description_tag.value.replace(state_name_change[2],
-                                                                                      state_name_change[3])
+                            if f'{state_name_change[2]} ' in description_tag.value():
+                                description_tag.set_value(description_tag.value.replace(state_name_change[2],
+                                                                                        state_name_change[3]))
                                 break
-                    for state_tag in self.main.driver_xml.get_tag('state'):
-                        for param in state_tag.parameters:
-                            if param[0] == 'id':
+                    for state_tag in self.main.driver_xml.get_tags('state'):
+                        for attribute in state_tag.attributes:
+                            if attribute[0] == 'id':
                                 for state_name_change in state_name_changes:
-                                    if state_name_change[0] == param[1]:
-                                        param[1] = state_name_change[1]
+                                    if state_name_change[0] == attribute[1]:
+                                        attribute[1] = state_name_change[1]
                                         break
-                                    if state_name_change[2] == param[1]:
-                                        param[1] = state_name_change[3]
+                                    if state_name_change[2] == attribute[1]:
+                                        attribute[1] = state_name_change[3]
                                         break
 
             # Check driver info variables
@@ -1988,23 +1999,23 @@ class C4IconSwapper:
                 conn.tags[5].value = conn.type.get()
 
             # Update xml with new driver name
-            self.main.driver_xml.get_tag('name')[0].value = driver_name
+            self.main.driver_xml.get_tags('name')[0].set_value(driver_name)
             modified_datestamp = str(datetime.now().strftime('%m/%d/%Y %H:%M'))
             if self.inc_driver_version.get() and \
                     int(self.main.driver_version_var.get()) >= int(self.main.driver_version_new_var.get()):
                 self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
-            self.main.driver_xml.get_tag('version')[0].value = self.main.driver_version_new_var.get()
-            self.main.driver_xml.get_tag('modified')[0].value = modified_datestamp
-            self.main.driver_xml.get_tag('creator')[0].value = self.main.driver_creator_new_var.get()
-            self.main.driver_xml.get_tag('manufacturer')[0].value = self.main.driver_manufac_new_var.get()
-            for param in self.main.driver_xml.get_tag('proxy')[0].parameters:
-                if param[0] == 'name':
-                    param[1] = driver_name
-            for icon_tag in self.main.driver_xml.get_tag('Icon'):
-                result = re.search('driver/(.*)/icons', icon_tag.value)
+            self.main.driver_xml.get_tags('version')[0].set_value(self.main.driver_version_new_var.get())
+            self.main.driver_xml.get_tags('modified')[0].set_value(modified_datestamp)
+            self.main.driver_xml.get_tags('creator')[0].set_value(self.main.driver_creator_new_var.get())
+            self.main.driver_xml.get_tags('manufacturer')[0].set_value(self.main.driver_manufac_new_var.get())
+            for attribute in self.main.driver_xml.get_tags('proxy')[0].attributes:
+                if attribute[0] == 'name':
+                    attribute[1] = driver_name
+            for icon_tag in self.main.driver_xml.get_tags('Icon'):
+                result = re.search('driver/(.*)/icons', icon_tag.value())
                 if result:
                     result = result[1]
-                    icon_tag.value = icon_tag.value.replace(result, driver_name)
+                    icon_tag.set_value(icon_tag.value().replace(result, driver_name))
 
             # Backup xml file and write new xml
             if os.path.isfile(xml_bak_path := f'{self.main.temp_dir}driver/driver.xml.bak'):
@@ -2069,6 +2080,7 @@ class C4IconSwapper:
             if f'{valid_id}\n' in instance_ids:
                 valid_id = valid_instance_id(instance_ids)
             return valid_id
+
         # Create temporary directory
         self.instance_id = str(random.randint(111111, 999999))
         self.cur_dir = f'{os.getcwd()}/'
