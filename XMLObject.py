@@ -1,3 +1,6 @@
+from collections import deque
+
+
 def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
     if xml_path:
         with open(xml_path, errors='ignore') as xml_file:
@@ -100,7 +103,7 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
 
 
 # xml_data = ['name', 'value', 'attributes', [children]]; Initialize with path to xml file
-class XMLObject:
+class XMLObjectOld:
     def __init__(self, xml_path=None, xml_data=None, parents=None):
         if xml_path:
             xml_data = get_xml_data(xml_path)
@@ -272,6 +275,160 @@ class XMLObject:
             child.restore()
 
 
-with open('compare_driver.xml', 'w', errors='ignore') as out_file:
-    out_file.writelines(XMLObject('test_driver.xml').get_lines())
+class XMLTag:
+    def __init__(self, name: str, elements=None, attributes=None, parent=None, indent=0, has_comment=None,
+                 closing_comment=None, is_comment=False, is_self_closing=False, is_prolog=False):
+        self.name = name
+        self.elements = [] if not elements else elements
+        self.attributes = {} if not attributes else attributes
+        self.parent = parent
+        self.indent = indent
+        self.has_comment = has_comment
+        self.closing_comment = closing_comment
+        self.is_comment = is_comment
+        self.is_self_closing = is_self_closing
+        self.is_prolog = is_prolog
+
+    def get_lines(self):
+        output = ''
+        if self.has_comment:
+            output = f'{self.has_comment.get_lines()}\n'
+        attributes = ''
+        for attribute in self.attributes:
+            attributes += f'{attribute}="{self.attributes[attribute]}" '
+        if self.is_comment:
+            output += f'<!--{self.name}-->'
+            return output
+        elif self.is_prolog:
+            output += f'<?{self.name}?>'
+            return output
+        else:
+            output += f'<{self.name} {attributes}'
+            output = output[:-1]
+            output += '>' if len(self.elements) < 2 else f'>\n'
+        for element in self.elements:
+            if type(element) is str:
+                output += element if len(self.elements) < 2 else f'{element}\n'
+                continue
+            output += f'{element.get_lines()}\n'
+        if self.closing_comment:
+            output += f'{self.closing_comment.get_lines()}\n'
+        if self.is_self_closing:
+            return f'{output[:-1]} />'
+        output += f'</{self.name}>'
+        return output
+
+
+class XMLObject:
+    def __init__(self, xml_path: str = None):
+        if not xml_path:
+            return
+        with open(xml_path, errors='ignore') as xml_file:
+            xml_string = ''.join(xml_file.readlines())
+
+        self.tags = []
+        comment = None
+        tag_stack = deque()
+        tag_start = None
+        tag_end = None
+        attributes = {}
+        for i in (i for i, char in enumerate(xml_string) if char in ('<', '>')):
+            if xml_string[i] == '<':
+                tag_start = i
+                continue
+            data = xml_string[tag_start + 1:i]
+
+            # Identify comment
+            if data.startswith('!'):
+                if not comment:
+                    comment = XMLTag(data[3:-2], is_comment=True)
+                else:
+                    comment = XMLTag(data[3:-2], is_comment=True, has_comment=comment)
+                continue
+
+            # Identify prolog
+            if data.startswith('?') and data.endswith('?'):
+                if tag_stack:
+                    tag_stack[-1].elements.append(XMLTag(data[1:-1], parent=tag_stack[-1], indent=len(tag_stack),
+                                                         is_prolog=True, has_comment=comment))
+                else:
+                    self.tags.append(XMLTag(data[1:-1], is_prolog=True, has_comment=comment))
+                comment = None
+                continue
+
+            # Handle self-closing tags
+            if data.endswith('/'):
+                data = data[:data.index(' ')]
+                if tag_stack:
+                    tag_stack[-1].elements.append(XMLTag(data, attributes=attributes, is_self_closing=True,
+                                                         indent=len(tag_stack), parent=tag_stack[-1],
+                                                         has_comment=comment))
+                    attributes = {}
+                else:
+                    self.tags.append(XMLTag(data, attributes=attributes, is_self_closing=True, has_comment=comment))
+                comment = None
+                continue
+
+            # Parse tag attributes
+            if ' ' in data:
+                read_att = False
+                read_val = False
+                att = ''
+                val_i = None
+                for di, char in enumerate(data):
+                    if read_val:
+                        if char == '"':
+                            if not val_i:
+                                val_i = di + 1
+                                continue
+                            attributes[att] = data[val_i:di]
+                            val_i = None
+                            att = ''
+                            read_val = False
+                        continue
+                    if char == ' ':
+                        read_att = True
+                        continue
+                    if read_att:
+                        if char == '=':
+                            read_val = True
+                            continue
+                        att += char
+                data = data[:data.index(' ')]
+
+            # Handle closing tag, Pull off stack
+            if tag_stack and tag_stack[-1].name == data[1:]:
+                if tag_end:
+                    tag_stack[-1].elements.append(xml_string[tag_end:tag_start])
+                    tag_end = None
+                if comment:
+                    for el in tag_stack[-1].elements:
+                        if type(el) is str and comment.get_lines() in el:
+                            comment = None
+                            break
+                    if comment:
+                        tag_stack[-1].closing_comment = comment
+                        comment = None
+                temp_tag = tag_stack.pop()
+                if tag_stack:
+                    tag_stack[-1].elements.append(temp_tag)
+                else:
+                    self.tags.append(temp_tag)
+                continue
+
+            # Push tag on stack to wait for closing tag
+            tag_stack.append(XMLTag(data, attributes=attributes, has_comment=comment, indent=len(tag_stack),))
+            tag_end = i + 1
+            attributes = {}
+            comment = None
+
+    def get_lines(self):
+        for tag in self.tags:
+            print(tag.get_lines())
+
+
+# with open('compare_driver.xml', 'w', errors='ignore') as out_file:
+#     out_file.writelines(XMLObject('test_driver.xml').get_lines())
+
+XMLObject('test_driver.xml').get_lines()
     
