@@ -1,3 +1,4 @@
+import copy
 from collections import deque
 
 # def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
@@ -318,12 +319,14 @@ class XMLTag:
             else:
                 output += f'>\n'
         for element in self.elements:
-            if len(self.elements) == 1 and type(element) is str:
-                output += element
-                continue
             if type(element) is str:
+                if len(self.elements) == 1:
+                    output += element
+                    continue
                 if element:
                     output += f'{indent}\t{element}\n'
+                continue
+            if element.delete:
                 continue
             output += f'{element.get_lines().rstrip()}\n'
         if self.closing_comments:
@@ -361,10 +364,25 @@ class XMLTag:
                 self.elements[i] = value
                 break
 
-    def add_element(self, tag: object):
+    def add_element(self, tag):
         if type(tag) is not type(self):
             raise TypeError
+        tag.update_indent(self.indent + 1)
         self.elements.append(tag)
+
+    def update_indent(self, new_indent: int):
+        self.indent = new_indent
+        for tag in self.elements:
+            if type(tag) is type(self):
+                tag.update_indent(self.indent + 1)
+
+    def get_parents(self, parents=None):
+        if not self.parent:
+            return [] if not parents else parents
+        if not parents:
+            parents = []
+        parents.append(self.parent)
+        return self.parent.get_parents(parents)
 
 
 class XMLObject:
@@ -375,6 +393,7 @@ class XMLObject:
             with open(xml_path, errors='ignore') as xml_file:
                 xml_string = ''.join(xml_file.readlines())
 
+        self.restore_point = None
         self.tags = []
         comments = []
         tag_stack = deque()
@@ -382,10 +401,11 @@ class XMLObject:
         tag_end = None
         attributes = {}
 
+        # Begin Parsing
         for i in (i for i, char in enumerate(xml_string) if char in ('<', '>')):
             if xml_string[i] == '<':
                 if tag_start:
-                    continue
+                    continue  # Continue if '<' found inside comment
                 tag_start = i
                 continue
             data = xml_string[tag_start + 1:i]
@@ -457,9 +477,12 @@ class XMLObject:
 
             # Handle closing tag, Pull off stack
             if tag_stack and tag_stack[-1].name == data[1:]:
+                # Add closing tag to XMLTag
                 if tag_end:
                     tag_stack[-1].elements.append(xml_string[tag_end:tag_start].lstrip().rstrip())
                     tag_end = None
+
+                # Add comments to XMLTag
                 if comments:
                     pop_list = []
                     for element in tag_stack[-1].elements:
@@ -471,8 +494,11 @@ class XMLObject:
                     if comments:
                         tag_stack[-1].closing_comments = comments
                         comments = []
+
+                # Append XMLTag to parent or to XMLObject
                 temp_tag = tag_stack.pop()
                 if tag_stack:
+                    temp_tag.parent = tag_stack[-1]
                     tag_stack[-1].elements.append(temp_tag)
                 else:
                     self.tags.append(temp_tag)
@@ -495,3 +521,15 @@ class XMLObject:
             if tag.get(name):
                 output.extend(tag.get(name))
         return output
+
+    def set_restore_point(self):
+        self.restore_point = copy.deepcopy(self)
+
+    def restore(self):
+        if not self.restore:
+            return
+        self.tags = self.restore_point.tags
+
+
+# with open('compare_driver.xml', 'w', errors='ignore') as out_file:
+#     out_file.writelines(XMLObject('test_driver.xml').get_lines())

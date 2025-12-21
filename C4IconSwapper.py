@@ -15,7 +15,7 @@ from tkinter import ttk, filedialog, Toplevel, StringVar, IntVar, Checkbutton, L
 from PIL import ImageTk, Image
 from datetime import datetime
 from Base64Assets import *
-from XMLObject import XMLObject
+from XMLObject import XMLObject, XMLTag
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
 version = '1.3'
@@ -74,7 +74,7 @@ class C4IS:
         self.ids = main.conn_ids
         self.connections = [{'id': conn.id, 'original': conn.original, 'in_id_group': conn.in_id_group,
                              'delete': conn.delete, 'prior_txt': conn.prior_txt, 'prior_type': conn.prior_type,
-                             'tags': conn.tags, 'id_group': conn.id_group, 'type': conn.type.get(),
+                             'tag': conn.tag, 'id_group': conn.id_group, 'type': conn.type.get(),
                              'name': conn.name_entry_var.get(), 'state': conn.enabled}
                             for conn in main.connections]
 
@@ -119,13 +119,14 @@ class C4IconSwapper:
             self.id = 0
             self.original, self.in_id_group, self.delete, self.enabled = False, False, False, False
             self.prior_txt, self.prior_type = '', ''
-            self.tags, self.id_group = [], []
+            self.tag = None
+            self.id_group = []
             self.name_entry_var, self.type = StringVar(), StringVar()
             self.name_entry_var.set('Connection Name...')
             self.type.set('HDMI IN')
 
         def update_id(self, *_, refresh=False):
-            if not self.tags:
+            if not self.tag:
                 return
             self.main.ask_to_save = True
             if self.original:
@@ -143,26 +144,26 @@ class C4IconSwapper:
                 conn_type = conn_type.replace(' IN', '')
                 if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
                     valid_id = find_valid_id(2000, self.main.conn_ids)
-                    self.tags[4].value = '5'
+                    self.tag.get('type')[0].set_value('5')
                 elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
                     valid_id = find_valid_id(4000, self.main.conn_ids)
-                    self.tags[4].value = '6'
+                    self.tag.get('type')[0].set_value('6')
             elif ' OUT' in conn_type:
                 conn_type = conn_type.replace(' OUT', '')
                 if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
                     valid_id = find_valid_id(1900, self.main.conn_ids)
-                    self.tags[4].value = '5'
+                    self.tag.get('type')[0].set_value('5')
                 elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
                     valid_id = find_valid_id(3900, self.main.conn_ids)
-                    self.tags[4].value = '6'
+                    self.tag.get('type')[0].set_value('6')
             if conn_type == 'IR_OUT':
                 valid_id = find_valid_id(1, self.main.conn_ids)
-                self.tags[4].value = '6'
+                self.tag.get('type')[0].set_value('6')
 
             if self.id in self.main.conn_ids:
                 self.main.conn_ids.pop(self.main.conn_ids.index(self.id))
             self.id = valid_id[0]
-            self.tags[3].value = str(self.id)
+            self.tag.get('id')[0].set_value(str(self.id))
             self.main.conn_ids.append(self.id)
 
     class State:
@@ -229,8 +230,8 @@ class C4IconSwapper:
                 self.type_menu['state'] = NORMAL
                 self.add_button.place(x=-420, y=-420, anchor='w')
                 self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
-                if self.conn_object.tags:
-                    self.conn_object.tags[0].delete = False
+                if self.conn_object.tag:
+                    self.conn_object.tag.delete = False
                 self.name_entry['takefocus'] = 1
 
             def disable(self):
@@ -239,8 +240,8 @@ class C4IconSwapper:
                 self.type_menu['state'] = DISABLED
                 self.add_button.place(x=self.x, y=self.y, anchor='w')
                 self.x_button.place(x=-420, y=-420, anchor='w')
-                if self.conn_object.tags:
-                    self.conn_object.tags[0].delete = True
+                if self.conn_object.tag:
+                    self.conn_object.tag.delete = True
                 self.name_entry['takefocus'] = 0
 
             def flag_delete(self):
@@ -248,6 +249,8 @@ class C4IconSwapper:
                     return
                 if not self.conn_object.delete:
                     self.conn_object.delete = True
+                    if self.conn_object.tag:
+                        self.conn_object.tag.delete = True
                     self.conn_object.prior_txt = self.name_entry_var.get()
                     self.conn_object.prior_type = self.type.get()
                     self.type.set('RIP')
@@ -259,18 +262,20 @@ class C4IconSwapper:
                     self.del_button.place(x=self.del_button.winfo_x() - 6, y=self.y)
                     if len(self.conn_object.id_group) > 1:
                         if all(groupie.delete for i, groupie in enumerate(self.conn_object.id_group) if i):
-                            self.conn_object.tags[0].delete = True
-                        self.conn_object.tags[1].delete = True
+                            self.conn_object.tag.delete = True
+                        self.conn_object.tag.delete = True
                     return
                 self.conn_object.delete = False
+                if self.conn_object.tag:
+                    self.conn_object.tag.delete = False
                 self.name_entry['state'] = NORMAL
                 self.name_entry_var.set(self.conn_object.prior_txt)
                 self.conn_object.prior_txt = ''
                 self.name_entry['state'] = DISABLED
                 self.type.set(self.conn_object.prior_type)
                 self.conn_object.prior_type = ''
-                if self.conn_object.tags:
-                    self.conn_object.tags[0].delete, self.conn_object.tags[1].delete = False, False
+                if self.conn_object.tag:
+                    self.conn_object.tag.delete =  False
                 self.del_button['text'] = 'Del'
                 self.del_button['width'] = 3
                 self.del_button.place(x=self.del_button.winfo_x() + 6, y=self.y)
@@ -1180,7 +1185,6 @@ class C4IconSwapper:
                 conn.__init__(self.main)
 
             # Get connections from xml object
-            # TODO: Update for new XML object
             connections = []
             if classname_tags := self.main.driver_xml.get_tags('classname'):
                 for classname_tag in reversed(classname_tags):
@@ -1188,12 +1192,16 @@ class C4IconSwapper:
                         classname_tags.pop(classname_tags.index(classname_tag))
                 for classname_tag in classname_tags:
                     class_tag, connection_tag, connectionname_tag, id_tag, type_tag = None, None, None, None, None
-                    for parent in reversed(classname_tag.parents):
+                    for parent in reversed(classname_tag.get_parents()):
+                        if not parent:
+                            continue
                         if (parent_name := parent.name) == 'class':
                             class_tag = parent
                         elif parent_name == 'connection':
                             connection_tag = parent
-                            for child in connection_tag.children:
+                            for child in connection_tag.elements:
+                                if type(child) is not XMLTag:
+                                    continue
                                 if (child_name := child.name) == 'type':
                                     type_tag = child
                                 elif child_name == 'id':
@@ -1201,7 +1209,7 @@ class C4IconSwapper:
                                 elif child_name == 'connectionname':
                                     connectionname_tag = child
                     if all([id_tag, connection_tag, class_tag, connectionname_tag, type_tag]):
-                        connections.append([connectionname_tag.value, classname_tag.value, id_tag.value,
+                        connections.append([connectionname_tag.value(), classname_tag.value(), id_tag.value(),
                                             connection_tag, class_tag, connectionname_tag, id_tag, type_tag,
                                             classname_tag])
 
@@ -1224,7 +1232,8 @@ class C4IconSwapper:
                 self.main.connections[i].name_entry_var.set(connections[i][0])
                 self.main.connections[i].type.set(connections[i][1])
                 self.main.connections[i].id = connections[i][2]
-                self.main.connections[i].tags = connections[i][3:]
+                self.main.connections[i].tag = connections[i][3]
+                # self.main.connections[i].tags = connections[i][3:]
                 self.main.connections[i].original = True
 
             # Fill in remaining empty connections
@@ -1233,15 +1242,11 @@ class C4IconSwapper:
                     continue
                 new_conn = XMLObject(xml_string=conn_template).tags[0]
                 name_tag = new_conn.get('connectionname')[0]
-                class_tag = new_conn.get('class')[0]
-                classname_tag = new_conn.get('classname')[0]
-                id_tag = new_conn.get('id')[0]
-                type_tag = new_conn.get('type')[0]
                 name_tag.value = 'Connection Name...'
                 new_conn.get('classname')[0].set_value('HDMI IN')
                 new_conn.delete = True
                 self.main.driver_xml.get_tags('connections')[0].add_element(new_conn)
-                conn.tags = [new_conn, class_tag, name_tag, id_tag, type_tag, classname_tag]
+                conn.tag = new_conn
 
             # Form id groups
             for group in id_groups:
@@ -1792,13 +1797,8 @@ class C4IconSwapper:
                             os.remove(current_path)
 
             # Create .c4z file
-            driver_zip = ''.join([self.main.temp_dir, driver_name, '.zip'])
-            driver_c4z = ''.join([self.main.temp_dir, driver_name, '.c4z'])
-            shutil.make_archive(self.main.temp_dir + driver_name, 'zip', f'{self.main.temp_dir}driver')
-            base = os.path.splitext(driver_zip)[0]
-            os.rename(driver_zip, f'{base}.c4z')
-            shutil.copy(driver_c4z, path)
-            os.remove(driver_c4z)
+            shutil.make_archive(path, 'zip', f'{self.main.temp_dir}driver')
+            os.rename(f'{path}.zip', path)
 
             # Restore .bak files
             if not self.include_backups.get():
@@ -1995,8 +1995,8 @@ class C4IconSwapper:
 
             # Update connection names
             for conn in self.main.connections:
-                conn.tags[2].value = conn.name_entry_var.get()
-                conn.tags[5].value = conn.type.get()
+                conn.tag.get('connectionname')[0].set_value(conn.name_entry_var.get())
+                conn.tag.get('classname')[0].set_value(conn.type.get())
 
             # Update xml with new driver name
             self.main.driver_xml.get_tags('name')[0].set_value(driver_name)
@@ -2199,37 +2199,40 @@ class C4IconSwapper:
         self.driver_version_new_var.set('1')
         self.multi_state_driver, self.states_shown, self.ask_to_save = False, False, False
         self.counter, self.easter_counter = 0, 0
-        self.connections, self.conn_ids = [self.Connection(self) for _ in range(18)], []
-        self.states, self.state_dupes = [self.State('') for _ in range(13)], []
-        self.states_orig_names, self.conn_dict = [], {}
+        self.connections = [self.Connection(self) for _ in range(18)]
+        self.conn_ids = []
+        self.states = [self.State('') for _ in range(13)]
+        self.state_dupes = []
+        self.states_orig_names = []
+        # self.conn_dict = {}
         self.device_icon_dir = f'{self.temp_dir}driver/www/icons/device/'
         self.icon_dir = f'{self.temp_dir}driver/www/icons/'
         self.images_dir = f'{self.temp_dir}driver/www/images/'
         self.replacement_image_path = f'{self.temp_dir}replacement_icon.png'
         self.orig_file_dir, self.orig_file_path, self.restore_entry_string = '', '', ''
         self.driver_selected, self.replacement_selected, self.schedule_entry_restore = False, False, False
-        for key in ['HDMI IN', 'COMPOSITE IN', 'VGA IN', 'COMPONENT IN', 'DVI IN']:
-            self.conn_dict[key] = '\t\t\t<type>5</type>\n\t\t\t' \
-                                  '<connectionname>REPLACE</connectionname>\n' \
-                                  '\t\t\t<consumer>True</consumer>\n\t\t\t<linelevel>True</linelevel>'
-        for key in ['HDMI OUT', 'COMPOSITE OUT', 'VGA OUT', 'COMPONENT OUT', 'DVI OUT']:
-            self.conn_dict[key] = '\t\t\t<type>5</type>\n\t\t\t' \
-                                  '<connectionname>REPLACE</connectionname>\n' \
-                                  '\t\t\t<consumer>False</consumer>\n\t\t\t<linelevel>True</linelevel>'
-        for key in ['STEREO IN', 'DIGITAL_OPTICAL IN']:
-            self.conn_dict[key] = '\t\t\t<type>6</type>\n\t\t\t' \
-                                  '<connectionname>REPLACE</connectionname>\n' \
-                                  '\t\t\t<consumer>True</consumer>\n\t\t\t<linelevel>True</linelevel>'
-        for key in ['STEREO OUT', 'DIGITAL_OPTICAL OUT']:
-            self.conn_dict[key] = '\t\t\t<type>6</type>\n\t\t\t' \
-                                  '<connectionname>REPLACE</connectionname>\n' \
-                                  '\t\t\t<consumer>False</consumer>\n\t\t\t<linelevel>True</linelevel>'
-
-        self.conn_dict['IR_OUT'] = '\t\t\t<facing>6</facing>\n\t\t\t' \
-                                   '<connectionname>REPLACE</connectionname>\n' \
-                                   '\t\t\t<type>1</type>\n\t\t\t<consumer>False</consumer>\n\t\t\t' \
-                                   '<audiosource>False</audiosource>\n' \
-                                   '\t\t\t<videosource>False</videosource>\n\t\t\t<linelevel>False</linelevel>'
+        # for key in ['HDMI IN', 'COMPOSITE IN', 'VGA IN', 'COMPONENT IN', 'DVI IN']:
+        #     self.conn_dict[key] = '\t\t\t<type>5</type>\n\t\t\t' \
+        #                           '<connectionname>REPLACE</connectionname>\n' \
+        #                           '\t\t\t<consumer>True</consumer>\n\t\t\t<linelevel>True</linelevel>'
+        # for key in ['HDMI OUT', 'COMPOSITE OUT', 'VGA OUT', 'COMPONENT OUT', 'DVI OUT']:
+        #     self.conn_dict[key] = '\t\t\t<type>5</type>\n\t\t\t' \
+        #                           '<connectionname>REPLACE</connectionname>\n' \
+        #                           '\t\t\t<consumer>False</consumer>\n\t\t\t<linelevel>True</linelevel>'
+        # for key in ['STEREO IN', 'DIGITAL_OPTICAL IN']:
+        #     self.conn_dict[key] = '\t\t\t<type>6</type>\n\t\t\t' \
+        #                           '<connectionname>REPLACE</connectionname>\n' \
+        #                           '\t\t\t<consumer>True</consumer>\n\t\t\t<linelevel>True</linelevel>'
+        # for key in ['STEREO OUT', 'DIGITAL_OPTICAL OUT']:
+        #     self.conn_dict[key] = '\t\t\t<type>6</type>\n\t\t\t' \
+        #                           '<connectionname>REPLACE</connectionname>\n' \
+        #                           '\t\t\t<consumer>False</consumer>\n\t\t\t<linelevel>True</linelevel>'
+        #
+        # self.conn_dict['IR_OUT'] = '\t\t\t<facing>6</facing>\n\t\t\t' \
+        #                            '<connectionname>REPLACE</connectionname>\n' \
+        #                            '\t\t\t<type>1</type>\n\t\t\t<consumer>False</consumer>\n\t\t\t' \
+        #                            '<audiosource>False</audiosource>\n' \
+        #                            '\t\t\t<videosource>False</videosource>\n\t\t\t<linelevel>False</linelevel>'
 
         # Panels; Creating blank image for panels
         temp_image_file = f'{self.temp_root_dir}blank.gif'
@@ -2629,7 +2632,7 @@ class C4IconSwapper:
             self.connections[i].delete = conn['delete']
             self.connections[i].prior_txt = conn['prior_txt']
             self.connections[i].prior_type = conn['prior_type']
-            self.connections[i].tags = conn['tags']
+            self.connections[i].tag = conn['tag']
             self.connections[i].id_group = conn['id_group']
             self.connections[i].type.set(conn['type'])
             self.connections[i].name_entry_var.set(conn['name'])
