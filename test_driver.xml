@@ -1,34 +1,250 @@
-<?prolog?>
-<tag1>
-    <!--2-->
-    <!--2-->
-    <tag2 att1="val1" att2="val2">
-        <!--test comment-->
-        <test>
-            blank
-        </test>
-        <!--3-->
-        <tag3>
-            <!--4-->
-            <tag4>
-                <!--4in-->qoooo<!--test-->
-            </tag4>
-        </tag3>
-        <!--69-->
-        <tag69>
-        </tag69>
-    <!--2e-->
-    </tag2>
-    <tag2>
-    </tag2>
-    <!--5-->
-    <tag5 id="tagid='5'" />
-    <tag6 />
-    <tag7>
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-    </tag7>
-    <tag8 />
-</tag1>
-<lonelytag />
-<?what am i doing here?>
-<lonelytag />
+<devicedata>
+	<name>New Driver</name>
+	<model>Scenario</model>
+	<creator>C4IconSwapper</creator>
+	<created>06/13/2016 10:00</created>
+	<modified>12/21/2025 00:26</modified>
+	<version>15</version>
+	<capabilities>
+		<navigator_display_option proxybindingid="5001">
+			<display_icons>
+				<Icon height="90" width="90">controller://driver/New Driver/icons/device/default_90.png</Icon>
+				<Icon height="70" width="70">controller://driver/New Driver/icons/device/default_70.png</Icon>
+				<Icon height="300" width="300">controller://driver/New Driver/icons/device/default_300.png</Icon>
+				<Icon height="512" width="512">controller://driver/New Driver/icons/device/default_512.png</Icon>
+				<Icon height="1024" width="1024">controller://driver/New Driver/icons/device/default_1024.png</Icon>
+				<state id="Default">
+					<Icon width="70" height="70">controller://driver/New Driver/icons/device/default_70.png</Icon>
+					<Icon width="90" height="90">controller://driver/New Driver/icons/device/default_90.png</Icon>
+					<Icon width="300" height="300">controller://driver/New Driver/icons/device/default_300.png</Icon>
+					<Icon width="512" height="512">controller://driver/New Driver/icons/device/default_512.png</Icon>
+					<Icon width="1024" height="1024">controller://driver/New Driver/icons/device/default_1024.png</Icon>
+				</state>
+				<state id="Selected">
+					<Icon width="70" height="70">controller://driver/New Driver/icons/device/selected_70.png</Icon>
+					<Icon width="90" height="90">controller://driver/New Driver/icons/device/selected_90.png</Icon>
+					<Icon width="300" height="300">controller://driver/New Driver/icons/device/selected_300.png</Icon>
+					<Icon width="512" height="512">controller://driver/New Driver/icons/device/selected_512.png</Icon>
+					<Icon width="1024" height="1024">controller://driver/New Driver/icons/device/selected_1024.png</Icon>
+				</state>
+			</display_icons>
+		</navigator_display_option>
+	</capabilities>
+	<small image_source="c4z">icons/device_sm.png</small>
+	<large image_source="c4z">icons/device_lg.png</large>
+	<control>lua_gen</control>
+	<driver>DriverWorks</driver>
+	<copyright>Copyright 2021 Wirepath Home Systems, LLC. All Rights Reserved.</copyright>
+	<manufacturer>C4IconSwapper</manufacturer>
+	<config>
+		<script file="driver.lua"/>
+		<documentation>
+Scenario Experience Button
+This driver is a template driver which enables you to provide a button on the Control4 UI which can then be used to trigger a sequence of custom programming.  Think of it as an advanced Custom Button which can be placed in most UI sections rather than in the corners of the screen.
+The driver will need some customization in order to add your required graphic to the button.
+
+Driver Properties
+Driver Version: Current driver version.
+Current State: Current State of the Experience Button (On, Off)
+On Name: The text value to display on list navigators when the experience button is set to On.
+Off Name: The text value to display on list navigators when the experience button is set to Off.
+Toggle State Each Time Selected: Toggle the state of the experience button when selected from a navigator (Yes), or do not toggle when selected (No).
+On LED Color: The color to set a bound keypad buttons LED to when the experience button is set to On (Selected).
+Off LED Color: The color to set a bound keypad buttons LED to when the experience button is set to Off (Default).
+
+Customization
+In order to customize this driver first find it in your Control4 Drivers folder  it is called experience-button-scenario.c4z.  Now make a copy of the driver and give it a new name.  From here onwards wherever you see my-driver-name you should substitute the name you have used for your new driver.
+Now change the file extension from .c4z to .zip
+Open the zip file and within it open the XML file in a text editor.
+Follow the instructions inside the XML file to rename the elements to match the new name of your driver.
+All the items that need to be changed are at the top of the file.
+
+Icons
+The driver uses two icons; one for the default (Off) state and the other for a selected (On) state.  This enables you to provide feedback to your customer if you require.  If feedback is not required then use the same graphic for each state.
+The graphics must be created as transparent background pngs.  You must supply five sizes (70x70, 90x90, 300x300, 512x512, and 1024x1024) for each of the states.
+The graphics must be named exactly as the samples in the driver.  These are default_70.png, default_90.png default_300.png, default_512.png, and default_1024.png for the standard icon to show on the UI.  For the selected state they should be named selected_70.png, selected_90.png selected_300.png, selected_512.png, and selected_1024.png.
+Once you have created the icons they should be saved in the www/icons/device folder, replacing the icons that are already there.
+
+Convert to c4z
+Having completed the changes rename the .zip file to .c4z.  Now copy your new driver to the Control4  Drivers folder.  Open Composer and the driver will be ready to add to the project.
+
+Using the Driver
+There are three stages to using the driver.
+
+Making it visible
+Select each room you want the button to be visible in in turn.  Now for the room select the Navigator tab and the Experience Menu you require.  Note that Experience Buttons cannot be shown under Lights or Shades.
+
+Performing the Action
+In Custom Programming select the button under Device Events.  A single Selected (On) event is available.  Choose this and then add in the custom programming you want to execute when the customer selects the button on the UI.
+
+Feedback (Optional)
+If you want to provide feedback on the button then you can add custom programming using the Device Actions.  A Device Specific Command is available Set State.  This enables you to set the icon state on the UI either to the Default (Off) or Selected (On) state.
+
+Keypad Button Links
+Button links are available for On (Select), Off (Default) and Toggle.
+
+
+CHANGELOG
+
+VERSION 10: Initial Release
+
+VERSION 11: Added STATE variable, which can be used for conditionals, as well as to *set* the STATE of the Scenario button.  Also added a Property to view the current state of the Scenario button (On/Selected or Off/Default).  Also added a toggle command.  Updated the Events to be named 'On' and 'Off' instead of 'Selected' and 'Default'.
+
+VERSION 12: Updated icons.
+
+VERSION 13: Persist experience button state through reboot. Added text properties for On/Off state for list navigator feedback.
+		</documentation>
+		<properties>
+			<property>
+				<name>Driver Version</name>
+				<default></default>
+				<type>STRING</type>
+				<readonly>true</readonly>
+			</property>
+			<property>
+				<name>Current State</name>
+				<default></default>
+				<type>STRING</type>
+				<readonly>true</readonly>
+			</property>
+			<property>
+				<name>On Name</name>
+				<default></default>
+				<type>STRING</type>
+				<readonly>false</readonly>
+			</property>
+			<property>
+				<name>Off Name</name>
+				<default></default>
+				<type>STRING</type>
+				<readonly>false</readonly>
+			</property>
+			<property>
+				<name>Toggle State Each Time Selected</name>
+				<type>LIST</type>
+				<items>
+					<item>Yes</item>
+					<item>No</item>
+				</items>
+				<default>Yes</default>
+				<readonly>false</readonly>
+			</property>
+			<property>
+				<name>On LED Color</name>
+				<type>COLOR_SELECTOR</type>
+				<default>0,200,0</default>
+				<readonly>false</readonly>
+			</property>
+			<property>
+				<name>Off LED Color</name>
+				<type>COLOR_SELECTOR</type>
+				<default>200,0,0</default>
+				<readonly>false</readonly>
+			</property>
+		</properties>
+		<commands>
+			<command>
+				<name>SetState</name>
+				<description>Set State to PARAM1 in NAME</description>
+				<params>
+					<param>
+						<name>State</name>
+						<type>LIST</type>
+						<items>
+							<item>Off</item>
+							<item>On</item>
+						</items>
+					</param>
+				</params>
+			</command>
+			<command>
+				<name>ToggleState</name>
+				<description>Toggle State of NAME</description>
+				<params/>
+			</command>
+		</commands>
+	</config>
+	<proxies>
+		<proxy proxybindingid="5001" name="New Driver" primary="True" image_source="c4z" large_image="icons/device_lg.png" small_image="icons/device_sm.png">uibutton</proxy>
+	</proxies>
+	<events>
+		<event>
+			<id>1</id>
+			<name>Off</name>
+			<description>Button Off from NAME</description>
+		</event>
+		<event>
+			<id>2</id>
+			<name>On</name>
+			<description>Button On from NAME</description>
+		</event>
+	</events>
+	<connections>
+		<connection>
+			<id>5001</id>
+			<facing>6</facing>
+			<connectionname>UIBUTTON</connectionname>
+			<type>2</type>
+			<consumer>False</consumer>
+			<audiosource>True</audiosource>
+			<videosource>True</videosource>
+			<linelevel>True</linelevel>
+			<classes>
+				<class>
+					<classname>UIBUTTON</classname>
+				</class>
+			</classes>
+		</connection>
+		<connection>
+			<id>500</id>
+			<facing>6</facing>
+			<connectionname>Toggle</connectionname>
+			<type>1</type>
+			<consumer>False</consumer>
+			<audiosource>False</audiosource>
+			<videosource>False</videosource>
+			<linelevel>False</linelevel>
+			<classes>
+				<class>
+					<classname>BUTTON_LINK</classname>
+					<autobind>False</autobind>
+				</class>
+			</classes>
+			<hidden>False</hidden>
+		</connection>
+		<connection>
+			<id>501</id>
+			<facing>6</facing>
+			<connectionname>On</connectionname>
+			<type>1</type>
+			<consumer>False</consumer>
+			<audiosource>False</audiosource>
+			<videosource>False</videosource>
+			<linelevel>False</linelevel>
+			<classes>
+				<class>
+					<classname>BUTTON_LINK</classname>
+					<autobind>False</autobind>
+				</class>
+			</classes>
+			<hidden>False</hidden>
+		</connection>
+		<connection>
+			<id>502</id>
+			<facing>6</facing>
+			<connectionname>Off</connectionname>
+			<type>1</type>
+			<consumer>False</consumer>
+			<audiosource>False</audiosource>
+			<videosource>False</videosource>
+			<linelevel>False</linelevel>
+			<classes>
+				<class>
+					<classname>BUTTON_LINK</classname>
+					<autobind>False</autobind>
+				</class>
+			</classes>
+			<hidden>False</hidden>
+		</connection>
+	</connections>
+</devicedata>
