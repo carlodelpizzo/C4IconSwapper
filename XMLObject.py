@@ -290,8 +290,6 @@ class XMLTag:
         self.is_prolog = is_prolog
 
     def get_lines(self):
-        if self.name == 'tag69':
-            pass
         if self.is_comment:
             return f'<!--{self.name}-->\n'
         if self.is_prolog:
@@ -360,19 +358,6 @@ class XMLObject:
                 comments = []
                 continue
 
-            # Handle self-closing tags
-            if data.endswith('/'):
-                data = data[:data.index(' ')]
-                if tag_stack:
-                    tag_stack[-1].elements.append(XMLTag(data, attributes=attributes, is_self_closing=True,
-                                                         indent=len(tag_stack), parent=tag_stack[-1],
-                                                         comments=comments))
-                    attributes = {}
-                else:
-                    self.tags.append(XMLTag(data, attributes=attributes, is_self_closing=True, comments=comments))
-                comments = []
-                continue
-
             # Parse tag attributes
             if ' ' in data:
                 read_att = False
@@ -398,6 +383,21 @@ class XMLObject:
                             read_val = True
                             continue
                         att += char
+
+            # Handle self-closing tags
+            if data.endswith('/'):
+                data = data[:data.index(' ')]
+                if tag_stack:
+                    tag_stack[-1].elements.append(XMLTag(data, attributes=attributes, is_self_closing=True,
+                                                         indent=len(tag_stack), parent=tag_stack[-1],
+                                                         comments=comments))
+                    attributes = {}
+                else:
+                    self.tags.append(XMLTag(data, attributes=attributes, is_self_closing=True, comments=comments))
+                comments = []
+                continue
+
+            if ' ' in data:
                 data = data[:data.index(' ')]
 
             # Handle closing tag, Pull off stack
@@ -430,12 +430,12 @@ class XMLObject:
             comments = []
 
     def get_lines(self):
-        lines = ''.join([s.get_lines() for s in self.tags])
-        print(lines)
+        return ''.join([s.get_lines() for s in self.tags])
 
 
 # with open('compare_driver.xml', 'w', errors='ignore') as out_file:
 #     out_file.writelines(XMLObject('test_driver.xml').get_lines())
 
-XMLObject('test_driver.xml').get_lines()
+with open('compare_driver.xml', 'w', errors='ignore') as out_file:
+    out_file.writelines(XMLObject('test_driver.xml').get_lines())
     
