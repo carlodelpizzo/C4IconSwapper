@@ -158,7 +158,7 @@ class C4IconSwapper:
                     self.tag.get('type')[0].set_value('6')
             if conn_type == 'IR_OUT':
                 valid_id = find_valid_id(1, self.main.conn_ids)
-                self.tag.get('type')[0].set_value('6')
+                self.tag.get('type')[0].set_value('1')
 
             if self.id in self.main.conn_ids:
                 self.main.conn_ids.pop(self.main.conn_ids.index(self.id))
@@ -861,7 +861,7 @@ class C4IconSwapper:
 
             # File select dialog
             if given_path is None and not recovery:
-                filename = filedialog.askopenfilename(filetypes=[('Control4 Drivers', '*.c4z')])
+                filename = filedialog.askopenfilename(filetypes=[('Control4 Drivers', '*.c4z *.zip')])
                 # If no file selected
                 if not filename:
                     if os.path.isdir(temp_bak):
@@ -1995,8 +1995,17 @@ class C4IconSwapper:
 
             # Update connection names
             for conn in self.main.connections:
+                # TODO: Verify connection formats are valid
                 conn.tag.get('connectionname')[0].set_value(conn.name_entry_var.get())
-                conn.tag.get('classname')[0].set_value(conn.type.get())
+                conn.tag.get('classname')[0].set_value(conn_type := conn.type.get())
+                if 'IN' in conn_type:
+                    conn.tag.get('consumer')[0].set_value('True')
+                else:
+                    conn.tag.get('consumer')[0].set_value('False')
+                if conn_type == 'IR_OUT':
+                    conn.tag.add_element(XMLObject(xml_string='<facing>6</facing>').tags[0], index=2)
+                    conn.tag.add_element(XMLObject(xml_string='<audiosource>False</audiosource>').tags[0], index=-3)
+                    conn.tag.add_element(XMLObject(xml_string='<videosource>False</videosource>').tags[0], index=-3)
 
             # Update xml with new driver name
             self.main.driver_xml.get_tags('name')[0].set_value(driver_name)
@@ -2022,6 +2031,8 @@ class C4IconSwapper:
                 os.remove(xml_bak_path)
             os.rename(xml_path := f'{self.main.temp_dir}driver/driver.xml', xml_bak_path)
             with open(xml_path, 'w', errors='ignore') as out_file:
+                out_file.writelines(self.main.driver_xml.get_lines())
+            with open('driver.xml', 'w', errors='ignore') as out_file:
                 out_file.writelines(self.main.driver_xml.get_lines())
             # Call export functions
             if quick_export:
@@ -2204,35 +2215,12 @@ class C4IconSwapper:
         self.states = [self.State('') for _ in range(13)]
         self.state_dupes = []
         self.states_orig_names = []
-        # self.conn_dict = {}
         self.device_icon_dir = f'{self.temp_dir}driver/www/icons/device/'
         self.icon_dir = f'{self.temp_dir}driver/www/icons/'
         self.images_dir = f'{self.temp_dir}driver/www/images/'
         self.replacement_image_path = f'{self.temp_dir}replacement_icon.png'
         self.orig_file_dir, self.orig_file_path, self.restore_entry_string = '', '', ''
         self.driver_selected, self.replacement_selected, self.schedule_entry_restore = False, False, False
-        # for key in ['HDMI IN', 'COMPOSITE IN', 'VGA IN', 'COMPONENT IN', 'DVI IN']:
-        #     self.conn_dict[key] = '\t\t\t<type>5</type>\n\t\t\t' \
-        #                           '<connectionname>REPLACE</connectionname>\n' \
-        #                           '\t\t\t<consumer>True</consumer>\n\t\t\t<linelevel>True</linelevel>'
-        # for key in ['HDMI OUT', 'COMPOSITE OUT', 'VGA OUT', 'COMPONENT OUT', 'DVI OUT']:
-        #     self.conn_dict[key] = '\t\t\t<type>5</type>\n\t\t\t' \
-        #                           '<connectionname>REPLACE</connectionname>\n' \
-        #                           '\t\t\t<consumer>False</consumer>\n\t\t\t<linelevel>True</linelevel>'
-        # for key in ['STEREO IN', 'DIGITAL_OPTICAL IN']:
-        #     self.conn_dict[key] = '\t\t\t<type>6</type>\n\t\t\t' \
-        #                           '<connectionname>REPLACE</connectionname>\n' \
-        #                           '\t\t\t<consumer>True</consumer>\n\t\t\t<linelevel>True</linelevel>'
-        # for key in ['STEREO OUT', 'DIGITAL_OPTICAL OUT']:
-        #     self.conn_dict[key] = '\t\t\t<type>6</type>\n\t\t\t' \
-        #                           '<connectionname>REPLACE</connectionname>\n' \
-        #                           '\t\t\t<consumer>False</consumer>\n\t\t\t<linelevel>True</linelevel>'
-        #
-        # self.conn_dict['IR_OUT'] = '\t\t\t<facing>6</facing>\n\t\t\t' \
-        #                            '<connectionname>REPLACE</connectionname>\n' \
-        #                            '\t\t\t<type>1</type>\n\t\t\t<consumer>False</consumer>\n\t\t\t' \
-        #                            '<audiosource>False</audiosource>\n' \
-        #                            '\t\t\t<videosource>False</videosource>\n\t\t\t<linelevel>False</linelevel>'
 
         # Panels; Creating blank image for panels
         temp_image_file = f'{self.temp_root_dir}blank.gif'

@@ -364,11 +364,14 @@ class XMLTag:
                 self.elements[i] = value
                 break
 
-    def add_element(self, tag):
+    def add_element(self, tag, index=None):
         if type(tag) is not type(self):
             raise TypeError
         tag.update_indent(self.indent + 1)
-        self.elements.append(tag)
+        if index:
+            self.elements.insert(index, tag)
+        else:
+            self.elements.append(tag)
 
     def update_indent(self, new_indent: int):
         self.indent = new_indent
