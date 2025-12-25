@@ -25,3 +25,100 @@
 <lonelytag/>
 <?what am i doing here?>
 <lonelytag/>
+<!--Connection Templates-->
+<connection>
+	<id>2</id>
+	<facing>1</facing>
+	<facing>6</facing>
+	<connectionname>IR</connectionname>
+	<type>1</type>
+	<consumer>False</consumer>
+	<audiosource>False</audiosource>
+	<audiosource>False</audiosource>
+	<videosource>False</videosource>
+	<videosource>False</videosource>
+	<linelevel>True</linelevel>
+	<classes>
+		<class>
+			<classname>IR_OUT</classname>
+		</class>
+	</classes>
+</connection>
+<connection proxybindingid="5001" verified="False">
+	<id>1000</id>
+	<facing>6</facing>
+	<connectionname>ANTENNA</connectionname>
+	<type>5</type>
+	<consumer>true</consumer>
+	<audiosource>false</audiosource>
+	<videosource>false</videosource>
+	<linelevel>true</linelevel>
+	<classes>
+		<class>
+			<classname>RF_UHF_VHF</classname>
+		</class>
+	</classes>
+</connection>
+<connection proxybindingid="5001" verified="False">
+	<id>1020</id>
+	<facing>6</facing>
+	<connectionname>CABLE</connectionname>
+	<type>5</type>
+	<consumer>true</consumer>
+	<audiosource>false</audiosource>
+	<videosource>false</videosource>
+	<linelevel>true</linelevel>
+	<classes>
+		<class>
+			<classname>RF_CABLE</classname>
+		</class>
+	</classes>
+</connection>
+<connection proxybindingid="5001" verified="False">
+	<id>1001</id>
+	<facing>6</facing>
+	<connectionname>HDMI 1</connectionname>
+	<type>5</type>
+	<consumer>False</consumer>
+	<audiosource>False</audiosource>
+	<videosource>False</videosource>
+	<linelevel>True</linelevel>
+	<classes>
+		<class>
+			<classname>HDMI</classname>
+		</class>
+	</classes>
+</connection>
+<connection proxybindingid="5001" verified="False">
+	<id>4000</id>
+	<facing>6</facing>
+	<connectionname>AUDIO OUT</connectionname>
+	<type>6</type>
+	<consumer>False</consumer>
+	<audiosource>true</audiosource>
+	<videosource>false</videosource>
+	<linelevel>true</linelevel>
+	<classes>
+		<class>
+			<classname>STEREO</classname>
+		</class>
+		<class>
+			<classname>STEREO</classname>
+		</class>
+	</classes>
+</connection>
+<connection>
+	<id>5001</id>
+	<facing>6</facing>
+	<connectionname>TV</connectionname>
+	<type>2</type>
+	<consumer>False</consumer>
+	<audiosource>False</audiosource>
+	<videosource>False</videosource>
+	<linelevel>False</linelevel>
+	<classes>
+		<class>
+			<classname>TV</classname>
+		</class>
+	</classes>
+</connection>

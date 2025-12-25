@@ -52,8 +52,8 @@ class C4IS:
     def __init__(self, main: object):
         if type(main) is not C4IconSwapper:
             raise TypeError
-        if not main:  # For IDE UnresolvedReferences errors
-            main = C4IconSwapper()
+        if not main:
+            main = C4IconSwapper()  # For IDE UnresolvedReferences errors
         # Root class
         self.driver_xml = main.driver_xml
         self.driver_manufac_var = main.driver_manufac_var.get()
@@ -86,7 +86,6 @@ class C4IS:
         self.include_backups = main.export_panel.include_backups.get()
 
         # C4z Panel
-        # self.icons = main.c4z_panel.icons
         self.extra_icons = main.c4z_panel.extra_icons
         self.show_extra_icons = main.c4z_panel.show_extra_icons.get()
         if main.driver_selected:
@@ -146,26 +145,26 @@ class C4IconSwapper:
                 conn_type = conn_type.replace(' IN', '')
                 if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
                     valid_id = find_valid_id(2000, self.main.conn_ids)
-                    self.tag.get('type')[0].set_value('5')
+                    self.tag.get_tag('type').set_value('5')
                 elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
                     valid_id = find_valid_id(4000, self.main.conn_ids)
-                    self.tag.get('type')[0].set_value('6')
+                    self.tag.get_tag('type').set_value('6')
             elif ' OUT' in conn_type:
                 conn_type = conn_type.replace(' OUT', '')
                 if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
                     valid_id = find_valid_id(1900, self.main.conn_ids)
-                    self.tag.get('type')[0].set_value('5')
+                    self.tag.get_tag('type').set_value('5')
                 elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
                     valid_id = find_valid_id(3900, self.main.conn_ids)
-                    self.tag.get('type')[0].set_value('6')
+                    self.tag.get_tag('type').set_value('6')
             if conn_type == 'IR_OUT':
                 valid_id = find_valid_id(1, self.main.conn_ids)
-                self.tag.get('type')[0].set_value('1')
+                self.tag.get_tag('type').set_value('1')
 
             if self.id in self.main.conn_ids:
                 self.main.conn_ids.pop(self.main.conn_ids.index(self.id))
             self.id = valid_id[0]
-            self.tag.get('id')[0].set_value(str(self.id))
+            self.tag.get_tag('id').set_value(str(self.id))
             self.main.conn_ids.append(self.id)
 
     class State:
@@ -355,7 +354,7 @@ class C4IconSwapper:
                 self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
 
             # Labels
-            instance_id_label = tk.Label(self.window, text=f'instance id: {self.main.instance_id}')
+            instance_id_label = tk.Label(self.window, text=f'program instance id: {self.main.instance_id}')
 
             man_y = 20
             man_arrow = tk.Label(self.window, text='\u2192', font=('', 15))
@@ -621,6 +620,7 @@ class C4IconSwapper:
             self.file_entry_field['state'] = DISABLED
 
             # Checkbox
+            # TODO: Disable show extra icons checkbox if inapplicable
             self.show_extra_icons = IntVar(value=0)
             self.show_extra_icons.trace('w', self.toggle_extra_icons)
             self.show_sub_icons_check = Checkbutton(self.main.root, text='show extra icons',
@@ -753,7 +753,7 @@ class C4IconSwapper:
             self.icon_name_label.config(text=f'name: {self.icons[self.current_icon].name}')
 
         def load_c4z(self, given_path=None, recovery=False):
-            # Could improve this
+            # TODO: Improve code
             def get_icons(directory):
                 if not os.path.isdir(directory):
                     return None
@@ -807,7 +807,7 @@ class C4IconSwapper:
                     icons_out.extend(get_icons(sub_dir))
                 return icons_out
 
-            # Could improve this
+            # TODO: Improve code; Code runs when loading some drivers, need to re-evaluate
             def check_dupe_names(recalled=False):
                 recall = False
                 if not recalled:
@@ -1008,18 +1008,14 @@ class C4IconSwapper:
 
             # Read driver.xml and update variables
             self.main.driver_xml = XMLObject(f'{self.main.temp_dir}driver/driver.xml')
-            man_tag = self.main.driver_xml.get_tags('manufacturer')
-            if man_tag:
-                self.main.driver_manufac_var.set(man_tag[0].value())
-            creator_tag = self.main.driver_xml.get_tags('creator')
-            if creator_tag:
-                self.main.driver_creator_var.set(creator_tag[0].value())
-            self.main.driver_version_count = 1
-            version_tag = self.main.driver_xml.get_tags('version')
-            if version_tag:
-                self.main.driver_ver_orig.set(version_tag[0].value())
+            if man_tag := self.main.driver_xml.get_tag('manufacturer'):
+                self.main.driver_manufac_var.set(man_tag.value())
+            if creator_tag := self.main.driver_xml.get_tag('creator'):
+                self.main.driver_creator_var.set(creator_tag.value())
+            if version_tag := self.main.driver_xml.get_tag('version'):
+                self.main.driver_ver_orig.set(version_tag.value())
                 temp_str = ''
-                for char in version_tag[0].value():
+                for char in version_tag.value():
                     if char not in numbers:
                         continue
                     temp_str += char
@@ -1240,11 +1236,11 @@ class C4IconSwapper:
                 if conn.original:
                     continue
                 new_conn = XMLTag(xml_string=conn_template)
-                name_tag = new_conn.get('connectionname')[0]
+                name_tag = new_conn.get_tag('connectionname')
                 name_tag.value = 'Connection Name...'
-                new_conn.get('classname')[0].set_value('HDMI IN')
+                new_conn.get_tag('classname').set_value('HDMI IN')
                 new_conn.delete = True
-                self.main.driver_xml.get_tags('connections')[0].add_element(new_conn)
+                self.main.driver_xml.get_tag('connections').add_element(new_conn)
                 conn.tag = new_conn
 
             # Form id groups
@@ -1995,34 +1991,32 @@ class C4IconSwapper:
 
             # Update connection names
             for conn in self.main.connections:
-                # TODO: Verify connection formats are valid
-                conn.tag.get('connectionname')[0].set_value(conn.name_entry_var.get())
-                conn.tag.get('classname')[0].set_value(conn_type := conn.type.get())
+                conn.tag.get_tag('connectionname').set_value(conn.name_entry_var.get())
+                conn.tag.get_tag('classname').set_value(conn_type := conn.type.get())
                 if 'IN' in conn_type:
-                    conn.tag.get('consumer')[0].set_value('True')
+                    conn.tag.get_tag('consumer').set_value('True')
                 else:
-                    conn.tag.get('consumer')[0].set_value('False')
+                    conn.tag.get_tag('consumer').set_value('False')
                 if conn_type == 'IR_OUT':
                     conn.tag.add_element(XMLTag(xml_string='<facing>6</facing>'), index=2)
                     conn.tag.add_element(XMLTag(xml_string='<audiosource>False</audiosource>'), index=-3)
                     conn.tag.add_element(XMLTag(xml_string='<videosource>False</videosource>'), index=-3)
 
             # Update XML with new driver name
-            self.main.driver_xml.get_tags('name')[0].set_value(driver_name)
+            self.main.driver_xml.get_tag('name').set_value(driver_name)
             modified_datestamp = str(datetime.now().strftime('%m/%d/%Y %H:%M'))
             if self.inc_driver_version.get() and \
                     int(self.main.driver_version_var.get()) >= int(self.main.driver_version_new_var.get()):
                 self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
-            self.main.driver_xml.get_tags('version')[0].set_value(self.main.driver_version_new_var.get())
-            self.main.driver_xml.get_tags('modified')[0].set_value(modified_datestamp)
-            self.main.driver_xml.get_tags('creator')[0].set_value(self.main.driver_creator_new_var.get())
-            self.main.driver_xml.get_tags('manufacturer')[0].set_value(self.main.driver_manufac_new_var.get())
-            for attribute in self.main.driver_xml.get_tags('proxy')[0].attributes:
+            self.main.driver_xml.get_tag('version').set_value(self.main.driver_version_new_var.get())
+            self.main.driver_xml.get_tag('modified').set_value(modified_datestamp)
+            self.main.driver_xml.get_tag('creator').set_value(self.main.driver_creator_new_var.get())
+            self.main.driver_xml.get_tag('manufacturer').set_value(self.main.driver_manufac_new_var.get())
+            for attribute in self.main.driver_xml.get_tag('proxy').attributes:
                 if attribute[0] == 'name':
                     attribute[1] = driver_name
             for icon_tag in self.main.driver_xml.get_tags('Icon'):
-                result = re.search('driver/(.*)/icons', icon_tag.value())
-                if result:
+                if result := re.search('driver/(.*)/icons', icon_tag.value()):
                     result = result[1]
                     icon_tag.set_value(icon_tag.value().replace(result, driver_name))
 
@@ -2729,10 +2723,12 @@ class C4IconSwapper:
 
 
 def list_all_sub_directories(directory: str, include_root_dir=False):
-    subs = [path for dir_name in os.listdir(directory) if os.path.isdir(path := f'{directory}/{dir_name}')]
-    for sub_sub in [list_all_sub_directories(sub_dir) for sub_dir in [*subs]]:
-        subs.extend(sub_sub)
-    return [directory, *sorted(subs)] if include_root_dir else sorted(subs)  # I don't remember why I used sort here
+    subs = []
+    for root, dirs, _ in os.walk(directory):
+        for sub in dirs:
+            subs.append(os.path.join(root, sub))
+    subs.sort()
+    return subs.insert(0, directory) if include_root_dir else subs
 
 
 def find_valid_id(id_seed: int, list_of_ids: list, inc_count=0):
