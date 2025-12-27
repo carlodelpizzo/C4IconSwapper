@@ -1,15 +1,16 @@
-<?prolog?>
+<?prol>og?>
 <tag1>
 	<!--2a-->
 	<!--2b-->
 	<!--2c-->
-	<tag2 att1="val1" att2="val2">
+	<tag att="t&lt;&gt;&gt;est"/>
+	<tag2 att1="val test 1" att2="val2 " anothaone="tes&gt;t">
 		<!--killer<>><<<><>>>comment-->
 		<test>blank</test>
 		<!--3-->
 		<tag3>
 			<!--4-->
-			<tag4><!--4in-->qoooo<!--4in2--></tag4>
+			<tag4>&lt;!--4in--&gt;qoooo&lt;!--4in2--&gt;</tag4>
 		</tag3>
 		<!--69-->
 		<tag69></tag69>
@@ -20,6 +21,11 @@
 	<tag5 id="tagid='5'"/>
 	<tag6/>
 	<tag7>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</tag7>
+	<tag7>
+Lorem &amp; ipsum dolor sit amet, consectetur adipiscing elit, sed do
+eiusmod tempor incididunt ut labore et dolore magna
+aliqua.
+	</tag7>
 	<tag8/>
 </tag1>
 <lonelytag/>

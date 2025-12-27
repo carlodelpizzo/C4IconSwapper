@@ -1,10 +1,12 @@
 import copy
+import re
 from collections import deque
 
-from Tools.scripts.objgraph import ignore
+
+char_escapes = {'<': '&lt;', '>': '&gt;', '&': '&amp;'}
 
 
-def parse_xml(xml_path: str = None, xml_string: str = None):
+def parse_xml(xml_path: str = '', xml_string: str = ''):
     if not xml_path and not xml_string:
         return []
     if xml_path:
@@ -22,10 +24,14 @@ def parse_xml(xml_path: str = None, xml_string: str = None):
     for i in (i for i, char in enumerate(xml_string) if char in ('<', '>')):
         if xml_string[i] == '<':
             if tag_start:
-                continue  # Continue if '<' found inside comment
+                continue  # Continue if '<' found inside comment or attribute
             tag_start = i
             continue
-        data = xml_string[tag_start + 1:i]
+
+        try:
+            data = xml_string[tag_start + 1:i]
+        except TypeError:
+            raise SyntaxError
 
         # Identify comment
         if data.startswith('!--'):
@@ -36,7 +42,9 @@ def parse_xml(xml_path: str = None, xml_string: str = None):
             continue
 
         # Identify prolog
-        if data.startswith('?') and data.endswith('?'):
+        if data.startswith('?'):
+            if not data.endswith('?'):
+                continue
             if tag_stack:
                 tag_stack[-1].elements.append(XMLTag(name=data[1:-1], parent=tag_stack[-1],
                                                      is_prolog=True, comments=comments))
@@ -48,29 +56,10 @@ def parse_xml(xml_path: str = None, xml_string: str = None):
 
         # Parse tag attributes
         if ' ' in data:
-            read_att = False
-            read_val = False
-            att = ''
-            val_i = None
-            for di, char in enumerate(data):
-                if read_val:
-                    if char == '"':
-                        if not val_i:
-                            val_i = di + 1
-                            continue
-                        attributes[att] = data[val_i:di]
-                        val_i = None
-                        att = ''
-                        read_val = False
-                    continue
-                if char == ' ':
-                    read_att = True
-                    continue
-                if read_att:
-                    if char == '=':
-                        read_val = True
-                        continue
-                    att += char
+            attr_pairs = re.findall(r'(\w+)="([^"]*)"', data)
+            if len(attr_pairs) != len(re.findall(r'(\w+)="([^"]*)', data)):
+                continue
+            attributes = {k: v for k, v in attr_pairs}
 
         # Handle self-closing tags
         if data.endswith('/'):
@@ -78,6 +67,8 @@ def parse_xml(xml_path: str = None, xml_string: str = None):
                 data = data[:data.index(' ')]
             else:
                 data = data[:-1]
+            if '<' in data or '>' in data:
+                raise SyntaxError
             if tag_stack:
                 tag_stack[-1].elements.append(XMLTag(name=data, attributes=attributes, is_self_closing=True,
                                                      parent=tag_stack[-1],
@@ -93,10 +84,12 @@ def parse_xml(xml_path: str = None, xml_string: str = None):
             data = data[:data.index(' ')]
 
         # Handle closing tag, Pull off stack
-        if tag_stack and tag_stack[-1].name == data[1:]:
+        if tag_stack and data.startswith('/') and tag_stack[-1].name == data[1:]:
             # Add closing tag to XMLTag
             if tag_end:
-                tag_stack[-1].elements.append(xml_string[tag_end:tag_start].lstrip().rstrip())
+                str_element = xml_string[tag_end:tag_start].strip()
+                if str_element:
+                    tag_stack[-1].elements.append(str_element)
                 tag_end = None
 
             # Add comments to XMLTag
@@ -104,7 +97,7 @@ def parse_xml(xml_path: str = None, xml_string: str = None):
                 pop_list = []
                 for element in tag_stack[-1].elements:
                     for comment in comments:
-                        if type(element) is str and comment.get_lines() in element:
+                        if type(element) is str and f'<!--{comment.name}-->' in element:
                             pop_list.append(comments.index(comment))
                 for x in sorted(pop_list, reverse=True):
                     comments.pop(x)
@@ -129,6 +122,8 @@ def parse_xml(xml_path: str = None, xml_string: str = None):
         comments = []
         tag_start = None
 
+    if tag_stack:
+        raise SyntaxError
     return tags
 
 
@@ -166,57 +161,61 @@ class XMLTag:
         self.is_prolog = is_prolog
         self.delete = False
 
-    # TODO: have function return list of lines
+    # Returns list of lines
     def get_lines(self, indent=''):
         if self.delete:
-            return ''
+            return []
         if self.is_comment:
-            return f'<!--{self.name}-->'
+            return [f'<!--{self.name}-->']
         if self.is_prolog:
-            return f'<?{self.name}?>'
+            return [f'<?{self.name}?>']
 
-        attributes = ''
-
-        for attribute in self.attributes:
-            attributes += f'{attribute}="{self.attributes[attribute]}" '
-
-        output = ''
+        attributes = ' '.join([f'{attribute}="{re.sub(r"[<>&]", lambda m: char_escapes[m.group(0)], value)}"'
+                               for attribute, value in self.attributes.items()])
+        output = []
 
         if self.comments:
             for comment in self.comments:
-                output += f'{indent}{comment.get_lines()}\n'
+                output.extend([f'{indent}{line}\n' for line in comment.get_lines()])
         if self.is_self_closing:
-            output += f'{indent}<{self.name} {attributes}'
-            return f'{output[:-1]}/>'
-        else:
-            output += f'{indent}<{self.name} {attributes}'
-            output = output[:-1]
-            if len(self.elements) <= 1 and type(self.elements[0]) is str and '\n' not in self.elements[0]:
-                output += '>'
+            if attributes:
+                output.append(f'{indent}<{self.name} {attributes}/>')
             else:
-                output += f'>\n'
+                output.append(f'{indent}<{self.name}/>')
+            return output
+        else:
+            output.append(f'{indent}<{self.name} {attributes}'.rstrip())
+            if not self.elements and not self.closing_comments:
+                output[-1] += '>'
+            elif len(self.elements) <= 1 and type(self.elements[0]) is str and '\n' not in self.elements[0]:
+                output[-1] += '>'
+            else:
+                output[-1] += f'>\n'
         for element in self.elements:
             if type(element) is str:
                 if len(self.elements) == 1:
-                    output += element
+                    output.append(re.sub(r"[<>&]", lambda m: char_escapes[m.group(0)], element))
                     continue
                 if element:
-                    output += f'{indent}\t{element}\n'
+                    output.append(f'{indent}\t{re.sub(r"[<>&]", lambda m: char_escapes[m.group(0)], element)}\n')
                 continue
             if element.delete:
                 continue
-            output += element.get_lines(indent=f'\t{indent}') + '\n'
+            output.extend(element.get_lines(indent=f'\t{indent}'))
+            output[-1] += '\n'
         if self.closing_comments:
             for comment in self.closing_comments:
-                output += f'{indent}{comment.get_lines()}\n'
+                output.append(f'{indent}<!--{comment.name}-->\n')
 
-        if len(self.elements) <= 1 and type(self.elements[0]) is str:
+        if not self.elements:
+            output.append(f'</{self.name}>')
+        elif len(self.elements) <= 1 and type(self.elements[0]) is str:
             if '\n' in self.elements[0]:
-                output += f'\n{indent}</{self.name}>'
+                output.append(f'\n{indent}</{self.name}>')
             else:
-                output += f'</{self.name}>'
+                output.append(f'</{self.name}>')
         else:
-            output += f'{indent}</{self.name}>'
+            output.append(f'{indent}</{self.name}>')
         return output
 
     def get_tags(self, name: str):
@@ -276,7 +275,14 @@ class XMLObject:
         self.tags = parse_xml(xml_path=xml_path, xml_string=xml_string)
 
     def get_lines(self):
-        return '\n'.join([s.get_lines() for s in self.tags])
+        output = []
+        if len(self.tags) == 1:
+            return self.tags[0].get_lines()
+        for i, tag in enumerate(self.tags):
+            output.extend(tag.get_lines())
+            if i != len(self.tags) - 1:
+                output[-1] += '\n'
+        return output
 
     def get_tags(self, name: str):
         output = []
@@ -299,5 +305,6 @@ class XMLObject:
         self.tags = self.restore_point.tags
 
 
+# TODO: Remove before commit
 # with open('compare_driver.xml', 'w', errors='ignore') as out_file:
 #     out_file.writelines(XMLObject('test_driver.xml').get_lines())

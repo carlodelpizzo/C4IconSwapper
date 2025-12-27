@@ -1,9 +1,10 @@
-<?prolog?>
-<tag1>
+<<?prol>og?>
+<tag1 >
 	<!--2a-->
 	<!--2b-->
     <!--2c-->
-	<tag2 att1="val1" att2="val2">
+	<tag att="t<>>est" />
+	<tag2 att1="val test 1" att2="val2 "   anothaone="tes>t" >
 		<!--killer<>><<<><>>>comment-->
 		<test>blank</test>
 		<!--3-->
@@ -20,6 +21,11 @@
 	<tag5 id="tagid='5'"/>
 	<tag6/>
 	<tag7>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</tag7>
+	<tag7>
+Lorem & ipsum dolor sit amet, consectetur adipiscing elit, sed do
+eiusmod tempor incididunt ut labore et dolore magna
+aliqua.
+	</tag7>
 	<tag8/>
 </tag1>
 <lonelytag/>
