@@ -306,5 +306,5 @@ class XMLObject:
 
 
 # TODO: Remove before commit
-# with open('compare_driver.xml', 'w', errors='ignore') as out_file:
-#     out_file.writelines(XMLObject('test_driver.xml').get_lines())
+with open('compare_driver.xml', 'w', errors='ignore') as out_file:
+    out_file.writelines(XMLObject('test_driver.xml').get_lines())
