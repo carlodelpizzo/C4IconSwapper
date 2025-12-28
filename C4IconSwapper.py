@@ -18,6 +18,7 @@ from tkinter import NORMAL, DISABLED, END, INSERT
 from tkinter import ttk, filedialog, Toplevel, StringVar, IntVar, Checkbutton, Label, OptionMenu, Menu
 from tkinterdnd2 import DND_FILES, TkinterDnD
 from PIL import ImageTk, Image
+from pathlib import Path
 from datetime import datetime
 from collections import deque
 from XMLObject import XMLObject, XMLTag
@@ -68,7 +69,6 @@ class C4IS:
         self.multi_state_driver = main.multi_state_driver
         self.states_orig_names = main.states_orig_names
         self.driver_selected = main.driver_selected
-        self.replacement_selected = main.replacement_selected
 
         # State Panel
         self.states = [{'original_name': state.original_name, 'name_var': state.name_var.get()}
@@ -103,11 +103,11 @@ class C4IS:
                           'next': main.c4z_panel.next_icon_button['state']}
 
         # Replacement Panel
-        if self.replacement_selected:
-            self.replacement = Image.open(os.path.join(main.temp_dir, 'replacement_icon.png'))
+        if main.replacement_panel.replacement_icon:
+            self.replacement = Image.open(main.replacement_panel.replacement_icon.path)
         else:
             self.replacement = None
-        self.img_stack = [Image.open(img) for img in main.replacement_panel.img_stack]
+        self.img_bank = [Image.open(img.path) for img in main.replacement_panel.img_bank]
 
         self.replacement_panel = {'replace': main.replacement_panel.replace_button['state'],
                                   'replace_all': main.replacement_panel.replace_all_button['state'],
@@ -124,27 +124,27 @@ class C4IconSwapper:
             return valid_id
 
         def exception_handler(*args):
-            err_lines = (err := '\n'.join(traceback.format_exception(*args))).splitlines()
             root = tk.Toplevel()
             root.title('Exception')
             frame = tk.Frame(root)
-            frame.pack(expand=True, fill='both', padx=10, pady=(10, 0))
+            frame.pack(expand=True, fill='both', padx=10, pady=10)
             # Create window icon
             root.wm_iconphoto(True, tk.PhotoImage(data=Assets.win_icon_b64))
 
-            text_widget = tk.Text(frame, font=('Consolas', 10), wrap='none')
-            text_widget.insert(tk.END, err)
-            text_widget.config(state='disabled')
+            h_scroll = tk.Scrollbar(frame, orient='horizontal')
+            h_scroll.pack(side='bottom', fill='x')
+            v_scroll = tk.Scrollbar(frame, orient='vertical')
+            v_scroll.pack(side='right', fill='y')
 
-            # Scroll bars
-            v_scroll = tk.Scrollbar(frame, orient='vertical', command=text_widget.yview)
-            h_scroll = tk.Scrollbar(root, orient='horizontal', command=text_widget.xview)
+            text_widget = tk.Text(frame, font=('Consolas', 10), wrap='none', width=80, height=20)
+            text_widget.pack(side='left', expand=True, fill='both')
             text_widget.config(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
-            text_widget.grid(row=0, column=0, sticky='nsew')
-            v_scroll.grid(row=0, column=1, sticky='ns')
-            h_scroll.pack(fill='x', padx=10)
+            v_scroll.config(command=text_widget.yview)
+            h_scroll.config(command=text_widget.xview)
 
             # Set window size
+            err_lines = (err := '\n'.join(traceback.format_exception(*args))).splitlines()
+            text_widget.insert(END, err)
             width = max(len(line.strip()) for line in err_lines) + 2
             height = len(err_lines) + 2
             text_widget.config(width=width, height=height)
@@ -155,9 +155,17 @@ class C4IconSwapper:
             # Cap window size
             screen_width = root.winfo_screenwidth()
             screen_height = root.winfo_screenheight()
-            if root.winfo_width() > screen_width * 0.8 or root.winfo_height() > screen_height * 0.8:
-                root.geometry(f'{int(screen_width * 0.8)}x{int(screen_height * 0.8)}')
+            h_scale_factor = 0.75
+            v_scale_factor = 0.75
+            if root.winfo_width() > screen_width * h_scale_factor:
+                if root.winfo_height() > screen_height * v_scale_factor:
+                    root.geometry(f'{int(screen_width * h_scale_factor)}x{int(screen_height * v_scale_factor)}')
+                else:
+                    root.geometry(f'{int(screen_width * h_scale_factor)}x{root.winfo_height()}')
+            elif root.winfo_height() > screen_height * v_scale_factor:
+                root.geometry(f'{root.winfo_width()}x{int(screen_height * v_scale_factor)}')
 
+            text_widget.config(state='disabled')
             root.resizable(False, False)
             root.grab_set()
 
@@ -280,6 +288,7 @@ class C4IconSwapper:
         self.driver_version_new_var.set('1')
         self.multi_state_driver, self.states_shown, self.ask_to_save = False, False, False
         self.counter, self.easter_counter = 0, 0
+        self.img_bank_size = 4
         self.connections = [Connection(self) for _ in range(18)]
         self.conn_ids = []
         self.states = [State('') for _ in range(13)]
@@ -288,15 +297,14 @@ class C4IconSwapper:
         self.device_icon_dir = os.path.join(www_path := os.path.join(self.temp_dir, 'driver', 'www'), 'icons', 'device')
         self.icon_dir = os.path.join(www_path, 'icons')
         self.images_dir = os.path.join(www_path, 'images')
-        self.replacement_image_path = os.path.join(self.temp_dir, 'replacement_icon.png')
         self.orig_file_dir, self.orig_file_path, self.restore_entry_string = '', '', ''
-        self.driver_selected, self.replacement_selected, self.schedule_entry_restore = False, False, False
+        self.driver_selected, self.schedule_entry_restore = False, False
         self.undo_history = deque(maxlen=10)
 
         # Panels; Creating blank image for panels
         with Image.open(io.BytesIO(Assets.blank_img_b)) as img:
             self.blank = ImageTk.PhotoImage(img.resize((128, 128)))
-            self.stack_blank = ImageTk.PhotoImage(img.resize((60, 60)))
+            self.img_bank_blank = ImageTk.PhotoImage(img.resize((60, 60)))
 
         # Initialize Panels
         self.c4z_panel = C4zPanel(self)
@@ -360,11 +368,9 @@ class C4IconSwapper:
             if not first_time:
                 multi_images = False
                 multi_check = 0
-                # TODO: Create class variable for stack_length
-                stack_size = 4
                 for file in os.listdir(recovery_path):
                     self.replacement_panel.load_replacement(given_path=os.path.join(recovery_path, file))
-                    if multi_check > stack_size + 1:
+                    if multi_check > self.img_bank_size + 1:
                         multi_images = True
                         continue
                     multi_check += 1
@@ -400,9 +406,9 @@ class C4IconSwapper:
         elif event.keysym == 'Left':
             self.c4z_panel.prev_icon()
         elif event.keysym == 'Up':
-            self.replacement_panel.inc_img_stack()
+            self.replacement_panel.inc_img_bank()
         elif event.keysym == 'Down':
-            self.replacement_panel.dec_img_stack()
+            self.replacement_panel.dec_img_bank()
         elif event.keysym == 'c' and self.easter_counter >= 10:
             self.version_label.config(text='\u262D', font=('Arial', 25))
             self.version_label.place(relx=1.005, rely=1.02, anchor='se')
@@ -632,7 +638,7 @@ class C4IconSwapper:
         # C4z Panel (and export button)
         self.c4z_panel.icons = []
         self.c4z_panel.current_icon = 0
-        self.c4z_panel.blank_image_label.configure(image=self.blank)
+        self.c4z_panel.c4_icon_label.configure(image=self.blank)
         if os.path.isdir(driver_folder := os.path.join(self.temp_dir, 'driver')):
             shutil.rmtree(driver_folder)
         self.c4z_panel.restore_button['state'] = DISABLED
@@ -649,7 +655,7 @@ class C4IconSwapper:
             self.export_panel.export_button['state'] = DISABLED
             self.export_panel.export_as_button['state'] = DISABLED
             self.c4z_panel.icon_name_label.config(text='icon name')
-            self.c4z_panel.icon_label.config(text='0 of 0')
+            self.c4z_panel.icon_num_label.config(text='0 of 0')
         self.driver_selected = save_state.driver_selected
 
         self.c4z_panel.extra_icons = save_state.extra_icons
@@ -669,7 +675,6 @@ class C4IconSwapper:
         self.driver_version_new_var.set(save_state.driver_version_new_var)
         self.multi_state_driver = save_state.multi_state_driver
         self.states_orig_names = save_state.states_orig_names
-        self.replacement_selected = save_state.replacement_selected
         if self.multi_state_driver:
             self.edit.entryconfig(self.states_pos, state=NORMAL)
         else:
@@ -703,30 +708,28 @@ class C4IconSwapper:
         # TODO: Update to use tk images
         # Replacement Panel
         if save_state.replacement:
-            if os.path.isfile(self.replacement_image_path):
-                os.remove(self.replacement_image_path)
-            save_state.replacement.save(self.replacement_image_path)
+            if os.path.isdir(self.replacement_panel.replacement_icons_path):
+                shutil.rmtree(self.replacement_panel.replacement_icons_path)
+            os.mkdir(self.replacement_panel.replacement_icons_path)
+            save_state.replacement.save(os.path.join(self.replacement_panel.replacement_icons_path, 'replacement.png'))
             save_state.replacement.close()
-            icon_image = Image.open(self.replacement_image_path)
-            icon = icon_image.resize((128, 128))
-            icon = ImageTk.PhotoImage(icon)
-            self.replacement_panel.blank_image_label.configure(image=icon)
-            self.replacement_panel.blank_image_label.image = icon
-        for img in self.replacement_panel.img_stack:
-            os.remove(img)
-        self.replacement_panel.img_stack = []
-        for stack_label in self.replacement_panel.stack_labels:
-            stack_label.configure(image=self.stack_blank)
-        for img in save_state.img_stack:
-            img_path = f'{self.temp_dir}stack{str(len(self.replacement_panel.img_stack))}.png'
-            img.save(img_path)
-            img.close()
-            self.replacement_panel.img_stack.append(img_path)
-        self.replacement_panel.refresh_img_stack()
-        self.replacement_panel.replace_button['state'] = save_state.replacement_panel['replace']
-        self.replacement_panel.replace_all_button['state'] = save_state.replacement_panel['replace_all']
-        self.replacement_panel.prev_icon_button['state'] = save_state.replacement_panel['prev']
-        self.replacement_panel.next_icon_button['state'] = save_state.replacement_panel['next']
+            self.replacement_panel.replacement_icon = Icon(os.path.join(self.replacement_panel.replacement_icons_path, 'replacement.png'))
+            self.replacement_panel.replacement_img_label.configure(image=self.replacement_panel.replacement_icon.tk_icon_lg)
+            self.replacement_panel.replacement_img_label.image = self.replacement_panel.replacement_icon.tk_icon_lg
+            self.replacement_panel.img_bank = []
+            for img_bank_label in self.replacement_panel.img_bank_tk_labels:
+                img_bank_label.configure(image=self.img_bank_blank)
+            bank_length = str(len(self.replacement_panel.img_bank))
+            for img in save_state.img_bank:
+                img_path = os.path.join(self.temp_dir, f'img_bank{bank_length}.png')
+                img.save(img_path)
+                img.close()
+                self.replacement_panel.img_bank.append(Icon(img_path))
+            self.replacement_panel.refresh_img_bank()
+            self.replacement_panel.replace_button['state'] = save_state.replacement_panel['replace']
+            self.replacement_panel.replace_all_button['state'] = save_state.replacement_panel['replace_all']
+            self.replacement_panel.prev_icon_button['state'] = save_state.replacement_panel['prev']
+            self.replacement_panel.next_icon_button['state'] = save_state.replacement_panel['next']
 
         self.ask_to_save = False
 
@@ -797,9 +800,19 @@ class C4IconSwapper:
 
 
 class Icon:
-    def __init__(self):
-        self.path = None
-        self.tk_icon = None
+    def __init__(self, path: str, img=None):
+        if not os.path.isfile(path):
+            raise FileNotFoundError
+        if not is_valid_image(path):
+            raise TypeError
+        self.path = path
+        if img:
+            self.tk_icon_lg = ImageTk.PhotoImage(img.resize((128, 128)))
+            self.tk_icon_sm = ImageTk.PhotoImage(img.resize((60, 60)))
+            return
+        with Image.open(self.path) as img:
+            self.tk_icon_lg = ImageTk.PhotoImage(img.resize((128, 128)))
+            self.tk_icon_sm = ImageTk.PhotoImage(img.resize((60, 60)))
 
 
 class Connection:
@@ -1237,6 +1250,15 @@ class StatesWin:
 
 
 class C4zPanel:
+    # TODO: Update to use tk images; add .bak flag
+    class C4Icon(Icon):
+        def __init__(self, icons: list, extra=False):
+            super().__init__(path=icons[0].path)
+            # Initialize Icon Group
+            self.name, self.name_orig, self.name_alt = icons[0].name, icons[0].name, icons[0].name_alt
+            self.root = icons[0].root
+            self.icons, self.extra, self.dupe_number, self.bak = icons, extra, 0, False
+
     class SubIcon:
         def __init__(self, root_path: str, path: str, name: str, size: int):
             # Initialize Icon
@@ -1267,15 +1289,6 @@ class C4zPanel:
                         self.alt_format = True
                         if size0_int != size1_int:
                             self.size_alt = (size0_int, size1_int)
-
-    # TODO: Update to use tk images; add .bak flag
-    class C4Icon(Icon):
-        def __init__(self, icons: list, extra=False):
-            super().__init__()
-            # Initialize Icon Group
-            self.name, self.name_orig, self.name_alt = icons[0].name, icons[0].name, icons[0].name_alt
-            self.path, self.root = icons[0].path, icons[0].root
-            self.icons, self.extra, self.dupe_number, self.bak = icons, extra, 0, False
 
     def __init__(self, main):
         # Initialize C4z Panel
@@ -1327,19 +1340,19 @@ class C4zPanel:
         # Labels
         self.panel_label = tk.Label(self.main.root, text='Driver Selection', font=(label_font, 15))
 
-        self.blank_image_label = tk.Label(self.main.root, image=self.main.blank)
-        self.blank_image_label.image = self.main.blank
-        self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+        self.c4_icon_label = tk.Label(self.main.root, image=self.main.blank)
+        self.c4_icon_label.image = self.main.blank
+        self.c4_icon_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
 
-        self.icon_label = tk.Label(self.main.root, text='0 of 0')
-        self.icon_label.place(x=108 + self.x, y=176 + self.y, anchor='n')
+        self.icon_num_label = tk.Label(self.main.root, text='0 of 0')
+        self.icon_num_label.place(x=108 + self.x, y=176 + self.y, anchor='n')
 
         self.icon_name_label = tk.Label(self.main.root, text='icon name')
         self.icon_name_label.place(x=108 + self.x, y=193 + self.y, anchor='n')
 
         self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
-        self.blank_image_label.drop_target_register(DND_FILES)
-        self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
+        self.c4_icon_label.drop_target_register(DND_FILES)
+        self.c4_icon_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
     def toggle_extra_icons(self, *_):
         if not self.main.driver_selected:
@@ -1428,11 +1441,11 @@ class C4zPanel:
     def show_loading_image(self):
         with Image.open(io.BytesIO(Assets.loading_img_b)) as img:
             icon = ImageTk.PhotoImage(img)
-            self.blank_image_label.configure(image=icon)
-            self.blank_image_label.image = icon
+            self.c4_icon_label.configure(image=icon)
+            self.c4_icon_label.image = icon
         self.main.root.after(1, self.main.recall_load_gen_multi)
 
-    # TODO: Update to use tk images
+    # TODO: Update to create actual files during export
     def update_icon(self):
         if not self.icons:
             return
@@ -1441,18 +1454,18 @@ class C4zPanel:
         icon_image = Image.open(self.icons[self.current_icon].path)
         icon = icon_image.resize((128, 128))
         icon = ImageTk.PhotoImage(icon)
-        self.blank_image_label.configure(image=icon)
-        self.blank_image_label.image = icon
+        self.c4_icon_label.configure(image=icon)
+        self.c4_icon_label.image = icon
 
         if not self.show_extra_icons.get() and self.extra_icons:
-            self.icon_label.config(text=f'icon: {str(self.current_icon + 1)} of '
+            self.icon_num_label.config(text=f'icon: {str(self.current_icon + 1)} of '
                                         f'{str(len(self.icons) - self.extra_icons)} ({str(len(self.icons))})')
         else:
-            self.icon_label.config(text=f'icon: {str(self.current_icon + 1)} of {str(len(self.icons))}')
+            self.icon_num_label.config(text=f'icon: {str(self.current_icon + 1)} of {str(len(self.icons))}')
         self.icon_name_label.config(text=f'name: {self.icons[self.current_icon].name}')
 
+    # TODO: Completely rewrite c4 icon related code
     def load_c4z(self, given_path=None, recovery=False):
-        # TODO: Improve code
         def get_icons(directory):
             if not os.path.isdir(directory):
                 return None
@@ -1506,7 +1519,6 @@ class C4zPanel:
                 icons_out.extend(get_icons(sub_dir))
             return icons_out
 
-        # TODO: Improve code; Code runs when loading some drivers, need to re-evaluate
         def check_dupe_names(recalled=False):
             recall = False
             if not recalled:
@@ -1681,7 +1693,6 @@ class C4zPanel:
         if device_exception:
             self.icons.insert(0, device_exception)
 
-        # TODO: Update using os functions
         # Update entry with driver file path
         self.file_entry_field['state'] = NORMAL
         self.file_entry_field.delete(0, 'end')
@@ -1737,13 +1748,13 @@ class C4zPanel:
                     if int(id_tag.value()) not in self.main.conn_ids:
                         self.main.conn_ids.append(int(id_tag.value()))
 
-        # TODO: Rewrite using RegEx or maybe a Lua parser?
         # Check Lua file for multi-state
         self.main.multi_state_driver = False
         self.main.edit.entryconfig(self.main.states_pos, state=DISABLED)
         if os.path.isfile(lua_path := os.path.join(self.main.temp_dir, 'driver', 'driver.lua')):
             with open(lua_path, errors='ignore') as driver_lua_file:
                 driver_lua_lines = driver_lua_file.readlines()
+            # TODO: Rewrite using RegEx
             for line in driver_lua_lines:
                 if '_OPTIONS = { {' in line:
                     self.main.get_states(driver_lua_lines)
@@ -1763,7 +1774,7 @@ class C4zPanel:
             self.prev_icon_button['state'] = NORMAL
             self.next_icon_button['state'] = NORMAL
         # Update replacement prev/next buttons
-        if self.main.replacement_selected and self.main.driver_selected:
+        if self.main.replacement_panel.replacement_icon and self.main.driver_selected:
             self.main.replacement_panel.replace_button['state'] = NORMAL
             self.main.replacement_panel.replace_all_button['state'] = NORMAL
         else:
@@ -1990,48 +2001,33 @@ class ReplacementPanel:
         # Initialize Replacement Panel
         self.main = main
         self.x, self.y = (303, 20)
-        self.img_stack, self.stack_labels = [], []
-        self.stack_select_lockout = {}
+        self.replacement_icon = None
+        self.img_bank, self.img_bank_tk_labels = [], []
+        self.img_bank_select_lockout = {}
+        self.replacement_icons_path = os.path.join(self.main.temp_dir, 'Replacement Icons')
+        if not os.path.isdir(self.replacement_icons_path):
+            os.mkdir(self.replacement_icons_path)
 
         # Labels
         self.panel_label = tk.Label(self.main.root, text='Replacement Icons', font=(label_font, 15))
 
-        self.blank_image_label = tk.Label(self.main.root, image=self.main.blank)
-        self.blank_image_label.image = self.main.blank
+        self.replacement_img_label = tk.Label(self.main.root, image=self.main.blank)
+        self.replacement_img_label.image = self.main.blank
 
-        self.stack_labels.append(tk.Label(self.main.root, image=self.main.stack_blank))
-        self.stack_labels[-1].image = self.main.stack_blank
-        self.stack_labels[-1].bind('<Button-1>', self.select_stack0)
-        self.stack_labels[-1].place(x=31 + self.x, y=176 + self.y, anchor='nw')
-        self.stack_labels[-1].drop_target_register(DND_FILES)
-        self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack0)
-
-        self.stack_labels.append(tk.Label(self.main.root, image=self.main.stack_blank))
-        self.stack_labels[-1].image = self.main.stack_blank
-        self.stack_labels[-1].bind('<Button-1>', self.select_stack1)
-        self.stack_labels[-1].place(x=92 + self.x, y=176 + self.y, anchor='nw')
-        self.stack_labels[-1].drop_target_register(DND_FILES)
-        self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack1)
-
-        self.stack_labels.append(tk.Label(self.main.root, image=self.main.stack_blank))
-        self.stack_labels[-1].image = self.main.stack_blank
-        self.stack_labels[-1].bind('<Button-1>', self.select_stack2)
-        self.stack_labels[-1].place(x=153 + self.x, y=176 + self.y, anchor='nw')
-        self.stack_labels[-1].drop_target_register(DND_FILES)
-        self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack2)
-
-        self.stack_labels.append(tk.Label(self.main.root, image=self.main.stack_blank))
-        self.stack_labels[-1].image = self.main.stack_blank
-        self.stack_labels[-1].bind('<Button-1>', self.select_stack3)
-        self.stack_labels[-1].place(x=214 + self.x, y=176 + self.y, anchor='nw')
-        self.stack_labels[-1].drop_target_register(DND_FILES)
-        self.stack_labels[-1].dnd_bind('<<Drop>>', self.drop_stack3)
+        x_offset = 61
+        for i in range(self.main.img_bank_size):
+            self.img_bank_tk_labels.append(tk.Label(self.main.root, image=self.main.img_bank_blank))
+            self.img_bank_tk_labels[-1].image = self.main.img_bank_blank
+            self.img_bank_tk_labels[-1].bind('<Button-1>', lambda e, bn=i: self.select_img_bank(bn, e))
+            self.img_bank_tk_labels[-1].place(x=31 + self.x + x_offset * i, y=176 + self.y, anchor='nw')
+            self.img_bank_tk_labels[-1].drop_target_register(DND_FILES)
+            self.img_bank_tk_labels[-1].dnd_bind('<<Drop>>', lambda e, bn=i: self.drop_img_bank(bn, e))
 
         self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
 
-        self.blank_image_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
-        self.blank_image_label.drop_target_register(DND_FILES)
-        self.blank_image_label.dnd_bind('<<Drop>>', self.drop_in_replacement)
+        self.replacement_img_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+        self.replacement_img_label.drop_target_register(DND_FILES)
+        self.replacement_img_label.dnd_bind('<<Drop>>', self.drop_in_replacement)
 
         # Buttons
         self.open_file_button = tk.Button(self.main.root, text='Open', width=10, command=self.load_replacement,
@@ -2045,11 +2041,11 @@ class ReplacementPanel:
                                         takefocus=0)
         self.replace_button['state'] = DISABLED
 
-        self.prev_icon_button = tk.Button(self.main.root, text='Prev', command=self.dec_img_stack, width=5,
+        self.prev_icon_button = tk.Button(self.main.root, text='Prev', command=self.dec_img_bank, width=5,
                                           takefocus=0)
         self.prev_icon_button['state'] = DISABLED
 
-        self.next_icon_button = tk.Button(self.main.root, text='Next', command=self.inc_img_stack, width=5,
+        self.next_icon_button = tk.Button(self.main.root, text='Next', command=self.inc_img_bank, width=5,
                                           takefocus=0)
         self.next_icon_button['state'] = DISABLED
 
@@ -2067,34 +2063,65 @@ class ReplacementPanel:
         self.file_entry_field.insert(0, 'Select image file...')
         self.file_entry_field['state'] = DISABLED
 
-    # TODO: Update to us tk images
-    # TODO: Rewrite to handle multiple files simultaneously
-    def load_replacement(self, given_path=''):
-        if not given_path:
-            filename = filedialog.askopenfilenames(filetypes=[('Image', '*.png *.jpg *.jpeg *.gif')])
-            if len(filename) == 1:
-                filename = filename[0]
+    def load_replacement(self, given_path='', bank_index=None):
+        if not given_path and bank_index is None:
+            print(given_path, bank_index)
+            file_path = filedialog.askopenfilenames(filetypes=[('Image', '*.png *.jpg *.jpeg *.gif')])
+            if len(file_path) == 1:
+                file_path = file_path[0]
             else:
-                for file in filename:
+                for file in file_path:
                     self.load_replacement(given_path=file)
                 return
         else:
-            filename = given_path
+            file_path = given_path
 
-        if not filename or not is_valid_image(filename):
-            return
+        if not file_path or not is_valid_image(file_path):
+            file_path = None
+            if bank_index is None:
+                return
 
-        if self.main.replacement_selected:
-            self.add_to_img_stack(self.main.replacement_image_path)
-        replacement_image = Image.open(filename)
-        output_img = replacement_image.resize((1024, 1024))
-        replacement_image.close()
-        output_img.save(self.main.replacement_image_path)
-        output_img.close()
+        if file_path:
+            new_path = os.path.join(self.replacement_icons_path, Path(file_path).name)
+            next_num = get_next_num(1)
+            while os.path.isfile(new_path):
+                new_path = os.path.join(self.replacement_icons_path,
+                                        f'{Path(file_path).stem}{next(next_num)}{Path(file_path).suffix}')
+
+            with Image.open(file_path) as img:
+                output_img = img.resize((1024, 1024))
+                output_img.save(new_path)
+                new_icon = Icon(new_path, img=img)
+                for file in os.listdir(self.replacement_icons_path):
+                    if (file_path := os.path.join(self.replacement_icons_path, file)) == new_path:
+                        continue
+                    if filecmp.cmp(file_path, new_path):
+                        del new_icon
+                        os.remove(new_path)
+                        output_img.close()
+                        return
+                output_img.close()
+
+            if bank_index is not None:
+                self.add_to_img_bank(new_icon, bank_index)
+                return
+
+        if self.replacement_icon:
+            if bank_index is not None:
+                rp_img = self.replacement_icon
+                self.replacement_icon = self.img_bank[bank_index]
+                self.img_bank[bank_index] = rp_img
+                self.refresh_img_bank()
+            else:
+                self.add_to_img_bank(self.replacement_icon)
+        if file_path:
+            self.replacement_icon = new_icon
+        else:
+            file_path = self.replacement_icon.path
 
         self.file_entry_field['state'] = NORMAL
         self.file_entry_field.delete(0, 'end')
-        self.file_entry_field.insert(0, filename)
+        self.file_entry_field.insert(0, file_path)
         self.file_entry_field['state'] = 'readonly'
 
         if self.main.driver_selected:
@@ -2104,94 +2131,56 @@ class ReplacementPanel:
             self.replace_button['state'] = DISABLED
             self.replace_all_button['state'] = DISABLED
 
-        if not os.path.isfile(self.main.replacement_image_path):
-            return
         self.main.replacement_selected = True
-        icon_image = Image.open(self.main.replacement_image_path)
-        icon = icon_image.resize((128, 128))
-        icon_image.close()
-        icon = ImageTk.PhotoImage(icon)
-        self.blank_image_label.configure(image=icon)
-        self.blank_image_label.image = icon
+
+        self.replacement_img_label.configure(image=self.replacement_icon.tk_icon_lg)
+        self.replacement_img_label.image = self.replacement_icon.tk_icon_lg
 
         if self.main.driver_selected:
             self.main.ask_to_save = True
 
-    # TODO: Update to use tk images
-    def add_to_img_stack(self, img_path: str, index=None):
-        if not os.path.isfile(img_path) or not is_valid_image(img_path):
+    def add_to_img_bank(self, img: Icon, bank_index=None):
+        if img in self.img_bank:
             return
-        for img in self.img_stack:
-            if filecmp.cmp(img, img_path):
-                return
 
-        stack_length = 4
-
-        new_img_path = os.path.join(self.main.temp_dir, 'stack', str(len(self.img_stack)), '.png')
-        if 'replacement_icon.png' in img_path:
-            os.rename(img_path, new_img_path)
+        if bank_index and len(self.img_bank) >= self.main.img_bank_size:
+            existing_img = self.img_bank[bank_index]
+            self.img_bank[bank_index] = img
+            self.img_bank.append(existing_img)
         else:
-            stack_image = Image.open(img_path)
-            output_img = stack_image.resize((1024, 1024))
-            stack_image.close()
-            output_img.save(new_img_path)
-            output_img.close()
-        if index is None:
-            self.img_stack.insert(0, new_img_path)
-        elif not -len(self.img_stack) < index < len(self.img_stack):
-            self.img_stack.append(new_img_path)
-        else:
-            temp = self.img_stack[index]
-            self.img_stack.pop(index)
-            self.img_stack.insert(index, new_img_path)
-            self.img_stack.append(temp)
-        self.refresh_img_stack()
-        if len(self.img_stack) > stack_length:
+            self.img_bank.append(img)
+        self.refresh_img_bank()
+        if len(self.img_bank) > self.main.img_bank_size:
             self.prev_icon_button['state'] = NORMAL
             self.next_icon_button['state'] = NORMAL
 
         self.main.ask_to_save = True
 
-    # TODO: Update to use tk images
-    def refresh_img_stack(self):
-        if not self.img_stack:
-            return
-        # Create class variable for stack_length
-        stack_length = 4
-        for i, image in enumerate(self.img_stack):
-            if i == stack_length:
-                break
-            icon_image = Image.open(image)
-            icon = icon_image.resize((60, 60))
-            icon = ImageTk.PhotoImage(icon)
-            self.stack_labels[i].configure(image=icon)
-            self.stack_labels[i].image = icon
+    def refresh_img_bank(self):
+        for i, img in zip(range(self.main.img_bank_size), self.img_bank):
+            self.img_bank_tk_labels[i].configure(image=img.tk_icon_sm)
+            self.img_bank_tk_labels[i].image = img.tk_icon_sm
 
-    def dec_img_stack(self):
-        # Create class variable for stack_length
-        stack_length = 4
-        if len(self.img_stack) <= stack_length:
+    def dec_img_bank(self):
+        if len(self.img_bank) <= self.main.img_bank_size:
             return
-        temp = self.img_stack[0]
-        self.img_stack.pop(0)
-        self.img_stack.append(temp)
-        self.refresh_img_stack()
+        temp = self.img_bank[0]
+        self.img_bank.pop(0)
+        self.img_bank.append(temp)
+        self.refresh_img_bank()
 
-    def inc_img_stack(self):
-        # Create class variable for stack_length
-        stack_length = 4
-        if len(self.img_stack) <= stack_length:
+    def inc_img_bank(self):
+        if len(self.img_bank) <= self.main.img_bank_size:
             return
-        temp = self.img_stack[-1]
-        self.img_stack.pop(-1)
-        self.img_stack.insert(0, temp)
-        self.refresh_img_stack()
+        temp = self.img_bank[-1]
+        self.img_bank.pop(-1)
+        self.img_bank.insert(0, temp)
+        self.refresh_img_bank()
 
-    # TODO: Update to use tk images
-    def replace_icon(self, update_undo_history=True, index=None, given_path=''):
-        if index is None:
-            index = self.main.c4z_panel.current_icon
-        elif 0 > index > len(self.main.c4z_panel.icons):
+    def replace_icon(self, update_undo_history=True, c4_icn_index=None, given_path=''):
+        if c4_icn_index is None:
+            c4_icn_index = self.main.c4z_panel.current_icon
+        elif 0 > c4_icn_index > len(self.main.c4z_panel.icons):
             return
 
         if update_undo_history:
@@ -2200,8 +2189,9 @@ class ReplacementPanel:
         if given_path:
             replacement_icon = Image.open(given_path)
         else:
-            replacement_icon = Image.open(self.main.replacement_image_path)
-        for icon in self.main.c4z_panel.icons[index].icons:
+            replacement_icon = Image.open(self.replacement_icon.path)
+        # TODO: Replace with function call to class
+        for icon in self.main.c4z_panel.icons[c4_icn_index].icons:
             if not os.path.isfile(bak_path := f'{icon.path}.bak'):
                 shutil.copy(icon.path, bak_path)
             if icon.size_alt:
@@ -2216,145 +2206,27 @@ class ReplacementPanel:
         self.main.ask_to_save = True
 
     def replace_all(self):
+        self.main.update_undo_history()
         for i, icon in enumerate(self.main.c4z_panel.icons):
             if not self.main.c4z_panel.show_extra_icons.get() and icon.extra:
                 continue
-            self.replace_icon(update_undo_history=False, index=i)
-        self.main.update_undo_history()
+            self.replace_icon(update_undo_history=False, c4_icn_index=i)
 
-    # TODO: Update to use tk images
-    # TODO: Consolidate all select_stack functions
-    def select_stack0(self, event):
-        if not self.img_stack:
-            return event
+    def select_img_bank(self, bank_num: int, event):
+        if not self.img_bank or len(self.img_bank) <= bank_num or not event:
+            return
         # Debounce stack selection
-        if 'stack0' in self.stack_select_lockout and time.time() - self.stack_select_lockout['stack0'] < 0.5:
-            return event
-        self.stack_select_lockout['stack0'] = time.time()
-        replacement_in_stack = False
-        replacement_index = None
-        for img in self.img_stack:
-            if filecmp.cmp(img, self.main.replacement_image_path):
-                replacement_in_stack = True
-                replacement_index = self.img_stack.index(img)
-                break
-        if not replacement_in_stack:
-            self.add_to_img_stack(self.main.replacement_image_path, index=0)
-            self.load_replacement(given_path=self.img_stack[-1])
-            return None
-        # TODO: Create class variable for stack_length
-        stack_length = 4
-        if len(self.img_stack) > stack_length and replacement_index > 3:
-            self.load_replacement(given_path=self.img_stack[0])
-            temp = self.img_stack[0]
-            temp_r = self.img_stack[replacement_index]
-            self.img_stack.pop(replacement_index)
-            self.img_stack.pop(0)
-            self.img_stack.insert(0, temp_r)
-            self.img_stack.insert(replacement_index, temp)
-            self.refresh_img_stack()
-            return None
-        self.load_replacement(given_path=self.img_stack[0])
-        return None
+        debounce_timer = 0.25
+        selected_bank = f'bank{bank_num}'
+        if (selected_bank in self.img_bank_select_lockout and
+                time.time() - self.img_bank_select_lockout[selected_bank] < debounce_timer):
+            return
+        self.img_bank_select_lockout[selected_bank] = time.time()
+        self.load_replacement(bank_index=bank_num)
 
-    def select_stack1(self, event):
-        if len(self.img_stack) <= 1:
-            return event
-        # Debounce stack selection
-        if 'stack1' in self.stack_select_lockout and time.time() - self.stack_select_lockout['stack1'] < 0.5:
-            return event
-        self.stack_select_lockout['stack1'] = time.time()
-        replacement_in_stack = False
-        replacement_index = None
-        for img in self.img_stack:
-            if filecmp.cmp(img, self.main.replacement_image_path):
-                replacement_in_stack = True
-                replacement_index = self.img_stack.index(img)
-                break
-        if not replacement_in_stack:
-            self.add_to_img_stack(self.main.replacement_image_path, index=1)
-            self.load_replacement(given_path=self.img_stack[-1])
-            return None
-        stack_length = 4
-        if len(self.img_stack) > stack_length and replacement_index > 3:
-            self.load_replacement(given_path=self.img_stack[1])
-            temp = self.img_stack[1]
-            temp_r = self.img_stack[replacement_index]
-            self.img_stack.pop(replacement_index)
-            self.img_stack.pop(1)
-            self.img_stack.insert(1, temp_r)
-            self.img_stack.insert(replacement_index, temp)
-            self.refresh_img_stack()
-            return None
-        self.load_replacement(given_path=self.img_stack[1])
-        return None
-
-    def select_stack2(self, event):
-        if len(self.img_stack) <= 2:
-            return event
-        # Debounce stack selection
-        if 'stack2' in self.stack_select_lockout and time.time() - self.stack_select_lockout['stack2'] < 0.5:
-            return event
-        self.stack_select_lockout['stack2'] = time.time()
-        replacement_in_stack = False
-        replacement_index = None
-        for img in self.img_stack:
-            if filecmp.cmp(img, self.main.replacement_image_path):
-                replacement_in_stack = True
-                replacement_index = self.img_stack.index(img)
-                break
-        if not replacement_in_stack:
-            self.add_to_img_stack(self.main.replacement_image_path, index=2)
-            self.load_replacement(given_path=self.img_stack[-1])
-            return None
-        stack_length = 4
-        if len(self.img_stack) > stack_length and replacement_index > 3:
-            self.load_replacement(given_path=self.img_stack[2])
-            temp = self.img_stack[2]
-            temp_r = self.img_stack[replacement_index]
-            self.img_stack.pop(replacement_index)
-            self.img_stack.pop(2)
-            self.img_stack.insert(2, temp_r)
-            self.img_stack.insert(replacement_index, temp)
-            self.refresh_img_stack()
-            return None
-        self.load_replacement(given_path=self.img_stack[2])
-        return None
-
-    def select_stack3(self, event):
-        if len(self.img_stack) <= 3:
-            return event
-        # Debounce stack selection
-        if 'stack3' in self.stack_select_lockout and time.time() - self.stack_select_lockout['stack3'] < 0.5:
-            return event
-        self.stack_select_lockout['stack3'] = time.time()
-        replacement_in_stack = False
-        replacement_index = None
-        for img in self.img_stack:
-            if filecmp.cmp(img, self.main.replacement_image_path):
-                replacement_in_stack = True
-                replacement_index = self.img_stack.index(img)
-                break
-        if not replacement_in_stack:
-            self.add_to_img_stack(self.main.replacement_image_path, index=3)
-            self.load_replacement(given_path=self.img_stack[-1])
-            return None
-        stack_length = 4
-        if len(self.img_stack) > stack_length and replacement_index > 3:
-            self.load_replacement(given_path=self.img_stack[3])
-            temp = self.img_stack[3]
-            temp_r = self.img_stack[replacement_index]
-            self.img_stack.pop(replacement_index)
-            self.img_stack.pop(3)
-            self.img_stack.insert(3, temp_r)
-            self.img_stack.insert(replacement_index, temp)
-            self.refresh_img_stack()
-            return None
-        self.load_replacement(given_path=self.img_stack[3])
-        return None
-
-    def drop_in_replacement(self, event):
-        paths = [path[0] if path[0] else path[1] for path in re.findall(r'\{(.*?)}|(\S+)', event.data)]
+    def drop_in_replacement(self, event, paths=None):
+        if not paths:
+            paths = [path[0] if path[0] else path[1] for path in re.findall(r'\{(.*?)}|(\S+)', event.data)]
         for path in paths:
             if is_valid_image(path):
                 self.load_replacement(given_path=path)
@@ -2365,22 +2237,14 @@ class ReplacementPanel:
                         if is_valid_image(img_path := os.path.join(directory, file)):
                             self.load_replacement(given_path=img_path)
 
-    # TODO: Consolidate all drop_stack functions and update to use RegEx
-    def drop_stack0(self, event):
-        dropped_path = event.data.replace('{', '').replace('}', '')
-        self.add_to_img_stack(dropped_path, index=0)
-
-    def drop_stack1(self, event):
-        dropped_path = event.data.replace('{', '').replace('}', '')
-        self.add_to_img_stack(dropped_path, index=1)
-
-    def drop_stack2(self, event):
-        dropped_path = event.data.replace('{', '').replace('}', '')
-        self.add_to_img_stack(dropped_path, index=2)
-
-    def drop_stack3(self, event):
-        dropped_path = event.data.replace('{', '').replace('}', '')
-        self.add_to_img_stack(dropped_path, index=3)
+    def drop_img_bank(self, bank_num: int, event):
+        paths = [path[0] if path[0] else path[1] for path in re.findall(r'\{(.*?)}|(\S+)', event.data)]
+        if not paths:
+            return
+        if len(paths) == 1 and os.path.isfile(paths[0]):
+            self.load_replacement(paths[0], bank_index=bank_num)
+            return
+        self.drop_in_replacement(event, paths=paths)
 
 
 class ExportPanel:
@@ -2463,11 +2327,6 @@ class ExportPanel:
         self.do_export(quick_export=True)
 
     def export_file(self, driver_name: str, path=None):
-        def get_next_num(start=0):
-            while True:
-                start += 1
-                yield str(start)
-
         if path is None:
             path = os.path.join(self.main.cur_dir, f'{driver_name}.c4z')
         bak_files_dict = {}
@@ -2805,6 +2664,12 @@ def is_valid_image(file_path: str):
 
 def natural_key(string: str):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
+
+
+def get_next_num(start=0):
+    while True:
+        start += 1
+        yield str(start)
 
 
 if __name__ == '__main__':
