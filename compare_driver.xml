@@ -1,28 +1,62 @@
-<?prol>og?>
+<?prol>og? data="value" value="data"?>
+<![CDATA[Upped version to match <?prol>og? data="value" value="data"?> Hopper MSP updated version.]]>
+<tags>
+	<![CDATA[Upped version to match Hopper MSP updated version.]]>
+	<tags2></tags2>
+</tags>
+<DeepNest1>
+	<DeepNest2>
+		<DeepNest3>
+			<DeepNest4>
+				<?prolog 2 test?>
+				<DeepNest5>
+					<![CDATA[Upped version to match Hopper MSP updated version.]]>
+					<DeepNest6></DeepNest6>
+				</DeepNest5>
+			</DeepNest4>
+			<![CDATA[Upped version to match Hopper MSP updated version.]]>
+		</DeepNest3>
+	</DeepNest2>
+</DeepNest1>
+<tagWithOnlyComment>
+<!--Comm<![CDATA[Upped version to match Hopper MSP updated version.]]>
+ent-->
+</tagWithOnlyComment>
+<test:1 param="value"/>
 <tag1>
 	<!--2a-->
+	<![CDATA[Upped version to match Hopper MSP updated version.]]>
 	<!--2b-->
 	<!--2c-->
-	<tag att="t&lt;&gt;&gt;est"/>
-	<tag2 att1="val test 1" att2="val2 " anothaone="tes&gt;t">
+	<tag test:att="t<>>est"/>
+	<tag2 att1="val test 1" att2="val2 " anothaone="tes>t">
 		<!--killer<>><<<><>>>comment-->
-		<test>blank</test>
+		<!--3e<!--3ed3-->d3-->
+		<test>bl>>>><>>>>>><<<<<<<<ank</test>
 		<!--3-->
 		<tag3>
 			<!--4-->
-			<tag4>&lt;!--4in--&gt;qoooo&lt;!--4in2--&gt;</tag4>
+			<tag4><!--4in-->qoo  oo<!--4in2--></tag4>
 		</tag3>
 		<!--69-->
 		<tag69></tag69>
 	<!--2e-->
 	</tag2>
 	<tag2></tag2>
+	<elementtag>The organic composition of capital—the ratio of <<<>>constant capital to variable capital ($c:v$)—necessarily rises as the forces of production develop, leading to a tendency for the general rate of profit to fall despite the countervailing increase in the rate of absolute and relative surplus value. </elementtag>
 	<!--5-->
 	<tag5 id="tagid='5'"/>
 	<tag6/>
+	<taga>
+		<tagb>
+			<!--tagCcomment-->
+			<tagc>Value</tagc>
+		</tagb>
+		<tagb></tagb>
+	</taga>
 	<tag7>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</tag7>
 	<tag7>
-Lorem &amp; ipsum dolor sit amet, consectetur adipiscing elit, sed do
+Lorem & ipsum dolor sit amet, consectetur adipiscing elit, sed do
 eiusmod tempor incididunt ut labore et dolore magna
 aliqua.
 	</tag7>
@@ -30,6 +64,7 @@ aliqua.
 </tag1>
 <lonelytag/>
 <?what am i doing here?>
+<![CDATA[Upped version to match Hopper MSP updated version.]]>
 <lonelytag/>
 <!--Connection Templates-->
 <connection>
