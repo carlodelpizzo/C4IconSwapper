@@ -1,31 +1,32 @@
-import filecmp
-import os
-import io
-import re
-import shutil
-import copy
 import base64
 import contextlib
+import copy
+import filecmp
+import io
 import itertools
-import time
-import random
+import os
 import pickle
+import random
+import re
+import shutil
+import time
 import traceback
-import PIL.Image
-import tkinter as tk
-import Assets
-from tkinter import NORMAL, DISABLED, END, INSERT
-from tkinter import ttk, filedialog, Toplevel, StringVar, IntVar, Checkbutton, Label, OptionMenu, Menu
-from tkinterdnd2 import DND_FILES, TkinterDnD
-from PIL import ImageTk, Image
-from pathlib import Path
+from collections import Counter, deque
 from datetime import datetime
-from collections import deque
+from pathlib import Path
+
+from PIL import Image, ImageTk
+import tkinter as tk
+from tkinter import filedialog, ttk, Toplevel, Checkbutton, IntVar, StringVar, Label, Menu, OptionMenu
+from tkinter import DISABLED, NORMAL, END, INSERT
+from tkinterdnd2 import DND_FILES, TkinterDnD
+
+import Assets
 from XMLObject import XMLObject, XMLTag
 
 version = '1.3'
-label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
 
+label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
 letters = ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z')
 capital_letters = ('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
@@ -46,9 +47,16 @@ conn_template = """
     </classes>
 </connection>
 """
-selectable_connections = ['HDMI IN', 'HDMI OUT', 'COMPOSITE IN', 'COMPOSITE OUT', 'VGA IN', 'VGA OUT', 'COMPONENT IN',
+selectable_connections = ('HDMI IN', 'HDMI OUT', 'COMPOSITE IN', 'COMPOSITE OUT', 'VGA IN', 'VGA OUT', 'COMPONENT IN',
                           'COMPONENT OUT', 'DVI IN', 'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
-                          'DIGITAL_OPTICAL OUT', 'IR_OUT']
+                          'DIGITAL_OPTICAL OUT', 'IR_OUT')
+conn_id_type = {'HDMI IN': (2000, '5'), 'COMPOSITE IN': (2000, '5'), 'VGA IN': (2000, '5'),
+                 'COMPONENT IN': (2000, '5'), 'DVI IN': (2000, '5'),
+                 'HDMI OUT': (1900, '5'), 'COMPOSITE OUT': (1900, '5'), 'VGA OUT': (1900, '5'),
+                 'COMPONENT OUT': (1900, '5'), 'DVI OUT': (1900, '5'),
+                 'STEREO IN': (4000, '6'), 'DIGITAL_OPTICAL IN': (4000, '6'),
+                 'STEREO OUT': (3900, '6'), 'DIGITAL_OPTICAL OUT': (3900, '6'),
+                 'IR_OUT': (1, '1')}
 
 
 class C4IS:
@@ -414,41 +422,31 @@ class C4IconSwapper:
             self.version_label.place(relx=1.005, rely=1.02, anchor='se')
             self.easter_counter = -1
 
-    # TODO: Rewrite using RegEx
     def get_states(self, lua_file):
         self.states_orig_names = []
-        find_names = False
-        for line in lua_file:
-            if '_OPTIONS = {' in line or find_names:
-                find_names = True
-                build_name = False
-                working_name = ''
-                for character in line:
-                    if build_name:
-                        if character == '{':
-                            build_name = False
-                            continue
-                        if character == '=':
-                            working_name = working_name[:-1]
-                            self.states_orig_names.append(working_name)
-                            working_name = ''
-                            build_name = False
-                            continue
-                        working_name += character
-                        continue
-                    working_name += character
-                    if len(working_name) > 2:
-                        working_name = working_name[1:]
-                    if working_name == '{ ':
-                        build_name = True
-                        working_name = ''
-            if 'States, LED = {},' in line or 'States = {}' in line:
-                break
+        states_index = re.search(r'state_OPTIONS\s*=\s*\{', lua_file).start()
+        if states_index < 0:
+            return False
+        states_str = ''
+        bracket_count = 0
+        for i, char in enumerate(lua_file[states_index:]):
+            if char == '{':
+                bracket_count += 1
+                continue
+            if char == '}':
+                bracket_count -= 1
+                if not bracket_count:
+                    states_str = lua_file[states_index:states_index + i]
+                    break
+        if not states_str:
+            return False
+        self.states_orig_names = re.findall(r'\{\s*(\w+)\s*=', states_str)[1:]
         for i, state_name in enumerate(self.states_orig_names):
             if self.states_win:
                 self.states_win.states[i].name_entry['state'] = NORMAL
             self.states[i].name_var.set(state_name)
             self.states[i].original_name = state_name
+        return True
 
     def recall_load_gen_multi(self):
         self.c4z_panel.load_gen_multi(show_loading_image=False)
@@ -705,7 +703,6 @@ class C4IconSwapper:
         self.export_panel.inc_driver_version.set(save_state.inc_driver_version)
         self.export_panel.include_backups.set(save_state.include_backups)
 
-        # TODO: Update to use tk images
         # Replacement Panel
         if save_state.replacement:
             if os.path.isdir(self.replacement_panel.replacement_icons_path):
@@ -713,8 +710,10 @@ class C4IconSwapper:
             os.mkdir(self.replacement_panel.replacement_icons_path)
             save_state.replacement.save(os.path.join(self.replacement_panel.replacement_icons_path, 'replacement.png'))
             save_state.replacement.close()
-            self.replacement_panel.replacement_icon = Icon(os.path.join(self.replacement_panel.replacement_icons_path, 'replacement.png'))
-            self.replacement_panel.replacement_img_label.configure(image=self.replacement_panel.replacement_icon.tk_icon_lg)
+            self.replacement_panel.replacement_icon = (
+                Icon(os.path.join(self.replacement_panel.replacement_icons_path, 'replacement.png')))
+            self.replacement_panel.replacement_img_label.configure(
+                image=self.replacement_panel.replacement_icon.tk_icon_lg)
             self.replacement_panel.replacement_img_label.image = self.replacement_panel.replacement_icon.tk_icon_lg
             self.replacement_panel.img_bank = []
             for img_bank_label in self.replacement_panel.img_bank_tk_labels:
@@ -840,28 +839,8 @@ class Connection:
         if not refresh:
             return
         conn_type = self.type.get()
-        valid_id = []
-        # TODO: Replace with dict
-        if ' IN' in conn_type:
-            conn_type = conn_type.replace(' IN', '')
-            if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
-                valid_id = find_valid_id(2000, self.main.conn_ids)
-                self.tag.get_tag('type').set_value('5')
-            elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
-                valid_id = find_valid_id(4000, self.main.conn_ids)
-                self.tag.get_tag('type').set_value('6')
-        elif ' OUT' in conn_type:
-            conn_type = conn_type.replace(' OUT', '')
-            if conn_type in ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI']:
-                valid_id = find_valid_id(1900, self.main.conn_ids)
-                self.tag.get_tag('type').set_value('5')
-            elif conn_type in ['STEREO', 'DIGITAL_OPTICAL']:
-                valid_id = find_valid_id(3900, self.main.conn_ids)
-                self.tag.get_tag('type').set_value('6')
-        if conn_type == 'IR_OUT':
-            valid_id = find_valid_id(1, self.main.conn_ids)
-            self.tag.get_tag('type').set_value('1')
-
+        valid_id = find_valid_id(conn_id_type[conn_type][0], self.main.conn_ids)
+        self.tag.get_tag('type').set_value(conn_id_type[conn_type][1])
         if self.id in self.main.conn_ids:
             self.main.conn_ids.pop(self.main.conn_ids.index(self.id))
         self.id = valid_id[0]
@@ -888,7 +867,7 @@ class ConnectionsWin:
 
             # Entry
             self.name_entry_var = conn_obj.name_entry_var
-            self.name_entry_var.trace('w', self.name_update)
+            self.name_entry_var.trace_add('write', self.name_update)
             self.name_entry = tk.Entry(self.window, width=20, textvariable=self.name_entry_var)
             self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
             if not self.conn_object.enabled:
@@ -898,7 +877,7 @@ class ConnectionsWin:
             self.type = conn_obj.type
             self.type_menu = OptionMenu(self.window, self.type, *selectable_connections)
             self.type_menu.place(x=self.x + 160, y=self.y, anchor='w')
-            self.type.trace('w', self.conn_object.update_id)
+            self.type.trace_add('write', self.conn_object.update_id)
             if not self.conn_object.enabled:
                 self.type_menu['state'] = DISABLED
 
@@ -1069,43 +1048,37 @@ class DriverInfoWin:
         version_arrow = tk.Label(self.window, text='\u2192', font=('', 15))
 
         font_size = 10
-        driver_ver_orig_label = tk.Label(self.window, text='Original Version:',
-                                         font=(label_font, 8))
-
-        driver_man_label = tk.Label(self.window, text='Driver Manufacturer',
-                                    font=(label_font, font_size))
-
-        driver_creator_label = tk.Label(self.window, text='Driver Creator',
-                                        font=(label_font, font_size))
-
-        driver_ver_label = tk.Label(self.window, text='Driver Version',
-                                    font=(label_font, font_size))
+        driver_ver_orig_label = tk.Label(self.window, text='Original Version:', font=(label_font, 8))
+        driver_man_label = tk.Label(self.window, text='Driver Manufacturer', font=(label_font, font_size))
+        driver_creator_label = tk.Label(self.window, text='Driver Creator', font=(label_font, font_size))
+        driver_ver_label = tk.Label(self.window, text='Driver Version', font=(label_font, font_size))
 
         # Entry
         entry_width = 17
-        driver_man_entry = tk.Entry(self.window, width=entry_width,
-                                    textvariable=self.main.driver_manufac_var)
+        driver_man_entry = tk.Entry(self.window, width=entry_width, textvariable=self.main.driver_manufac_var)
         driver_man_entry['state'] = DISABLED
         self.driver_man_new_entry = tk.Entry(self.window, width=entry_width,
                                              textvariable=self.main.driver_manufac_new_var)
-        self.main.driver_manufac_new_var.trace('w', lambda name, index, mode: self.main.validate_man_and_creator(
-            string_var=self.main.driver_manufac_new_var, entry=self.driver_man_new_entry))
+        self.main.driver_manufac_new_var.trace_add('write',
+                                                   lambda name, index, mode: self.main.validate_man_and_creator(
+                                                       string_var=self.main.driver_manufac_new_var,
+                                                       entry=self.driver_man_new_entry))
 
-        driver_creator_entry = tk.Entry(self.window, width=entry_width,
-                                        textvariable=self.main.driver_creator_var)
+        driver_creator_entry = tk.Entry(self.window, width=entry_width, textvariable=self.main.driver_creator_var)
         driver_creator_entry['state'] = DISABLED
         self.driver_creator_new_entry = tk.Entry(self.window, width=entry_width,
                                                  textvariable=self.main.driver_creator_new_var)
-        self.main.driver_creator_new_var.trace('w', lambda name, index, mode: self.main.validate_man_and_creator(
-            string_var=self.main.driver_creator_new_var, entry=self.driver_creator_new_entry))
+        self.main.driver_creator_new_var.trace_add('write',
+                                                   lambda name, index, mode: self.main.validate_man_and_creator(
+                                                       string_var=self.main.driver_creator_new_var,
+                                                       entry=self.driver_creator_new_entry))
 
-        driver_ver_entry = tk.Entry(self.window, width=entry_width,
-                                    textvariable=self.main.driver_version_var)
+        driver_ver_entry = tk.Entry(self.window, width=entry_width, textvariable=self.main.driver_version_var)
         driver_ver_entry['state'] = DISABLED
         self.driver_ver_new_entry = tk.Entry(self.window, width=entry_width,
                                              textvariable=self.main.driver_version_new_var)
         self.driver_ver_new_entry.bind('<FocusOut>', self.main.export_panel.update_driver_version)
-        self.main.driver_version_new_var.trace('w', self.main.validate_driver_ver)
+        self.main.driver_version_new_var.trace_add('write', self.main.validate_driver_ver)
         driver_ver_orig_entry = tk.Entry(self.window, width=6, textvariable=self.main.driver_ver_orig)
         driver_ver_orig_entry['state'] = DISABLED
         instance_id_label.place(x=127, y=220, anchor='n')
@@ -1141,82 +1114,33 @@ class StatesWin:
 
             # Entry
             self.name_var = StringVar(value=state_obj.name_var.get())
-            self.name_var.trace('w', self.validate_state)
+            self.name_var.trace_add('write', self.on_name_update)
             self.name_entry = tk.Entry(self.window, width=20, textvariable=self.name_var)
             self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
             self.name_entry['background'] = state_obj.bg_color
             if not self.main.multi_state_driver:
                 self.name_entry['state'] = DISABLED
 
-        # TODO: Improve this
-        def validate_state(self, *_):
-            def state_object(obj_index):
-                return self.main.states_win.states[obj_index]
+        def on_name_update(self, *_):
+            if self.main.states_win:
+                if self.main.states_win.trace_lockout:
+                    return
+                self.main.states_win.validate_states()
 
-            def original_name_check(obj_index):
-                orig_name_check = [*self.main.states_orig_names]
-                orig_name_check.pop(obj_index)
-                if (state_object(obj_index).state_object.bg_color != 'pink' and
-                        state_object(obj_index).name_var.get() in orig_name_check):
-                    state_object(obj_index).state_object.bg_color = 'cyan'
+        def get(self):
+            return self.name_var.get()
 
-            self.main.ask_to_save = True
-            if not self.main.states_win:
-                return
-            self.format_state_name()
-            self_index = self.main.states_win.states.index(self)
-            background_color = light_entry_bg
-            in_dupe_list = False
-            if not (self_name := self.name_var.get()):
-                self.state_object.bg_color = 'pink'
-                in_dupe_list = True
-            for dupe_list in self.main.state_dupes:
-                if (self_index in dupe_list and
-                        ((dupe_list[0] is not self_index and state_object(dupe_list[0]).name_var.get() != self_name)
-                         or state_object(dupe_list[-1]).name_var.get() != self_name)):
-                    self.state_object.bg_color = background_color
-                    dupe_list.pop(dupe_list.index(self_index))
-                    if len(dupe_list) == 1:
-                        state_object(dupe_list[0]).state_object.bg_color = background_color
-                        original_name_check(dupe_list[0])
-                        self.main.state_dupes.pop(self.main.state_dupes.index(dupe_list))
-                elif self_index in dupe_list:
-                    in_dupe_list = True
-                elif state_object(dupe_list[0]).name_var.get() == self_name and self_index not in dupe_list:
-                    dupe_list.append(self_index)
-                    self.state_object.bg_color = 'pink'
-                    in_dupe_list = True
-            if not in_dupe_list:
-                state_names = [state.name_var.get() for state in self.main.states_win.states if state is not self]
-                if self_name in state_names:
-                    dupe_list = [self.main.states_win.states.index(state)
-                                 for state in self.main.states_win.states if state.name_var.get() == self_name]
-                    for state_index in dupe_list:
-                        state_object(state_index).state_object.bg_color = 'pink'
-                    self.main.state_dupes.append(dupe_list)
-                else:
-                    self.state_object.bg_color = background_color
-
-            original_name_check(self_index)
-
-            for state in self.main.states_win.states:
-                state.refresh(bg_only=True)
-            self.state_object.name_var.set(self_name)
-
-        # TODO: Improve this
-        def format_state_name(self):
+        def update_state_name(self):
             name = self.name_var.get()
-            formatted_name = [char for char in name if char != ' ' and (
-                    char in letters or char in capital_letters or char in numbers)]
+            formatted_name = re.sub(r'[^a-zA-Z0-9]', '', name).capitalize()
             if not formatted_name:
                 self.name_var.set('')
                 return
-            if formatted_name[0] in letters:
-                formatted_name[0] = capital_letters[letters.index(formatted_name[0])]
             if str_diff := len(name) - len(formatted_name):
                 cursor_pos = self.name_entry.index(INSERT)
                 self.name_entry.icursor(cursor_pos - str_diff)
-            self.name_var.set(''.join(formatted_name))
+            self.name_var.set(formatted_name)
+            self.state_object.name_var.set(formatted_name)
 
         def refresh(self, bg_only=False):
             self.name_entry['background'] = self.state_object.bg_color
@@ -1232,21 +1156,58 @@ class StatesWin:
         self.window.focus()
         self.window.protocol('WM_DELETE_WINDOW', self.main.close_states)
         self.window.title('Edit Driver States')
-        x_spacing, y_spacing = 200, 34
         self.window.geometry('385x287')
         self.window.geometry(f'+{self.main.root.winfo_rootx()}+{self.main.root.winfo_rooty()}')
         self.window.resizable(False, False)
+        self.trace_lockout = False
 
-        self.states = []
-        x_offset, y_offset = (10, 30)
-        self.states.extend(
+        self.state_entries = []
+        x_spacing, y_spacing = 200, 34
+        x_offset, y_offset = 10, 30
+        self.state_entries.extend(
             self.StateEntry(self, self.main.states[i], int(i / 7) * x_spacing + x_offset,
                             (i % 7) * y_spacing + y_offset, label=f'state{str(i + 1)}:')
             for i in range(13))
 
-    def refresh(self):
-        for state in self.states:
-            state.refresh()
+    def refresh(self, bg_only=False):
+        trace_lockout = self.trace_lockout
+        self.trace_lockout = True
+        for state_entry in self.state_entries:
+            state_entry.refresh(bg_only)
+        self.trace_lockout = trace_lockout
+
+    def validate_states(self, *_):
+        self.main.ask_to_save = True
+        self.trace_lockout = True
+        # Update/format names and reset entry bg colors
+        for state_entry in self.state_entries:
+            state_entry.update_state_name()
+            state_entry.state_object.bg_color = light_entry_bg
+        # Count occurrences of each name
+        name_counts = Counter(state_entry.get() for state_entry in self.state_entries)
+        for name in name_counts:
+            # If name occurs more than once, change bg color to pink
+            if name_counts[name] > 1:
+                for state_entry in self.state_entries:
+                    if state_entry.get() == name:
+                        state_entry.state_object.bg_color = 'pink'
+                continue
+            # Else if name is in original names and does not match own original name, set bg color to cyan
+            if name in self.main.states_orig_names:
+                break_out = False
+                for state_entry in self.state_entries:
+                    if state_entry.get() == name and state_entry.original_name != name:
+                        if break_out:
+                            break
+                        for compare_entry in self.state_entries:
+                            if state_entry is compare_entry:
+                                continue
+                            if compare_entry.original_name == name:
+                                state_entry.state_object.bg_color = 'cyan'
+                                break_out = True
+                                break
+        self.refresh(bg_only=True)
+        self.trace_lockout = False
 
 
 class C4zPanel:
@@ -1332,7 +1293,7 @@ class C4zPanel:
         # Checkbox
         # TODO: Disable show extra icons checkbox when it is inapplicable
         self.show_extra_icons = IntVar(value=0)
-        self.show_extra_icons.trace('w', self.toggle_extra_icons)
+        self.show_extra_icons.trace_add('write', self.toggle_extra_icons)
         self.show_sub_icons_check = Checkbutton(self.main.root, text='show extra icons',
                                                 variable=self.show_extra_icons, takefocus=0)
         self.show_sub_icons_check.place(x=self.x + 177, y=self.y + 176, anchor='nw')
@@ -1504,7 +1465,7 @@ class C4zPanel:
                         continue
                     if read_name:
                         temp_name = character + temp_name
-                temp_img = PIL.Image.open(sub_path)
+                temp_img = Image.open(sub_path)
                 temp_size = str(temp_img.size[0])
                 if temp_img.size[0] != temp_img.size[1]:
                     alt_sized = True
@@ -1753,13 +1714,11 @@ class C4zPanel:
         self.main.edit.entryconfig(self.main.states_pos, state=DISABLED)
         if os.path.isfile(lua_path := os.path.join(self.main.temp_dir, 'driver', 'driver.lua')):
             with open(lua_path, errors='ignore') as driver_lua_file:
-                driver_lua_lines = driver_lua_file.readlines()
-            # TODO: Rewrite using RegEx
-            for line in driver_lua_lines:
-                if '_OPTIONS = { {' in line:
-                    self.main.get_states(driver_lua_lines)
+                driver_lua = driver_lua_file.read()
+                if self.main.get_states(driver_lua):
                     self.main.multi_state_driver = True
-                    break
+                else:
+                    self.main.multi_state_driver = False
         if self.main.multi_state_driver:
             self.main.edit.entryconfig(self.main.states_pos, state=NORMAL)
         elif self.main.states_win:
@@ -2274,13 +2233,13 @@ class ExportPanel:
 
         # Entry
         self.driver_name_var = StringVar(value='New Driver')
-        self.driver_name_var.trace('w', self.validate_driver_name)
+        self.driver_name_var.trace_add('write', self.validate_driver_name)
         self.driver_name_entry = tk.Entry(self.main.root, width=25, textvariable=self.driver_name_var)
         self.driver_name_entry.place(x=145 + self.x, y=190 + self.y, anchor='n')
 
         # Checkboxes
         self.inc_driver_version = IntVar(value=1)
-        self.inc_driver_version.trace('w', self.update_driver_version)
+        self.inc_driver_version.trace_add('write', self.update_driver_version)
         self.inc_driver_check = Checkbutton(self.main.root, text='increment driver version',
                                             variable=self.inc_driver_version, takefocus=0)
         self.inc_driver_check.place(x=63 + self.x, y=150 + self.y, anchor='w')
@@ -2392,7 +2351,7 @@ class ExportPanel:
             invalid_states = False
             single_invalid_state = False
             for state in self.main.states:
-                if state.bg_color in ['pink', 'cyan']:
+                if state.bg_color in ('pink', 'cyan'):
                     self.abort = True
                     invalid_states = True
                     if not single_invalid_state:
@@ -2425,108 +2384,78 @@ class ExportPanel:
                 return
 
             # Update state names in Lua file
-            # state_name_changes = [original_name, new_name, original_name_lower, new_name_lower]
-            state_name_changes = []
+            state_name_changes = {}
             if os.path.isfile(lua_path := os.path.join(self.main.temp_dir, 'driver', 'driver.lua')):
                 # Lua file backup
                 if os.path.isfile(lua_bak_path := f'{lua_path}.bak'):
                     os.remove(lua_bak_path)
                 shutil.copy(lua_path, lua_bak_path)
                 for state in self.main.states:
-                    state_name_changes.append([state.original_name, state.name_var.get()])
-                for name_change in state_name_changes:
-                    formatted_name = ''
-                    for character in name_change[1]:
-                        if character == ' ' or (
-                                character not in letters and character not in capital_letters and
-                                character not in numbers):
-                            continue
-                        if not formatted_name and character in letters:
-                            formatted_name += capital_letters[letters.index(character)]
-                            continue
-                        formatted_name += character
-                    if not formatted_name:
-                        formatted_name = name_change[0]
-                    name_change[1] = formatted_name
-                pop_list = []
-                for name_change in state_name_changes:
-                    if name_change[0] == name_change[1]:
-                        pop_list.insert(0, state_name_changes.index(name_change))
-                        continue
-                    name_change.append(name_change[0].replace(name_change[0][0],
-                                                              letters[
-                                                                  capital_letters.index(name_change[0][0])]))
-                    name_change.append(name_change[1].replace(name_change[1][0],
-                                                              letters[
-                                                                  capital_letters.index(name_change[1][0])]))
-                for index in pop_list:
-                    state_name_changes.pop(index)
+                    if state.original_name != state.name_var.get():
+                        state_name_changes[state.original_name] = state.name_var.get()
 
                 # Modify Lua file
                 modified_lua_lines = []
                 with open(lua_path, errors='ignore') as driver_lua_file:
                     driver_lua_lines = driver_lua_file.readlines()
+                # TODO: Need to rewrite more intelligently
                 for line in driver_lua_lines:
                     new_line = line
-                    for name_change in state_name_changes:
-                        if f'{name_change[0]} ' in line or f'{name_change[2]} ' in line:
-                            new_line = new_line.replace(f'{name_change[0]} ', f'{name_change[1]} ')
-                            new_line = new_line.replace(f'{name_change[2]} ', f'{name_change[3]} ')
-                        elif f"{name_change[0]}'" in line or f"{name_change[2]}'" in line:
-                            new_line = new_line.replace(f"{name_change[0]}'", f"{name_change[1]}'")
-                            new_line = new_line.replace(f"{name_change[2]}'", f"{name_change[3]}'")
-                        elif f'{name_change[0]}"' in line or f'{name_change[2]}"' in line:
-                            new_line = new_line.replace(f'{name_change[0]}"', f'{name_change[1]}"')
-                            new_line = new_line.replace(f'{name_change[2]}"', f'{name_change[3]}"')
-                        elif f'{name_change[0]}=' in line or f'{name_change[2]}=' in line:
-                            new_line = new_line.replace(f'{name_change[0]}=', f'{name_change[1]}=')
-                            new_line = new_line.replace(f'{name_change[2]}=', f'{name_change[3]}=')
+                    for orig_name in state_name_changes:
+                        orig_lower = orig_name.lower()
+                        new = state_name_changes[orig_name]
+                        new_lower = new.lower()
+                        if f'{orig_name} ' in line or f'{orig_lower} ' in line:
+                            new_line = new_line.replace(f'{orig_name} ', f'{new} ')
+                            new_line = new_line.replace(f'{orig_lower} ', f'{new_lower} ')
+                        elif f"{orig_name}'" in line or f"{orig_lower}'" in line:
+                            new_line = new_line.replace(f"{orig_name}'", f"{new}'")
+                            new_line = new_line.replace(f"{orig_lower}'", f"{new_lower}'")
+                        elif f'{orig_name}"' in line or f'{orig_lower}"' in line:
+                            new_line = new_line.replace(f'{orig_name}"', f'{new}"')
+                            new_line = new_line.replace(f'{orig_lower}"', f'{new_lower}"')
+                        elif f'{orig_name}=' in line or f'{orig_lower}=' in line:
+                            new_line = new_line.replace(f'{orig_name}=', f'{new}=')
+                            new_line = new_line.replace(f'{orig_lower}=', f'{new_lower}=')
                     modified_lua_lines.append(new_line)
                 with open(lua_path, 'w', errors='ignore') as driver_lua_file:
                     driver_lua_file.writelines(modified_lua_lines)
 
             # Do multi-state related changes in XML
             if state_name_changes:
-                for item_tag in self.main.driver_xml.get_tags('item'):
-                    for state_name_change in state_name_changes:
-                        if state_name_change[0] == item_tag.value():
-                            item_tag.set_value(state_name_change[1])
+                for orig_name in state_name_changes:
+                    orig_lower = orig_name.lower()
+                    new_name = state_name_changes[orig_name]
+                    new_lower = new_name.lower()
+                    for item_tag in self.main.driver_xml.get_tags('item'):
+                        if orig_name == item_tag.value():
+                            item_tag.set_value(new_name)
                             break
-                        if state_name_change[2] == item_tag.value():
-                            item_tag.set_value(state_name_change[3])
+                        if orig_lower == item_tag.value():
+                            item_tag.set_value(new_lower)
                             break
-                for name_tag in self.main.driver_xml.get_tags('name'):
-                    for state_name_change in state_name_changes:
-                        if state_name_change[0] == name_tag.value() or name_tag.value().endswith(
-                                state_name_change[0]):
-                            name_tag.set_value(name_tag.value.replace(state_name_change[0],
-                                                                      state_name_change[1]))
+                    for name_tag in self.main.driver_xml.get_tags('name'):
+                        if orig_name == name_tag.value() or name_tag.value().endswith(orig_name):
+                            name_tag.set_value(name_tag.value().replace(orig_name, new_name))
                             break
-                        if state_name_change[2] == name_tag.value() or name_tag.value().endswith(
-                                state_name_change[2]):
-                            name_tag.set_value(name_tag.value().replace(state_name_change[2],
-                                                                        state_name_change[3]))
+                        if orig_lower == name_tag.value() or name_tag.value().endswith(orig_lower):
+                            name_tag.set_value(name_tag.value().replace(orig_lower, new_lower))
                             break
-                for description_tag in self.main.driver_xml.get_tags('description'):
-                    for state_name_change in state_name_changes:
-                        if f'{state_name_change[0]} ' in description_tag.value():
-                            description_tag.set_value(description_tag.value().replace(state_name_change[0],
-                                                                                      state_name_change[1]))
+                    for description_tag in self.main.driver_xml.get_tags('description'):
+                        if f'{orig_name} ' in description_tag.value():
+                            description_tag.set_value(description_tag.value().replace(orig_name, new_name))
                             break
-                        if f'{state_name_change[2]} ' in description_tag.value():
-                            description_tag.set_value(description_tag.value.replace(state_name_change[2],
-                                                                                    state_name_change[3]))
+                        if f'{orig_lower} ' in description_tag.value():
+                            description_tag.set_value(description_tag.value().replace(orig_lower, new_lower))
                             break
-                for state_tag in self.main.driver_xml.get_tags('state'):
-                    for attribute in state_tag.attributes:
-                        if attribute[0] == 'id':
-                            for state_name_change in state_name_changes:
-                                if state_name_change[0] == attribute[1]:
-                                    attribute[1] = state_name_change[1]
-                                    break
-                                if state_name_change[2] == attribute[1]:
-                                    attribute[1] = state_name_change[3]
-                                    break
+                    for state_tag in self.main.driver_xml.get_tags('state'):
+                        if state_tag.attributes['id']:
+                            if state_tag.attributes['id'] == orig_name:
+                                state_tag.attributes['id'] = new_name
+                                break
+                            if state_tag.attributes['id'] == orig_lower:
+                                state_tag.attributes['id'] = new_lower
+                                break
 
         # Check driver info variables
         if not all([self.main.driver_version_new_var.get(), self.main.driver_manufac_new_var.get(),
