@@ -6,7 +6,6 @@ from collections import deque
 char_escapes = {'<': '&lt;', '>': '&gt;', '&': '&amp;'}
 
 
-# TODO: fix comments inside tag value; random ass spaces
 def parse_xml(xml_path: str = '', xml_string: str = ''):
     if not xml_path and not xml_string:
         return []
@@ -268,8 +267,6 @@ class XMLTag:
                 output[-1] += f'>\n'
         for element in self.elements:
             if type(element) is str:
-                if 'Lorem' in element:
-                    pass
                 if len(self.elements) == 1:
                     if use_esc_chars:
                         output.append(re.sub(r"[<>&]", lambda m: char_escapes[m.group(0)], element))

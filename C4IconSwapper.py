@@ -11,14 +11,15 @@ import re
 import shutil
 import time
 import traceback
-from collections import Counter, deque
+import warnings
+from collections import Counter, deque, defaultdict
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
-from PIL import Image, ImageTk
-import tkinter as tk
-from tkinter import filedialog, ttk, Toplevel, Checkbutton, IntVar, StringVar, Label, Menu, OptionMenu
-from tkinter import DISABLED, NORMAL, END, INSERT
+from PIL import Image, ImageTk, UnidentifiedImageError
+from tkinter import Tk, filedialog, ttk, Toplevel, Checkbutton, IntVar, StringVar, Label, Menu, OptionMenu
+from tkinter import DISABLED, NORMAL, END, INSERT, Scrollbar, Text, Button, Entry, PhotoImage, Frame
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
 import Assets
@@ -33,6 +34,8 @@ capital_letters = ('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', '
                    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z')
 numbers = ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
 valid_chars = ('_', '-', ' ', *letters, *capital_letters, *numbers)
+re_valid_chars = re.compile(f'[^{re.escape("".join(valid_chars))}]')
+valid_img_types = ('.png', '.jpg', '.gif', '.jpeg')
 conn_template = """
 <connection>
     <id>0</id>
@@ -131,30 +134,38 @@ class C4IconSwapper:
                 valid_id = valid_instance_id(instance_ids)
             return valid_id
 
-        def exception_handler(*args):
-            root = tk.Toplevel()
+        def exception_window(*args, message_txt=None):
+            root = Toplevel(self.root)
             root.title('Exception')
-            frame = tk.Frame(root)
+            root.attributes('-toolwindow', True)
+            frame = Frame(root)
             frame.pack(expand=True, fill='both', padx=10, pady=10)
             # Create window icon
-            root.wm_iconphoto(True, tk.PhotoImage(data=Assets.win_icon_b64))
+            root.wm_iconphoto(True, PhotoImage(data=Assets.win_icon_b64))
 
-            h_scroll = tk.Scrollbar(frame, orient='horizontal')
+            h_scroll = Scrollbar(frame, orient='horizontal')
             h_scroll.pack(side='bottom', fill='x')
-            v_scroll = tk.Scrollbar(frame, orient='vertical')
+            v_scroll = Scrollbar(frame, orient='vertical')
             v_scroll.pack(side='right', fill='y')
 
-            text_widget = tk.Text(frame, font=('Consolas', 10), wrap='none', width=80, height=20)
+            text_widget = Text(frame, font=('Consolas', 11), wrap='none')
             text_widget.pack(side='left', expand=True, fill='both')
             text_widget.config(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
             v_scroll.config(command=text_widget.yview)
             h_scroll.config(command=text_widget.xview)
 
             # Set window size
-            err_lines = (err := '\n'.join(traceback.format_exception(*args))).splitlines()
-            text_widget.insert(END, err)
-            width = max(len(line.strip()) for line in err_lines) + 2
-            height = len(err_lines) + 2
+            if message_txt:
+                msg_lines = message_txt.splitlines()
+            elif len(args) > 1 and args[1] is RuntimeWarning:
+                message_txt = f'{args[1].__name__}\nMessage: {args[0]}\n{args[2]}, Line: {args[3]}'
+                msg_lines = message_txt.splitlines()
+            else:
+                msg_lines = (message_txt := '\n'.join(traceback.format_exception(*args))).splitlines()
+
+            text_widget.insert(END, message_txt)
+            width = max(len(line.strip()) for line in msg_lines) + 3
+            height = len(msg_lines) + 2
             text_widget.config(width=width, height=height)
 
             # Update window for size check
@@ -163,19 +174,64 @@ class C4IconSwapper:
             # Cap window size
             screen_width = root.winfo_screenwidth()
             screen_height = root.winfo_screenheight()
-            h_scale_factor = 0.75
-            v_scale_factor = 0.75
-            if root.winfo_width() > screen_width * h_scale_factor:
-                if root.winfo_height() > screen_height * v_scale_factor:
-                    root.geometry(f'{int(screen_width * h_scale_factor)}x{int(screen_height * v_scale_factor)}')
+            max_rel_h_size = 0.75
+            max_rel_v_size = 0.75
+            if root.winfo_width() > screen_width * max_rel_h_size:
+                if root.winfo_height() > screen_height * max_rel_v_size:
+                    root.geometry(f'{int(screen_width * max_rel_h_size)}x{int(screen_height * max_rel_v_size)}')
                 else:
-                    root.geometry(f'{int(screen_width * h_scale_factor)}x{root.winfo_height()}')
-            elif root.winfo_height() > screen_height * v_scale_factor:
-                root.geometry(f'{root.winfo_width()}x{int(screen_height * v_scale_factor)}')
+                    root.geometry(f'{int(screen_width * max_rel_h_size)}x{root.winfo_height()}')
+            elif root.winfo_height() > screen_height * max_rel_v_size:
+                root.geometry(f'{root.winfo_width()}x{int(screen_height * max_rel_v_size)}')
 
             text_widget.config(state='disabled')
             root.resizable(False, False)
             root.grab_set()
+            return
+
+        def exception_handler(*args):
+            if args:
+                if len(args) > 1 and args[1] is RuntimeWarning:
+                    self.warnings.append(f'{args[1].__name__}\nMessage: {args[0]}\n{args[2]}, Line: {args[3]}')
+                else:
+                    self.exceptions.append('\n'.join(traceback.format_exception(*args)))
+                if self.handler_recall_id:
+                    self.root.after_cancel(self.handler_recall_id)
+                # noinspection PyTypeChecker
+                self.handler_recall_id = self.root.after(50, exception_handler)
+                return
+            if not self.warnings and not self.exceptions:
+                return
+            if len(self.warnings) == 1 and not self.exceptions:
+                exception_window(message_txt=self.warnings.pop())
+                return
+            elif len(self.exceptions) == 1 and not self.warnings:
+                exception_window(message_txt=self.exceptions.pop())
+                return
+
+            def get_label(count: int, text: str):
+                if count == 0:
+                    return ''
+                return f'{count} {text}' if count != 1 else f'{count} {text[:-1]}'
+
+            labels = (get_label(len(self.exceptions), 'EXCEPTIONS'),
+                      get_label(len(self.warnings), 'WARNINGS'))
+            header = f'{" & ".join(filter(None, labels))}\n'
+            header += '=' * len(header.strip())
+            msg_body = []
+            if self.exceptions:
+                msg_body.append('\n\n========================\n\n'.join(self.exceptions))
+            if self.warnings:
+                msg_body.append('\n\n========================\n\n'.join(self.warnings))
+            msg_txt = '\n\n==================\n     WARNINGS\n==================\n\n'.join(msg_body)
+
+            self.exceptions.clear()
+            self.warnings.clear()
+            exception_window(message_txt=f'{header}\n\n{msg_txt}')
+
+        self.warnings = deque()
+        self.exceptions = deque()
+        self.handler_recall_id = None
 
         # Create temporary directory
         self.instance_id = str(random.randint(111111, 999999))
@@ -219,19 +275,20 @@ class C4IconSwapper:
                             win_close()
 
                         self.main_app_wait = True
-                        recovery_win = tk.Tk()
+                        recovery_win = Tk()
                         recovery_win.focus()
                         recovery_win.protocol('WM_DELETE_WINDOW', win_close)
                         recovery_win.title('Driver Recovery')
                         recovery_win.geometry('300x100')
+                        recovery_win.attributes('-toolwindow', True)
                         recovery_win.resizable(False, False)
                         label_text = 'Existing driver found.'
-                        recovery_label = tk.Label(recovery_win, text=label_text)
+                        recovery_label = Label(recovery_win, text=label_text)
                         recovery_label.pack()
                         label_text = 'Would you like to recover previous driver?'
-                        recovery_label2 = tk.Label(recovery_win, text=label_text)
+                        recovery_label2 = Label(recovery_win, text=label_text)
                         recovery_label2.pack()
-                        recovery_button = tk.Button(recovery_win, text='Recover Driver', command=flag_recovery)
+                        recovery_button = Button(recovery_win, text='Recover Driver', command=flag_recovery)
                         recovery_button.pack()
                         recovery_win.mainloop()
 
@@ -269,6 +326,7 @@ class C4IconSwapper:
         # Initialize main program
         self.root = TkinterDnD.Tk()
         self.root.report_callback_exception = exception_handler
+        warnings.showwarning = exception_handler
         self.root.geometry('915x287')
         self.root.bind('<KeyRelease>', self.key_release)
 
@@ -336,7 +394,7 @@ class C4IconSwapper:
         self.file.add_command(label='Open Replacement Image', command=self.replacement_panel.load_replacement)
         self.file.add_separator()
         self.file.add_command(label='Load Generic Driver', command=self.c4z_panel.load_gen_driver)
-        self.file.add_command(label='Load Multi Driver', command=self.c4z_panel.load_gen_multi)
+        self.file.add_command(label='Load Multi Driver', command=lambda: self.c4z_panel.load_gen_driver(multi=True))
         self.edit = Menu(self.menu, tearoff=0)
         self.edit.add_command(label='Driver Info', command=lambda: self.open_edit_win(self.driver_info_win, 'driver'))
         self.edit.add_command(label='Connections', command=lambda: self.open_edit_win(self.connections_win, 'conn'))
@@ -357,7 +415,7 @@ class C4IconSwapper:
         self.separator1.place(x=610, y=0, height=270)
 
         # Create window icon
-        self.root.wm_iconphoto(True, tk.PhotoImage(data=Assets.win_icon_b64))
+        self.root.wm_iconphoto(True, PhotoImage(data=Assets.win_icon_b64))
 
         # Do recovery if necessary
         if self.recover_instance:
@@ -367,7 +425,7 @@ class C4IconSwapper:
             first_time = True
             recovery_path = os.path.join(self.temp_dir, 'img_recovery')
             for file in os.listdir(self.temp_dir):
-                if is_valid_image(file):
+                if file.endswith(valid_img_types):
                     if first_time:
                         os.mkdir(recovery_path)
                         first_time = False
@@ -424,7 +482,10 @@ class C4IconSwapper:
 
     def get_states(self, lua_file):
         self.states_orig_names = []
-        states_index = re.search(r'state_OPTIONS\s*=\s*\{', lua_file).start()
+        # Match 'state_OPTIONS' + 0 or more white spaces + '=' + white space + '{'
+        if not (states_index := re.search(r'state_OPTIONS\s*=\s*\{', lua_file)):
+            return False
+        states_index = states_index.start()
         if states_index < 0:
             return False
         states_str = ''
@@ -440,6 +501,7 @@ class C4IconSwapper:
                     break
         if not states_str:
             return False
+        # Find '{' + 0 or more white spaces + 1 or more alphanumeric char including '_' + white space + '='
         self.states_orig_names = re.findall(r'\{\s*(\w+)\s*=', states_str)[1:]
         for i, state_name in enumerate(self.states_orig_names):
             if self.states_win:
@@ -447,9 +509,6 @@ class C4IconSwapper:
             self.states[i].name_var.set(state_name)
             self.states[i].original_name = state_name
         return True
-
-    def recall_load_gen_multi(self):
-        self.c4z_panel.load_gen_multi(show_loading_image=False)
 
     def blink_driver_name_entry(self):
         if not self.counter:
@@ -540,10 +599,10 @@ class C4IconSwapper:
         confirm_label = Label(save_dialog, text='Would you like to save the current project?')
         confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
 
-        yes_button = tk.Button(save_dialog, text='Yes', width='10', command=do_project_save)
+        yes_button = Button(save_dialog, text='Yes', width='10', command=do_project_save)
         yes_button.grid(row=2, column=0, sticky='e', padx=5)
 
-        no_button = tk.Button(save_dialog, text='No', width='10', command=exit_save_dialog)
+        no_button = Button(save_dialog, text='No', width='10', command=exit_save_dialog)
         no_button.grid(row=2, column=1, sticky='w', padx=5)
 
         self.ask_to_save = False
@@ -586,25 +645,23 @@ class C4IconSwapper:
         self.states_win = None
 
     def validate_driver_ver(self, *_):
-        version_str = self.driver_version_new_var.get()
-        version_compare = [char for char in version_str.lstrip('0') if char in numbers]
+        version_compare = re.sub(r'\D', '', version_str := self.driver_version_new_var.get()).lstrip('0')
 
         if self.driver_info_win and (str_diff := len(version_str) - len(version_compare)):
             cursor_pos = self.driver_info_win.driver_ver_new_entry.index(INSERT)
             self.driver_info_win.driver_ver_new_entry.icursor(cursor_pos - str_diff)
-            self.driver_version_new_var.set(''.join(version_compare))
+            self.driver_version_new_var.set(version_compare)
 
         self.ask_to_save = True
 
     def validate_man_and_creator(self, string_var=None, entry=None):
         if not string_var or not entry:
             return
-        name = string_var.get()
-        name_compare = [char for char in name if char in valid_chars]
+        name_compare = re_valid_chars.sub('', name := string_var.get())
         if self.driver_info_win and (str_diff := len(name) - len(name_compare)):
             cursor_pos = entry.index(INSERT)
             entry.icursor(cursor_pos - str_diff)
-            string_var.set(''.join(name_compare))
+            string_var.set(name_compare)
 
         self.ask_to_save = True
 
@@ -802,7 +859,7 @@ class Icon:
     def __init__(self, path: str, img=None):
         if not os.path.isfile(path):
             raise FileNotFoundError
-        if not is_valid_image(path):
+        if not path.endswith(valid_img_types):
             raise TypeError
         self.path = path
         if img:
@@ -814,8 +871,57 @@ class Icon:
             self.tk_icon_sm = ImageTk.PhotoImage(img.resize((60, 60)))
 
 
+class C4Icon(Icon):
+    def __init__(self, icons: list, extra=False):
+        icon = max(icons, key=lambda sub_icon: sub_icon.size[0])
+        super().__init__(path=icon.path)
+        self.name, self.name_orig = icon.name, icon.name
+        self.root = icon.root
+        self.icons, self.extra = icons, extra
+        self.extraer = False
+        self.bak = False
+
+
+class C4SubIcon:
+    def __init__(self, root_path: str, img_path: str, name: str, size: int | tuple[int, int], label_scheme=None):
+        self.root = root_path  # Path to directory containing image
+        self.path = img_path  # Full path to image file
+        self.name = name
+        self.label_scheme = label_scheme
+        if isinstance(size, int) and not isinstance(size, bool):
+            self.size = (size, size)
+        elif (isinstance(size, (tuple, list)) and len(size) == 2 and
+              all(isinstance(n, int) and not isinstance(n, bool) for n in size)):
+            self.size = tuple(size)
+        else:
+            raise ValueError(f'Expected int or (int, int). Received: {type(size).__name__}: {size}')
+
+
+class ConnectionsWin:
+    def __init__(self, main: C4IconSwapper):
+        self.main = main
+
+        # Initialize window
+        self.window = Toplevel(self.main.root)
+        self.window.focus()
+        self.window.protocol('WM_DELETE_WINDOW', self.main.close_connections)
+        self.window.title('Edit Driver Connections')
+        self.window.geometry('975x250')
+        x_spacing, y_spacing = 330, 40
+        self.window.geometry(f'+{self.main.root.winfo_rootx()}+{self.main.root.winfo_rooty()}')
+        self.window.resizable(False, False)
+
+        self.connections = [ConnectionEntry(self, self.main.connections[(x * 6) + y],
+                                                 x * x_spacing + 15, y * y_spacing + 25)
+                            for x, y in itertools.product(range(3), range(6))]
+
+    def refresh(self):
+        for conn_entry in self.connections:
+            conn_entry.refresh()
+
+
 class Connection:
-    def __init__(self, main):
+    def __init__(self, main: C4IconSwapper):
         self.main = main
         self.id = 0
         self.original, self.in_id_group, self.delete, self.enabled = False, False, False, False
@@ -848,175 +954,145 @@ class Connection:
         self.main.conn_ids.append(self.id)
 
 
-class State:
-    def __init__(self, name: str):
-        self.original_name = name
-        self.name_var = StringVar(value=name)
-        background = light_entry_bg
-        self.bg_color = background
+class ConnectionEntry:
+    def __init__(self, parent: ConnectionsWin, conn_obj: Connection, x_pos: int, y_pos: int):
+        # Initialize Connection UI Object
+        self.window = parent.window
+        self.main = parent.main
+        self.conn_object = conn_obj
+        self.x, self.y = x_pos, y_pos
 
-
-class ConnectionsWin:
-    class ConnectionEntry:
-        def __init__(self, main, conn_obj, x_pos: int, y_pos: int):
-            # Initialize Connection UI Object
-            self.window = main.window
-            self.main = main.main
-            self.conn_object = conn_obj
-            self.x, self.y = x_pos, y_pos
-
-            # Entry
-            self.name_entry_var = conn_obj.name_entry_var
-            self.name_entry_var.trace_add('write', self.name_update)
-            self.name_entry = tk.Entry(self.window, width=20, textvariable=self.name_entry_var)
-            self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
-            if not self.conn_object.enabled:
-                self.name_entry['state'] = DISABLED
-
-            # Dropdown
-            self.type = conn_obj.type
-            self.type_menu = OptionMenu(self.window, self.type, *selectable_connections)
-            self.type_menu.place(x=self.x + 160, y=self.y, anchor='w')
-            self.type.trace_add('write', self.conn_object.update_id)
-            if not self.conn_object.enabled:
-                self.type_menu['state'] = DISABLED
-
-            # Buttons
-            self.add_button = tk.Button(self.window, text='Add', width=3, command=self.enable, takefocus=0)
-            if self.conn_object.enabled or self.conn_object.original:
-                self.add_button.place(x=-420, y=-420, anchor='w')
-            else:
-                self.add_button.place(x=self.x, y=self.y, anchor='w')
-            if not self.main.driver_selected:
-                self.add_button['state'] = DISABLED
-
-            self.x_button = tk.Button(self.window, text='x', width=1, command=self.disable, takefocus=0)
-            if self.conn_object.enabled and not self.conn_object.original:
-                self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
-            else:
-                self.x_button.place(x=-420, y=-420, anchor='w')
-
-            self.del_button = tk.Button(self.window, text='Del', width=3, command=self.flag_delete, takefocus=0)
-            if self.conn_object.original:
-                self.del_button.place(x=self.x, y=self.y, anchor='w')
-            else:
-                self.del_button.place(x=-420, y=-420, anchor='w')
-            if self.conn_object.delete:
-                self.del_button['text'] = 'Keep'
-                self.del_button['width'] = 4
-                self.del_button.place(x=self.x + self.del_button.winfo_x() - 6, y=self.y)
-
-        def enable(self):
-            self.conn_object.enabled = True
-            self.name_entry['state'] = NORMAL
-            self.type_menu['state'] = NORMAL
-            self.add_button.place(x=-420, y=-420, anchor='w')
-            self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
-            if self.conn_object.tag:
-                self.conn_object.tag.delete = False
-            self.name_entry['takefocus'] = 1
-
-        def disable(self):
-            self.conn_object.enabled = False
+        # Entry
+        self.name_entry_var = conn_obj.name_entry_var
+        self.name_entry_var.trace_add('write', self.name_update)
+        self.name_entry = Entry(self.window, width=20, textvariable=self.name_entry_var)
+        self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+        if not self.conn_object.enabled:
             self.name_entry['state'] = DISABLED
+
+        # Dropdown
+        self.type = conn_obj.type
+        self.type_menu = OptionMenu(self.window, self.type, *selectable_connections)
+        self.type_menu.place(x=self.x + 160, y=self.y, anchor='w')
+        self.type.trace_add('write', self.conn_object.update_id)
+        if not self.conn_object.enabled:
             self.type_menu['state'] = DISABLED
+
+        # Buttons
+        self.add_button = Button(self.window, text='Add', width=3, command=self.enable, takefocus=0)
+        if self.conn_object.enabled or self.conn_object.original:
+            self.add_button.place(x=-420, y=-420, anchor='w')
+        else:
             self.add_button.place(x=self.x, y=self.y, anchor='w')
+        if not self.main.driver_selected:
+            self.add_button['state'] = DISABLED
+
+        self.x_button = Button(self.window, text='x', width=1, command=self.disable, takefocus=0)
+        if self.conn_object.enabled and not self.conn_object.original:
+            self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
+        else:
             self.x_button.place(x=-420, y=-420, anchor='w')
+
+        self.del_button = Button(self.window, text='Del', width=3, command=self.flag_delete, takefocus=0)
+        if self.conn_object.original:
+            self.del_button.place(x=self.x, y=self.y, anchor='w')
+        else:
+            self.del_button.place(x=-420, y=-420, anchor='w')
+        if self.conn_object.delete:
+            self.del_button['text'] = 'Keep'
+            self.del_button['width'] = 4
+            self.del_button.place(x=self.x + self.del_button.winfo_x() - 6, y=self.y)
+
+    def enable(self):
+        self.conn_object.enabled = True
+        self.name_entry['state'] = NORMAL
+        self.type_menu['state'] = NORMAL
+        self.add_button.place(x=-420, y=-420, anchor='w')
+        self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
+        if self.conn_object.tag:
+            self.conn_object.tag.delete = False
+        self.name_entry['takefocus'] = 1
+
+    def disable(self):
+        self.conn_object.enabled = False
+        self.name_entry['state'] = DISABLED
+        self.type_menu['state'] = DISABLED
+        self.add_button.place(x=self.x, y=self.y, anchor='w')
+        self.x_button.place(x=-420, y=-420, anchor='w')
+        if self.conn_object.tag:
+            self.conn_object.tag.delete = True
+        self.name_entry['takefocus'] = 0
+
+    def flag_delete(self):
+        if not self.conn_object.original:
+            return
+        if not self.conn_object.delete:
+            self.conn_object.delete = True
             if self.conn_object.tag:
                 self.conn_object.tag.delete = True
-            self.name_entry['takefocus'] = 0
-
-        def flag_delete(self):
-            if not self.conn_object.original:
-                return
-            if not self.conn_object.delete:
-                self.conn_object.delete = True
-                if self.conn_object.tag:
-                    self.conn_object.tag.delete = True
-                self.conn_object.prior_txt = self.name_entry_var.get()
-                self.conn_object.prior_type = self.type.get()
-                self.type.set('RIP')
-                self.name_entry['state'] = NORMAL
-                self.name_entry_var.set('TO BE DELETED')
-                self.name_entry['state'] = DISABLED
-                self.del_button['text'] = 'Keep'
-                self.del_button['width'] = 4
-                self.del_button.place(x=self.del_button.winfo_x() - 6, y=self.y)
-                if len(self.conn_object.id_group) > 1:
-                    if all(groupie.delete for i, groupie in enumerate(self.conn_object.id_group) if i):
-                        self.conn_object.tag.delete = True
-                    self.conn_object.tag.delete = True
-                return
-            self.conn_object.delete = False
-            if self.conn_object.tag:
-                self.conn_object.tag.delete = False
+            self.conn_object.prior_txt = self.name_entry_var.get()
+            self.conn_object.prior_type = self.type.get()
+            self.type.set('RIP')
             self.name_entry['state'] = NORMAL
-            self.name_entry_var.set(self.conn_object.prior_txt)
-            self.conn_object.prior_txt = ''
+            self.name_entry_var.set('TO BE DELETED')
             self.name_entry['state'] = DISABLED
-            self.type.set(self.conn_object.prior_type)
-            self.conn_object.prior_type = ''
-            if self.conn_object.tag:
-                self.conn_object.tag.delete = False
-            self.del_button['text'] = 'Del'
-            self.del_button['width'] = 3
-            self.del_button.place(x=self.del_button.winfo_x() + 6, y=self.y)
+            self.del_button['text'] = 'Keep'
+            self.del_button['width'] = 4
+            self.del_button.place(x=self.del_button.winfo_x() - 6, y=self.y)
+            if len(self.conn_object.id_group) > 1:
+                if all(groupie.delete for i, groupie in enumerate(self.conn_object.id_group) if i):
+                    self.conn_object.tag.delete = True
+                self.conn_object.tag.delete = True
+            return
+        self.conn_object.delete = False
+        if self.conn_object.tag:
+            self.conn_object.tag.delete = False
+        self.name_entry['state'] = NORMAL
+        self.name_entry_var.set(self.conn_object.prior_txt)
+        self.conn_object.prior_txt = ''
+        self.name_entry['state'] = DISABLED
+        self.type.set(self.conn_object.prior_type)
+        self.conn_object.prior_type = ''
+        if self.conn_object.tag:
+            self.conn_object.tag.delete = False
+        self.del_button['text'] = 'Del'
+        self.del_button['width'] = 3
+        self.del_button.place(x=self.del_button.winfo_x() + 6, y=self.y)
 
-        def name_update(self, *_):
-            self.main.ask_to_save = True
-
-        def refresh(self):
-            self.name_entry_var.set(self.conn_object.name_entry_var.get())
-            self.type.set(self.conn_object.type.get())
-            if self.conn_object.enabled:
-                self.type_menu['state'] = NORMAL
-                self.name_entry['state'] = NORMAL
-            else:
-                self.type_menu['state'] = DISABLED
-                self.name_entry['state'] = DISABLED
-
-            if self.conn_object.enabled or self.conn_object.original:
-                self.add_button.place(x=-420, y=-420, anchor='w')
-            self.add_button.place(x=self.x, y=self.y, anchor='w')
-            self.add_button['state'] = NORMAL if self.main.driver_selected else DISABLED
-            if self.conn_object.enabled and not self.conn_object.original:
-                self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
-            else:
-                self.x_button.place(x=-420, y=-420, anchor='w')
-
-            if self.conn_object.original:
-                self.del_button.place(x=self.x, y=self.y, anchor='w')
-            else:
-                self.del_button.place(x=-420, y=-420, anchor='w')
-            if self.conn_object.delete:
-                self.del_button['text'] = 'Keep'
-                self.del_button['width'] = 4
-                self.del_button.place(x=self.x + self.del_button.winfo_x() - 6, y=self.y)
-
-    def __init__(self, main):
-        self.main = main
-
-        # Initialize window
-        self.window = Toplevel(self.main.root)
-        self.window.focus()
-        self.window.protocol('WM_DELETE_WINDOW', self.main.close_connections)
-        self.window.title('Edit Driver Connections')
-        self.window.geometry('975x250')
-        x_spacing, y_spacing = 330, 40
-        self.window.geometry(f'+{self.main.root.winfo_rootx()}+{self.main.root.winfo_rooty()}')
-        self.window.resizable(False, False)
-
-        self.connections = [self.ConnectionEntry(self, self.main.connections[(x * 6) + y],
-                                                 x * x_spacing + 15, y * y_spacing + 25)
-                            for x, y in itertools.product(range(3), range(6))]
+    def name_update(self, *_):
+        self.main.ask_to_save = True
 
     def refresh(self):
-        for conn_entry in self.connections:
-            conn_entry.refresh()
+        self.name_entry_var.set(self.conn_object.name_entry_var.get())
+        self.type.set(self.conn_object.type.get())
+        if self.conn_object.enabled:
+            self.type_menu['state'] = NORMAL
+            self.name_entry['state'] = NORMAL
+        else:
+            self.type_menu['state'] = DISABLED
+            self.name_entry['state'] = DISABLED
+
+        if self.conn_object.enabled or self.conn_object.original:
+            self.add_button.place(x=-420, y=-420, anchor='w')
+        self.add_button.place(x=self.x, y=self.y, anchor='w')
+        self.add_button['state'] = NORMAL if self.main.driver_selected else DISABLED
+        if self.conn_object.enabled and not self.conn_object.original:
+            self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
+        else:
+            self.x_button.place(x=-420, y=-420, anchor='w')
+
+        if self.conn_object.original:
+            self.del_button.place(x=self.x, y=self.y, anchor='w')
+        else:
+            self.del_button.place(x=-420, y=-420, anchor='w')
+        if self.conn_object.delete:
+            self.del_button['text'] = 'Keep'
+            self.del_button['width'] = 4
+            self.del_button.place(x=self.x + self.del_button.winfo_x() - 6, y=self.y)
 
 
 class DriverInfoWin:
-    def __init__(self, main):
+    def __init__(self, main: C4IconSwapper):
         self.main = main
 
         # Initialize window
@@ -1036,50 +1112,50 @@ class DriverInfoWin:
             self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
 
         # Labels
-        instance_id_label = tk.Label(self.window, text=f'program instance id: {self.main.instance_id}')
+        instance_id_label = Label(self.window, text=f'program instance id: {self.main.instance_id}')
 
         man_y = 20
-        man_arrow = tk.Label(self.window, text='\u2192', font=('', 15))
+        man_arrow = Label(self.window, text='\u2192', font=('', 15))
 
         creator_y = man_y + 55
-        creator_arrow = tk.Label(self.window, text='\u2192', font=('', 15))
+        creator_arrow = Label(self.window, text='\u2192', font=('', 15))
 
         version_y = creator_y + 55
-        version_arrow = tk.Label(self.window, text='\u2192', font=('', 15))
+        version_arrow = Label(self.window, text='\u2192', font=('', 15))
 
         font_size = 10
-        driver_ver_orig_label = tk.Label(self.window, text='Original Version:', font=(label_font, 8))
-        driver_man_label = tk.Label(self.window, text='Driver Manufacturer', font=(label_font, font_size))
-        driver_creator_label = tk.Label(self.window, text='Driver Creator', font=(label_font, font_size))
-        driver_ver_label = tk.Label(self.window, text='Driver Version', font=(label_font, font_size))
+        driver_ver_orig_label = Label(self.window, text='Original Version:', font=(label_font, 8))
+        driver_man_label = Label(self.window, text='Driver Manufacturer', font=(label_font, font_size))
+        driver_creator_label = Label(self.window, text='Driver Creator', font=(label_font, font_size))
+        driver_ver_label = Label(self.window, text='Driver Version', font=(label_font, font_size))
 
         # Entry
         entry_width = 17
-        driver_man_entry = tk.Entry(self.window, width=entry_width, textvariable=self.main.driver_manufac_var)
+        driver_man_entry = Entry(self.window, width=entry_width, textvariable=self.main.driver_manufac_var)
         driver_man_entry['state'] = DISABLED
-        self.driver_man_new_entry = tk.Entry(self.window, width=entry_width,
-                                             textvariable=self.main.driver_manufac_new_var)
+        self.driver_man_new_entry = Entry(self.window, width=entry_width,
+                                          textvariable=self.main.driver_manufac_new_var)
         self.main.driver_manufac_new_var.trace_add('write',
                                                    lambda name, index, mode: self.main.validate_man_and_creator(
                                                        string_var=self.main.driver_manufac_new_var,
                                                        entry=self.driver_man_new_entry))
 
-        driver_creator_entry = tk.Entry(self.window, width=entry_width, textvariable=self.main.driver_creator_var)
+        driver_creator_entry = Entry(self.window, width=entry_width, textvariable=self.main.driver_creator_var)
         driver_creator_entry['state'] = DISABLED
-        self.driver_creator_new_entry = tk.Entry(self.window, width=entry_width,
-                                                 textvariable=self.main.driver_creator_new_var)
+        self.driver_creator_new_entry = Entry(self.window, width=entry_width,
+                                              textvariable=self.main.driver_creator_new_var)
         self.main.driver_creator_new_var.trace_add('write',
                                                    lambda name, index, mode: self.main.validate_man_and_creator(
                                                        string_var=self.main.driver_creator_new_var,
                                                        entry=self.driver_creator_new_entry))
 
-        driver_ver_entry = tk.Entry(self.window, width=entry_width, textvariable=self.main.driver_version_var)
+        driver_ver_entry = Entry(self.window, width=entry_width, textvariable=self.main.driver_version_var)
         driver_ver_entry['state'] = DISABLED
-        self.driver_ver_new_entry = tk.Entry(self.window, width=entry_width,
-                                             textvariable=self.main.driver_version_new_var)
+        self.driver_ver_new_entry = Entry(self.window, width=entry_width,
+                                          textvariable=self.main.driver_version_new_var)
         self.driver_ver_new_entry.bind('<FocusOut>', self.main.export_panel.update_driver_version)
         self.main.driver_version_new_var.trace_add('write', self.main.validate_driver_ver)
-        driver_ver_orig_entry = tk.Entry(self.window, width=6, textvariable=self.main.driver_ver_orig)
+        driver_ver_orig_entry = Entry(self.window, width=6, textvariable=self.main.driver_ver_orig)
         driver_ver_orig_entry['state'] = DISABLED
         instance_id_label.place(x=127, y=220, anchor='n')
         man_arrow.place(x=115, y=man_y, anchor='nw')
@@ -1099,56 +1175,7 @@ class DriverInfoWin:
 
 
 class StatesWin:
-    class StateEntry:
-        def __init__(self, main, state_obj, x_pos: int, y_pos: int, label='State#:'):
-            # Initialize Driver State UI Object
-            self.main = main.main
-            self.window = main.window
-            self.state_object = state_obj
-            self.original_name = state_obj.original_name
-            self.x, self.y = x_pos, y_pos
-
-            # Label
-            self.name_label = tk.Label(self.window, text=label)
-            self.name_label.place(x=self.x + 35, y=self.y, anchor='e')
-
-            # Entry
-            self.name_var = StringVar(value=state_obj.name_var.get())
-            self.name_var.trace_add('write', self.on_name_update)
-            self.name_entry = tk.Entry(self.window, width=20, textvariable=self.name_var)
-            self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
-            self.name_entry['background'] = state_obj.bg_color
-            if not self.main.multi_state_driver:
-                self.name_entry['state'] = DISABLED
-
-        def on_name_update(self, *_):
-            if self.main.states_win:
-                if self.main.states_win.trace_lockout:
-                    return
-                self.main.states_win.validate_states()
-
-        def get(self):
-            return self.name_var.get()
-
-        def update_state_name(self):
-            name = self.name_var.get()
-            formatted_name = re.sub(r'[^a-zA-Z0-9]', '', name).capitalize()
-            if not formatted_name:
-                self.name_var.set('')
-                return
-            if str_diff := len(name) - len(formatted_name):
-                cursor_pos = self.name_entry.index(INSERT)
-                self.name_entry.icursor(cursor_pos - str_diff)
-            self.name_var.set(formatted_name)
-            self.state_object.name_var.set(formatted_name)
-
-        def refresh(self, bg_only=False):
-            self.name_entry['background'] = self.state_object.bg_color
-            if bg_only:
-                return
-            self.name_var.set(self.state_object.name_var.get())
-
-    def __init__(self, main):
+    def __init__(self, main: C4IconSwapper):
         self.main = main
 
         # Initialize window
@@ -1164,10 +1191,9 @@ class StatesWin:
         self.state_entries = []
         x_spacing, y_spacing = 200, 34
         x_offset, y_offset = 10, 30
-        self.state_entries.extend(
-            self.StateEntry(self, self.main.states[i], int(i / 7) * x_spacing + x_offset,
-                            (i % 7) * y_spacing + y_offset, label=f'state{str(i + 1)}:')
-            for i in range(13))
+        self.state_entries.extend(StateEntry(self, self.main.states[i], int(i / 7) * x_spacing + x_offset,
+                                             (i % 7) * y_spacing + y_offset, label=f'state{str(i + 1)}:')
+                                  for i in range(13))
 
     def refresh(self, bg_only=False):
         trace_lockout = self.trace_lockout
@@ -1210,70 +1236,89 @@ class StatesWin:
         self.trace_lockout = False
 
 
+class State:
+    def __init__(self, name: str):
+        self.original_name = name
+        self.name_var = StringVar(value=name)
+        background = light_entry_bg
+        self.bg_color = background
+
+
+class StateEntry:
+    def __init__(self, parent: StatesWin, state_obj: State, x_pos: int, y_pos: int, label='State#:'):
+        # Initialize Driver State UI Object
+        self.main = parent.main
+        self.window = parent.window
+        self.state_object = state_obj
+        self.original_name = state_obj.original_name
+        self.x, self.y = x_pos, y_pos
+
+        # Label
+        self.name_label = Label(self.window, text=label)
+        self.name_label.place(x=self.x + 35, y=self.y, anchor='e')
+
+        # Entry
+        self.name_var = StringVar(value=state_obj.name_var.get())
+        self.name_var.trace_add('write', self.on_name_update)
+        self.name_entry = Entry(self.window, width=20, textvariable=self.name_var)
+        self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+        self.name_entry['background'] = state_obj.bg_color
+        if not self.main.multi_state_driver:
+            self.name_entry['state'] = DISABLED
+
+    def on_name_update(self, *_):
+        if self.main.states_win:
+            if self.main.states_win.trace_lockout:
+                return
+            self.main.states_win.validate_states()
+
+    def get(self):
+        return self.name_var.get()
+
+    def update_state_name(self):
+        name = self.name_var.get()
+        # Substitute non-alphanumeric chars with ''
+        formatted_name = re.sub(r'[^a-zA-Z0-9]', '', name).capitalize()
+        if not formatted_name:
+            self.name_var.set('')
+            return
+        if str_diff := len(name) - len(formatted_name):
+            cursor_pos = self.name_entry.index(INSERT)
+            self.name_entry.icursor(cursor_pos - str_diff)
+        self.name_var.set(formatted_name)
+        self.state_object.name_var.set(formatted_name)
+
+    def refresh(self, bg_only=False):
+        self.name_entry['background'] = self.state_object.bg_color
+        if bg_only:
+            return
+        self.name_var.set(self.state_object.name_var.get())
+
+
 class C4zPanel:
-    # TODO: Update to use tk images; add .bak flag
-    class C4Icon(Icon):
-        def __init__(self, icons: list, extra=False):
-            super().__init__(path=icons[0].path)
-            # Initialize Icon Group
-            self.name, self.name_orig, self.name_alt = icons[0].name, icons[0].name, icons[0].name_alt
-            self.root = icons[0].root
-            self.icons, self.extra, self.dupe_number, self.bak = icons, extra, 0, False
-
-    class SubIcon:
-        def __init__(self, root_path: str, path: str, name: str, size: int):
-            # Initialize Icon
-            self.root = root_path  # Path to directory containing image
-            self.path = path  # Full path to image file
-            self.name, self.size = name, size
-            self.size_alt, self.name_alt, self.alt_format = None, '', False
-            # TODO: Improve using RegEx
-            for char in reversed(self.root):
-                if char == '/':
-                    break
-                self.name_alt = char + self.name_alt
-            # Check for alt format of icon
-            if 'x' in self.name_alt:
-                size0 = ''
-                size1 = ''
-                check_size0 = True
-                for char in self.name_alt:
-                    if char == 'x':
-                        check_size0 = False
-                        continue
-                    if check_size0:
-                        size0 += char
-                        continue
-                    size1 += char
-                with contextlib.suppress(ValueError):
-                    if (size0_int := int(size0)) and (size1_int := int(size1)):
-                        self.alt_format = True
-                        if size0_int != size1_int:
-                            self.size_alt = (size0_int, size1_int)
-
-    def __init__(self, main):
+    def __init__(self, main: C4IconSwapper):
         # Initialize C4z Panel
         self.main = main
         self.x, self.y = 5, 20
-        self.current_icon, self.extra_icons = 0, 0
+        self.current_icon, self.extra_icons, self.extraer_icons = 0, 0, 0
         self.icons = []
         self.valid_connections = ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI', 'STEREO', 'DIGITAL_OPTICAL',
                                   *selectable_connections]
 
         # Buttons
-        self.open_file_button = tk.Button(self.main.root, text='Open', width=10, command=self.load_c4z, takefocus=0)
-        self.restore_button = tk.Button(self.main.root, text='Restore\nOriginal Icon', command=self.restore_icon,
-                                        takefocus=0)
+        self.open_file_button = Button(self.main.root, text='Open', width=10, command=self.load_c4z, takefocus=0)
+        self.restore_button = Button(self.main.root, text='Restore\nOriginal Icon', command=self.restore_icon,
+                                     takefocus=0)
         self.restore_button['state'] = DISABLED
 
-        self.restore_all_button = tk.Button(self.main.root, text='Restore All',
-                                            command=self.restore_all, takefocus=0)
+        self.restore_all_button = Button(self.main.root, text='Restore All',
+                                         command=self.restore_all, takefocus=0)
         self.restore_all_button['state'] = DISABLED
 
-        self.prev_icon_button = tk.Button(self.main.root, text='Prev', command=self.prev_icon, width=5, takefocus=0)
+        self.prev_icon_button = Button(self.main.root, text='Prev', command=self.prev_icon, width=5, takefocus=0)
         self.prev_icon_button['state'] = DISABLED
 
-        self.next_icon_button = tk.Button(self.main.root, text='Next', command=self.next_icon, width=5, takefocus=0)
+        self.next_icon_button = Button(self.main.root, text='Next', command=self.next_icon, width=5, takefocus=0)
         self.next_icon_button['state'] = DISABLED
 
         self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
@@ -1283,32 +1328,40 @@ class C4zPanel:
         self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
 
         # Entry
-        self.file_entry_field = tk.Entry(self.main.root, width=25, takefocus=0)
+        self.file_entry_field = Entry(self.main.root, width=25, takefocus=0)
         self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
         self.file_entry_field.drop_target_register(DND_FILES)
         self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_c4z)
         self.file_entry_field.insert(0, 'Select .c4z file...')
         self.file_entry_field['state'] = DISABLED
 
-        # Checkbox
-        # TODO: Disable show extra icons checkbox when it is inapplicable
+        # Checkboxes
         self.show_extra_icons = IntVar(value=0)
         self.show_extra_icons.trace_add('write', self.toggle_extra_icons)
         self.show_sub_icons_check = Checkbutton(self.main.root, text='show extra icons',
                                                 variable=self.show_extra_icons, takefocus=0)
         self.show_sub_icons_check.place(x=self.x + 177, y=self.y + 176, anchor='nw')
+        self.show_sub_icons_check.config(state='disabled')
+
+        self.show_extraer_icons = IntVar(value=0)
+        self.show_extraer_icons.trace_add('write', self.toggle_extra_icons)
+        self.show_extraer_check = Checkbutton(self.main.root, text=f'show extra-er ({self.extraer_icons})',
+                                                variable=self.show_extra_icons, takefocus=0)
+        self.show_extraer_check.place(x=self.x + 177, y=self.y + 198, anchor='nw')
+        self.show_extraer_check.place_forget()
+        self.show_extraer_check.config(state='disabled')
 
         # Labels
-        self.panel_label = tk.Label(self.main.root, text='Driver Selection', font=(label_font, 15))
+        self.panel_label = Label(self.main.root, text='Driver Selection', font=(label_font, 15))
 
-        self.c4_icon_label = tk.Label(self.main.root, image=self.main.blank)
+        self.c4_icon_label = Label(self.main.root, image=self.main.blank)
         self.c4_icon_label.image = self.main.blank
         self.c4_icon_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
 
-        self.icon_num_label = tk.Label(self.main.root, text='0 of 0')
+        self.icon_num_label = Label(self.main.root, text='0 of 0')
         self.icon_num_label.place(x=108 + self.x, y=176 + self.y, anchor='n')
 
-        self.icon_name_label = tk.Label(self.main.root, text='icon name')
+        self.icon_name_label = Label(self.main.root, text='icon name')
         self.icon_name_label.place(x=108 + self.x, y=193 + self.y, anchor='n')
 
         self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
@@ -1318,20 +1371,32 @@ class C4zPanel:
     def toggle_extra_icons(self, *_):
         if not self.main.driver_selected:
             return
-        if not self.show_extra_icons.get() and self.main.c4z_panel.icons[self.main.c4z_panel.current_icon].extra:
+        # TODO: Update for extraer
+        if (not self.show_extra_icons.get() and
+                (self.icons[self.current_icon].extra or self.icons[self.current_icon].extraer)):
             self.next_icon()
         self.update_icon()
 
-    # TODO: Combine loading generic drivers
-    def load_gen_driver(self):
+    def load_gen_driver(self, multi=False):
         if self.main.ask_to_save:
             self.main.root.wait_window(self.main.ask_to_save_dialog(on_exit=False))
-        # Load generic two-state driver from Base64Assets
-        gen_driver_path = os.path.join(self.main.temp_dir, 'generic.c4z')
+        if multi:
+            with Image.open(io.BytesIO(Assets.loading_img_b)) as img:
+                icon = ImageTk.PhotoImage(img)
+                self.c4_icon_label.configure(image=icon)
+                self.c4_icon_label.image = icon
+            self.main.root.update()
+            # Load generic multi-state driver from Base64Assets
+            gen_driver_path = os.path.join(self.main.temp_dir, 'multi generic.c4z')
+            with open(gen_driver_path, 'wb') as gen_driver:
+                gen_driver.write(base64.b64decode(Assets.generic_multi_b64))
+        else:
+            # Load generic two-state driver from Base64Assets
+            gen_driver_path = os.path.join(self.main.temp_dir, 'generic.c4z')
+            with open(gen_driver_path, 'wb') as gen_driver:
+                gen_driver.write(base64.b64decode(Assets.generic_driver_b64))
         if self.file_entry_field.get() == gen_driver_path:
             return
-        with open(gen_driver_path, 'wb') as gen_driver:
-            gen_driver.write(base64.b64decode(Assets.generic_driver_b64))
 
         if os.path.isdir(temp_driver_path := os.path.join(self.main.temp_dir, 'driver')):
             shutil.rmtree(temp_driver_path)
@@ -1339,72 +1404,23 @@ class C4zPanel:
         shutil.unpack_archive(gen_driver_path, temp_driver_path, 'zip')
         os.remove(gen_driver_path)
 
-        sizes = [(70, 70), (90, 90), (300, 300), (512, 512)]
-        pictures = os.listdir(self.main.device_icon_dir)
-        for picture in pictures:
+        sizes = [90, 300, 512, 1024] if multi else [70, 90, 300, 512]
+        root_size = '70' if multi else '1024'
+        for picture in os.listdir(self.main.device_icon_dir):
             resized_icon = Image.open(img_path := os.path.join(self.main.device_icon_dir, picture))
             for size in sizes:
-                new_icon = resized_icon.resize(size)
-                new_icon.save(img_path.replace('1024', str(size[0])))
+                new_icon = resized_icon.resize((size, size))
+                new_icon.save(img_path.replace(root_size, str(size)))
 
         shutil.make_archive(gen_driver_path.replace('.c4z', ''), 'zip',
                             os.path.join(self.main.temp_dir, 'driver'))
-
         os.rename(gen_driver_path.replace('.c4z', '.zip'), gen_driver_path)
 
         self.load_c4z(gen_driver_path)
         self.main.export_panel.driver_name_entry.delete(0, 'end')
         self.main.export_panel.driver_name_entry.insert(0, 'New Driver')
-        self.main.ask_to_save = False
         os.remove(gen_driver_path)
-
-    # TODO: Combine loading generic drivers
-    def load_gen_multi(self, show_loading_image=True):
-        if self.main.ask_to_save:
-            self.main.root.wait_window(self.main.ask_to_save_dialog(on_exit=False))
-        # Shows loading image then recalls function with show_loading_image=False
-        if show_loading_image:
-            self.show_loading_image()
-            return
-        # Load generic multi-state driver from Base64Assets
-        multi_driver_path = os.path.join(self.main.temp_dir, 'multi generic.c4z')
-        if self.file_entry_field.get() == multi_driver_path:
-            return
-        with open(multi_driver_path, 'wb') as gen_driver:
-            gen_driver.write(base64.b64decode(Assets.generic_multi_b64))
-
-        if os.path.isdir(temp_driver_path := os.path.join(self.main.temp_dir, 'driver')):
-            shutil.rmtree(temp_driver_path)
-
-        shutil.unpack_archive(multi_driver_path, temp_driver_path, 'zip')
-        os.remove(multi_driver_path)
-
-        sizes = [(90, 90), (300, 300), (512, 512), (1024, 1024)]
-        pictures = os.listdir(self.main.device_icon_dir)
-        for picture in pictures:
-            resized_icon = Image.open(os.path.join(self.main.device_icon_dir, picture))
-            for size in sizes:
-                new_icon = resized_icon.resize(size)
-                new_icon.save(os.path.join(self.main.device_icon_dir, picture.replace('70', str(size[0]))))
-
-        shutil.make_archive(multi_driver_path.replace('.c4z', ''), 'zip',
-                            os.path.join(self.main.temp_dir, 'driver'))
-
-        os.rename(multi_driver_path.replace('.c4z', '.zip'), multi_driver_path)
-
-        self.load_c4z(multi_driver_path)
-        self.main.export_panel.driver_name_entry.delete(0, 'end')
-        self.main.export_panel.driver_name_entry.insert(0, 'New Driver')
         self.main.ask_to_save = False
-        os.remove(multi_driver_path)
-        return
-
-    def show_loading_image(self):
-        with Image.open(io.BytesIO(Assets.loading_img_b)) as img:
-            icon = ImageTk.PhotoImage(img)
-            self.c4_icon_label.configure(image=icon)
-            self.c4_icon_label.image = icon
-        self.main.root.after(1, self.main.recall_load_gen_multi)
 
     # TODO: Update to create actual files during export
     def update_icon(self):
@@ -1418,67 +1434,136 @@ class C4zPanel:
         self.c4_icon_label.configure(image=icon)
         self.c4_icon_label.image = icon
 
-        if not self.show_extra_icons.get() and self.extra_icons:
-            self.icon_num_label.config(text=f'icon: {str(self.current_icon + 1)} of '
-                                        f'{str(len(self.icons) - self.extra_icons)} ({str(len(self.icons))})')
+        if not self.extra_icons:
+            self.show_sub_icons_check.config(state='disabled')
         else:
-            self.icon_num_label.config(text=f'icon: {str(self.current_icon + 1)} of {str(len(self.icons))}')
+            self.show_sub_icons_check.config(state='active')
+
+        visible_icons = len(self.icons) - self.extra_icons - self.extraer_icons
+        if not self.show_extra_icons.get() and self.extra_icons:
+            self.icon_num_label.config(text=f'icon: {self.current_icon + 1} of {visible_icons}')
+            self.show_sub_icons_check.config(text=f'show extra ({self.extra_icons})')
+        else:
+            self.icon_num_label.config(text=f'icon: {self.current_icon + 1} of {len(self.icons) - self.extraer_icons}')
+            self.show_sub_icons_check.config(text=f'show extra icons')
         self.icon_name_label.config(text=f'name: {self.icons[self.current_icon].name}')
 
     # TODO: Completely rewrite c4 icon related code
     def load_c4z(self, given_path=None, recovery=False):
-        def get_icons(directory):
-            if not os.path.isdir(directory):
-                return None
-            icons_out = []
-            sub_list = []
-            path_list = os.listdir(directory)
-            path_list.sort()
-            for string in path_list:
-                if '.bak' in string or string[0] == '.':
-                    continue
-                if os.path.isdir(sub_path := os.path.join(directory, string)):
-                    sub_list.append(sub_path)
-                    continue
-                if 'device_lg' in string or 'icon_large' in string:
-                    icon_objects.append(self.SubIcon(directory, sub_path, 'device', 32))
-                    continue
-                elif 'device_sm' in string or 'icon_small' in string:
-                    icon_objects.append(self.SubIcon(directory, sub_path, 'device', 16))
-                    continue
-                temp_name = ''
-                read_size = False
-                read_name = False
-                alt_sized = False
-                for character in reversed(string):
-                    if character == '.':
-                        read_size = True
+        def get_icons(root_directory: str | Iterable[str]):
+            output = []
+            if not isinstance(root_directory, str):
+                if not root_directory:
+                    return output
+                for i in root_directory:
+                    output.extend(get_icons(i))
+                return output
+            if not os.path.isdir(root_directory):
+                return output
+            self.extra_icons = 0
+            self.extraer_icons = 0
+            icon_groups = defaultdict(list)
+            both_scheme = deque()
+            device_group = []
+            other_images = []
+            for directory in list_all_sub_directories(root_directory, include_root_dir=True):
+                for item in os.scandir(directory):
+                    if not item.is_file() or re.search(r'\.bak[^.]*$', item.name):
                         continue
-                    if read_size:
-                        try:
-                            int(character)
-                        except ValueError:
-                            if character != '_':
-                                temp_name = character + temp_name
-                            read_size = False
-                            read_name = True
+                    try:
+                        with Image.open(item.path) as img:
+                            actual_size = img.size[0]
+                    except UnidentifiedImageError:
                         continue
-                    if read_name:
-                        temp_name = character + temp_name
-                temp_img = Image.open(sub_path)
-                temp_size = str(temp_img.size[0])
-                if temp_img.size[0] != temp_img.size[1]:
-                    alt_sized = True
-                icons_out.append(self.SubIcon(directory, sub_path, temp_name, int(temp_size)))
-                if alt_sized:
-                    icons_out[-1].size_alt = temp_img.size
-                temp_img.close()
+                    file_stem, file_ext = os.path.splitext(item.name)
+                    if directory == root_directory:
+                        if file_stem == 'device_lg':
+                            device_group.append(C4SubIcon(directory, item.path, 'device', actual_size))
+                            continue
+                        if file_stem == 'device_sm':
+                            device_group.append(C4SubIcon(directory, item.path, 'device', actual_size))
+                            continue
+                    img_info = re.search(r'^(?:(\d+)_)?(.+?)(?:_(\d+))?$', file_stem).groups()
+                    if not (img_name := img_info[1]) or (not img_info[0] and not img_info[2]):
+                        # warnings.warn(f'Failed to parse icon data: {item.path}', RuntimeWarning)
+                        if img_name:
+                            sub_icon = C4SubIcon(directory, item.path, img_name, actual_size)
+                            other_images.append(C4Icon([sub_icon]))
+                            other_images[-1].extraer = True
+                            self.extraer_icons += 1
+                        continue
 
-            if not sub_list:
-                return icons_out
-            for sub_dir in sorted(sub_list):
-                icons_out.extend(get_icons(sub_dir))
-            return icons_out
+                    # If XOR left/right size labels
+                    if (img_info[0] is None) != (img_info[2] is None):
+                        if img_info[0] and int(img_info[0]) == actual_size:
+                            icon_groups[img_name].append(
+                                C4SubIcon(directory, item.path, img_name, actual_size, label_scheme='l'))
+                        elif int(img_info[2]) == actual_size:
+                            icon_groups[img_name].append(
+                                C4SubIcon(directory, item.path, img_name, actual_size, label_scheme='r'))
+                            continue
+                    elif img_info[0] and img_info[2]:
+                        scheme = None
+                        right_label = int(img_info[2])
+                        if img_info[0] == img_info[2] and right_label == actual_size:
+                            both_scheme.append(C4SubIcon(directory, item.path, img_name, actual_size))
+                            continue
+                        elif right_label == actual_size:
+                            scheme = 'r'
+                            img_name = f'{img_info[0]}_{img_name}'
+                        elif int(img_info[0]) == actual_size:
+                            scheme = 'l'
+                            img_name = f'{img_name}_{img_info[2]}'
+                        icon_groups[img_name].append(
+                            C4SubIcon(directory, item.path, img_name, actual_size, label_scheme=scheme))
+                        continue
+                    icon_groups[file_stem].append(C4SubIcon(directory, item.path, file_stem, actual_size))
+
+            # Handle icons which have numbers on both sides that match their size
+            for sub_icon in both_scheme:
+                found = None
+                if f'{sub_icon.size[0]}_{sub_icon.name}' in icon_groups:
+                    found = 'r'
+                if f'{sub_icon.name}_{sub_icon.size[0]}' in icon_groups:
+                    found = 'l' if not found else 'b'
+                if not found:
+                    icon_name = f'{sub_icon.size[0]}_{sub_icon.name}_{sub_icon.size[0]}'
+                    sub_icon.name = icon_name
+                    icon_groups[icon_name].append(sub_icon)
+                elif found == 'r':
+                    icon_name = f'{sub_icon.size[0]}_{sub_icon.name}'
+                    sub_icon.name = icon_name
+                    sub_icon.label_scheme = 'r'
+                    icon_groups[icon_name].append(sub_icon)
+                elif found == 'l':
+                    icon_name = f'{sub_icon.name}_{sub_icon.size[0]}'
+                    sub_icon.name = icon_name
+                    sub_icon.label_scheme = 'l'
+                    icon_groups[icon_name].append(sub_icon)
+                else:
+                    warnings.warn(f'Failed to parse icon data: {sub_icon.path}', RuntimeWarning)
+
+            # Form the final icon groups
+            extras = []
+            standard_icons = []
+            for key in icon_groups:
+                if all(os.path.basename(os.path.dirname(sub_icon.path)) != 'device' for sub_icon in icon_groups[key]):
+                    self.extra_icons += 1
+                    extras.append(C4Icon(icon_groups[key]))
+                    extras[-1].extra = True
+                    continue
+                standard_icons.append(C4Icon(icon_groups[key]))
+
+            extras.sort(key=lambda c4icon: natural_key(c4icon.name))
+            standard_icons.sort(key=lambda c4icon: natural_key(c4icon.name))
+            if device_group:
+                output.append(C4Icon(device_group))
+            output.extend(standard_icons)
+            output.extend(extras)
+            if other_images:
+                output.extend(other_images)
+
+            return output
 
         def check_dupe_names(recalled=False):
             recall = False
@@ -1497,8 +1582,6 @@ class C4zPanel:
                     if icon_cmp0 is not icon_cmp1 and icon_cmp0.name == icon_cmp1.name:
                         recall = True
                         if recalled:
-                            print('debug testing: recalled check_dupe_names...')
-                            print('this code should never run')
                             icon_cmp1.name = f'{icon_cmp1.name} ({str(icon_cmp1.dupe_number)})'
                             continue
                         icon_cmp0.name = icon_cmp0.name_alt
@@ -1552,58 +1635,13 @@ class C4zPanel:
         if not recovery:
             shutil.unpack_archive(filename, driver_folder, 'zip')
 
-        # Get all individual icons from driver
-        icon_objects = []
-        with contextlib.suppress(TypeError):
-            icon_objects.extend(get_icons(self.main.icon_dir))
-            icon_objects.extend(get_icons(self.main.images_dir))
-
-        # Form icon groups
-        self.icons = []
-        if icon_objects:
-            unique_icons = []
-            if not icon_objects[0].alt_format:
-                unique_icons = [icon_objects[0]]
-            alt_format_icons = [icon for icon in icon_objects if icon.alt_format]
-            for icon in icon_objects:
-                if icon.alt_format or any((icon.name == unique_icon.name and icon.root == unique_icon.root)
-                                          for unique_icon in unique_icons):
-                    continue
-                unique_icons.append(icon)
-            for unique_icon in unique_icons:
-                icon_group = [icon for icon in icon_objects if icon.name == unique_icon.name and
-                              icon.root == unique_icon.root]
-                if all('device' not in x for x in [icon_group[0].path, icon_group[0].root, icon_group[0].name]):
-                    self.icons.append(self.C4Icon(icon_group, extra=True))
-                else:
-                    self.icons.append(self.C4Icon(icon_group))
-            # Form icon groups with alt format
-            if alt_format_icons:
-                unique_icons = [alt_format_icons[0]]
-                for icon in alt_format_icons:
-                    if all(icon.name != unique_icon.name for unique_icon in unique_icons):
-                        unique_icons.append(icon)
-                for unique_icon in unique_icons:
-                    icon_group = [unique_icon]
-                    for icon in alt_format_icons:
-                        if icon is not unique_icon and icon.name == unique_icon.name:
-                            icon_group.append(icon)
-                    check_list = [icon_group[0].path, icon_group[0].root, icon_group[0].name]
-                    added = False
-                    for check_string in check_list:
-                        if all(string not in check_string for string in ['device', 'branding', 'icon']):
-                            self.icons.append(self.C4Icon(icon_group, extra=True))
-                            added = True
-                            break
-                    if not added:
-                        self.icons.append(self.C4Icon(icon_group))
-            # Rename icons with duplicate names
-            check_dupe_names()
+        # Get icons
+        self.icons = get_icons((self.main.icon_dir, self.main.images_dir))
 
         # Update entry fields and restore driver if necessary
-        elif not self.icons:
+        if not self.icons:
             self.file_entry_field['state'] = NORMAL
-            if self.file_entry_field.get() not in ['Select .c4z file...', 'Invalid driver selected...']:
+            if self.file_entry_field.get() not in ('Select .c4z file...', 'Invalid driver selected...'):
                 # Restore existing driver data if invalid driver selected
                 self.icons = icons_bak
                 if os.path.isdir(temp_bak):
@@ -1611,6 +1649,7 @@ class C4zPanel:
                         shutil.rmtree(driver_folder)
                     shutil.copytree(temp_bak, driver_folder)
                     shutil.rmtree(temp_bak)
+                # noinspection PyTypeChecker
                 self.main.root.after(3000, self.main.restore_entry_text)
                 self.main.schedule_entry_restore = True
                 self.main.restore_entry_string = self.file_entry_field.get()
@@ -1620,61 +1659,20 @@ class C4zPanel:
             self.file_entry_field['state'] = DISABLED
             return
 
-        # TODO: Examine this code for efficiency
-        # Count extra icons & naturally sort icon order
-        not_extra_icons = []
-        device_exception = None
-        self.extra_icons = 0
-        for icon in reversed(self.icons):
-            if icon.extra:
-                self.extra_icons += 1
-                continue
-            if icon.name == 'device':
-                device_exception = icon
-                self.icons.pop(self.icons.index(icon))
-                continue
-            not_extra_icons.append(icon)
-            self.icons.pop(self.icons.index(icon))
-        # Sort extra icons
-        temp_name_list = [icon.name for icon in self.icons]
-        temp_name_list.sort(key=natural_key)
-        temp_icons = [*self.icons]
-        temp_name_dict = {}
-        for icon in self.icons:
-            temp_name_dict[icon.name] = temp_icons.index(icon)
-        self.icons = [temp_icons[temp_name_dict[icon_name]] for icon_name in temp_name_list]
-        # Sort main device icons
-        temp_name_list = [icon.name for icon in not_extra_icons]
-        temp_name_dict = {}
-        for icon in not_extra_icons:
-            temp_name_dict[icon.name] = not_extra_icons.index(icon)
-        temp_name_list.sort(key=natural_key)
-        for icon_name in reversed(temp_name_list):
-            self.icons.insert(0, not_extra_icons[temp_name_dict[icon_name]])
-        if device_exception:
-            self.icons.insert(0, device_exception)
-
         # Update entry with driver file path
         self.file_entry_field['state'] = NORMAL
         self.file_entry_field.delete(0, 'end')
         self.file_entry_field.insert(0, filename)
         self.file_entry_field['state'] = 'readonly'
-        orig_file_path = filename
-        orig_driver_name = ''
-        for i in reversed(range(len(orig_file_path) - 1)):
-            if orig_file_path[i] == '/' or orig_file_path[i] == '\\':
-                self.main.orig_file_dir = orig_file_path[:i + 1]
-                break
-            if orig_driver_name:
-                orig_driver_name = orig_file_path[i] + orig_driver_name
-                continue
-            if orig_file_path[i + 1] == '.':
-                orig_driver_name = orig_file_path[i]
-        if orig_driver_name not in ['generic', 'multi generic']:
+
+        orig_file_path = Path(filename)
+        self.main.orig_file_dir = orig_file_path.parent
+        if (orig_driver_name := orig_file_path.stem) not in ('generic', 'multi generic'):
             self.main.export_panel.driver_name_entry.delete(0, 'end')
             self.main.export_panel.driver_name_entry.insert(0, orig_driver_name)
         if not self.main.export_panel.driver_name_entry.get():
             self.main.export_panel.driver_name_entry.insert(0, 'New Driver')
+
         self.main.driver_selected = True
         self.current_icon = 0
         self.update_icon()
@@ -1749,6 +1747,7 @@ class C4zPanel:
         for path in list_all_sub_directories(driver_folder):
             for file in os.listdir(path):
                 # TODO: Double check this RegEx works properly
+                # (?<!\.xml) = not preceded by '.xml' and file ends with '.bak' + any characters other than .
                 if re.search(r'(?<!\.xml)\.bak[^.]*$', file):
                     self.restore_all_button['state'] = NORMAL
                     done = True
@@ -1803,48 +1802,56 @@ class C4zPanel:
         self.update_icon()
 
     # TODO: Update to use Icon.bak flag
-    def prev_icon(self):
+    def prev_icon(self, validate=True):
         if not self.main.driver_selected:
             return
-        if self.current_icon < 1:
-            self.current_icon = self.current_icon - 1 + len(self.icons)
+        if self.current_icon <= 0:
+            self.current_icon = len(self.icons) - 1
         else:
             self.current_icon -= 1
+
+        if not validate:
+            return
+
+        # TODO: Properly implement this
+        if self.icons[self.current_icon].extraer:
+            while self.icons[self.current_icon].extraer:
+                self.prev_icon(validate=False)
+        if not self.show_extra_icons.get() and self.icons[self.current_icon].extra:
+            while self.icons[self.current_icon].extra or self.icons[self.current_icon].extraer:
+                self.prev_icon(validate=False)
 
         if os.path.isfile(f'{self.icons[self.current_icon].path}.bak'):
             self.restore_button['state'] = NORMAL
         else:
             self.restore_button['state'] = DISABLED
-
-        if not self.show_extra_icons.get() and self.icons[self.current_icon].extra:
-            while self.icons[self.current_icon].extra:
-                if self.current_icon < 1:
-                    self.current_icon = self.current_icon - 1 + len(self.icons)
-                else:
-                    self.current_icon -= 1
 
         self.update_icon()
 
     # TODO: Update to use Icon.bak flag
-    def next_icon(self):
+    def next_icon(self, validate=True):
         if not self.main.driver_selected:
             return
         if self.current_icon + 1 >= len(self.icons):
-            self.current_icon = self.current_icon + 1 - len(self.icons)
+            self.current_icon = 0
         else:
             self.current_icon += 1
+
+        if not validate:
+            return
+
+        # TODO: Properly implement this
+        if self.icons[self.current_icon].extraer:
+            while self.icons[self.current_icon].extraer:
+                self.next_icon(validate=False)
+        if not self.show_extra_icons.get() and self.icons[self.current_icon].extra:
+            while self.icons[self.current_icon].extra or self.icons[self.current_icon].extraer:
+                self.next_icon(validate=False)
 
         if os.path.isfile(f'{self.icons[self.current_icon].path}.bak'):
             self.restore_button['state'] = NORMAL
         else:
             self.restore_button['state'] = DISABLED
-
-        if not self.show_extra_icons.get() and self.icons[self.current_icon].extra:
-            while self.icons[self.current_icon].extra:
-                if self.current_icon + 1 >= len(self.icons):
-                    self.current_icon = self.current_icon + 1 - len(self.icons)
-                else:
-                    self.current_icon += 1
 
         self.update_icon()
 
@@ -1933,12 +1940,12 @@ class C4zPanel:
         multi_file_drop = []
         running_str = ''
         for char in dropped_path:
-            if char == ' ' and is_valid_image(running_str):
+            if char == ' ' and running_str.endswith(valid_img_types):
                 multi_file_drop.append(running_str)
                 running_str = ''
                 continue
             running_str += char
-        if is_valid_image(running_str):
+        if running_str.endswith(valid_img_types):
             multi_file_drop.append(running_str)
         if multi_file_drop:
             for file in multi_file_drop:
@@ -1947,7 +1954,7 @@ class C4zPanel:
 
         if dropped_path.endswith('.c4z'):
             self.load_c4z(given_path=dropped_path)
-        elif is_valid_image(dropped_path):
+        elif dropped_path.endswith(valid_img_types):
             self.main.replacement_panel.load_replacement(given_path=dropped_path)
         elif '.' not in dropped_path:
             image_paths = os.listdir(dropped_path)
@@ -1956,7 +1963,7 @@ class C4zPanel:
 
 
 class ReplacementPanel:
-    def __init__(self, main):
+    def __init__(self, main: C4IconSwapper):
         # Initialize Replacement Panel
         self.main = main
         self.x, self.y = (303, 20)
@@ -1968,14 +1975,14 @@ class ReplacementPanel:
             os.mkdir(self.replacement_icons_path)
 
         # Labels
-        self.panel_label = tk.Label(self.main.root, text='Replacement Icons', font=(label_font, 15))
+        self.panel_label = Label(self.main.root, text='Replacement Icons', font=(label_font, 15))
 
-        self.replacement_img_label = tk.Label(self.main.root, image=self.main.blank)
+        self.replacement_img_label = Label(self.main.root, image=self.main.blank)
         self.replacement_img_label.image = self.main.blank
 
         x_offset = 61
         for i in range(self.main.img_bank_size):
-            self.img_bank_tk_labels.append(tk.Label(self.main.root, image=self.main.img_bank_blank))
+            self.img_bank_tk_labels.append(Label(self.main.root, image=self.main.img_bank_blank))
             self.img_bank_tk_labels[-1].image = self.main.img_bank_blank
             self.img_bank_tk_labels[-1].bind('<Button-1>', lambda e, bn=i: self.select_img_bank(bn, e))
             self.img_bank_tk_labels[-1].place(x=31 + self.x + x_offset * i, y=176 + self.y, anchor='nw')
@@ -1989,23 +1996,23 @@ class ReplacementPanel:
         self.replacement_img_label.dnd_bind('<<Drop>>', self.drop_in_replacement)
 
         # Buttons
-        self.open_file_button = tk.Button(self.main.root, text='Open', width=10, command=self.load_replacement,
-                                          takefocus=0)
+        self.open_file_button = Button(self.main.root, text='Open', width=10, command=self.load_replacement,
+                                       takefocus=0)
 
-        self.replace_all_button = tk.Button(self.main.root, text='Replace All',
-                                            command=self.replace_all, takefocus=0)
+        self.replace_all_button = Button(self.main.root, text='Replace All',
+                                         command=self.replace_all, takefocus=0)
         self.replace_all_button['state'] = DISABLED
 
-        self.replace_button = tk.Button(self.main.root, text='Replace\nCurrent Icon', command=self.replace_icon,
-                                        takefocus=0)
+        self.replace_button = Button(self.main.root, text='Replace\nCurrent Icon', command=self.replace_icon,
+                                     takefocus=0)
         self.replace_button['state'] = DISABLED
 
-        self.prev_icon_button = tk.Button(self.main.root, text='Prev', command=self.dec_img_bank, width=5,
-                                          takefocus=0)
+        self.prev_icon_button = Button(self.main.root, text='Prev', command=self.dec_img_bank, width=5,
+                                       takefocus=0)
         self.prev_icon_button['state'] = DISABLED
 
-        self.next_icon_button = tk.Button(self.main.root, text='Next', command=self.inc_img_bank, width=5,
-                                          takefocus=0)
+        self.next_icon_button = Button(self.main.root, text='Next', command=self.inc_img_bank, width=5,
+                                       takefocus=0)
         self.next_icon_button['state'] = DISABLED
 
         self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
@@ -2015,7 +2022,7 @@ class ReplacementPanel:
         self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
 
         # Entry
-        self.file_entry_field = tk.Entry(self.main.root, width=25, takefocus=0)
+        self.file_entry_field = Entry(self.main.root, width=25, takefocus=0)
         self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
         self.file_entry_field.drop_target_register(DND_FILES)
         self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_replacement)
@@ -2035,7 +2042,7 @@ class ReplacementPanel:
         else:
             file_path = given_path
 
-        if not file_path or not is_valid_image(file_path):
+        if not file_path or not file_path.endswith(valid_img_types):
             file_path = None
             if bank_index is None:
                 return
@@ -2185,18 +2192,21 @@ class ReplacementPanel:
 
     def drop_in_replacement(self, event, paths=None):
         if not paths:
+            # Find '{' + any characters until reaching the first '}' OR at least one char of non-whitespace
             paths = [path[0] if path[0] else path[1] for path in re.findall(r'\{(.*?)}|(\S+)', event.data)]
         for path in paths:
-            if is_valid_image(path):
+            if path.endswith(valid_img_types):
                 self.load_replacement(given_path=path)
                 continue
             if os.path.isdir(path):
                 for directory in list_all_sub_directories(path, include_root_dir=True):
                     for file in os.listdir(directory):
-                        if is_valid_image(img_path := os.path.join(directory, file)):
+                        img_path = os.path.join(directory, file)
+                        if img_path.endswith(valid_img_types):
                             self.load_replacement(given_path=img_path)
 
     def drop_img_bank(self, bank_num: int, event):
+        # Find '{' + any characters until reaching the first '}' OR at least one char of non-whitespace
         paths = [path[0] if path[0] else path[1] for path in re.findall(r'\{(.*?)}|(\S+)', event.data)]
         if not paths:
             return
@@ -2207,34 +2217,34 @@ class ReplacementPanel:
 
 
 class ExportPanel:
-    def __init__(self, main):
+    def __init__(self, main: C4IconSwapper):
         # Initialize Export Panel
         self.main = main
         self.x, self.y = (615, -50)
         self.abort = False
 
         # Labels
-        self.panel_label = tk.Label(self.main.root, text='Export', font=(label_font, 15))
+        self.panel_label = Label(self.main.root, text='Export', font=(label_font, 15))
         self.panel_label.place(x=145 + self.x, y=50 + self.y, anchor='n')
 
-        self.driver_name_label = tk.Label(self.main.root, text='Driver Name:')
+        self.driver_name_label = Label(self.main.root, text='Driver Name:')
         self.driver_name_label.place(x=65 + self.x, y=180 + self.y, anchor='w')
 
         # Buttons
-        self.export_as_button = tk.Button(self.main.root, text='Export As...', width=20,
-                                          command=self.do_export, takefocus=0)
+        self.export_as_button = Button(self.main.root, text='Export As...', width=20,
+                                       command=self.do_export, takefocus=0)
         self.export_as_button['state'] = DISABLED
 
         self.export_as_button.place(x=145 + self.x, y=250 + self.y, anchor='n')
-        self.export_button = tk.Button(self.main.root, text='Quick Export', width=20,
-                                       command=self.quick_export, takefocus=0)
+        self.export_button = Button(self.main.root, text='Quick Export', width=20,
+                                    command=self.quick_export, takefocus=0)
         self.export_button.place(x=145 + self.x, y=220 + self.y, anchor='n')
         self.export_button['state'] = DISABLED
 
         # Entry
         self.driver_name_var = StringVar(value='New Driver')
         self.driver_name_var.trace_add('write', self.validate_driver_name)
-        self.driver_name_entry = tk.Entry(self.main.root, width=25, textvariable=self.driver_name_var)
+        self.driver_name_entry = Entry(self.main.root, width=25, textvariable=self.driver_name_var)
         self.driver_name_entry.place(x=145 + self.x, y=190 + self.y, anchor='n')
 
         # Checkboxes
@@ -2276,10 +2286,10 @@ class ExportPanel:
             confirm_label = Label(overwrite_pop_up, text='Would you like to overwrite the existing file?')
             confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
 
-            yes_button = tk.Button(overwrite_pop_up, text='Yes', width='10', command=confirm_overwrite)
+            yes_button = Button(overwrite_pop_up, text='Yes', width='10', command=confirm_overwrite)
             yes_button.grid(row=2, column=0, sticky='e', padx=5)
 
-            no_button = tk.Button(overwrite_pop_up, text='No', width='10', command=abort)
+            no_button = Button(overwrite_pop_up, text='No', width='10', command=abort)
             no_button.grid(row=2, column=1, sticky='w', padx=5)
             self.do_export(quick_export=overwrite_pop_up)
             return
@@ -2327,19 +2337,15 @@ class ExportPanel:
             self.main.root.wait_window(quick_export)
         if self.abort:
             return
-        # Format driver name
-        driver_name = self.driver_name_var.get()
-        # TODO: Probably a better way to do this
-        temp = []
-        for letter in driver_name:
-            if letter in valid_chars:
-                temp.append(letter)
-        driver_name = ''.join(temp)
+
+        # Validate driver name
+        driver_name = re_valid_chars.sub('', self.driver_name_var.get())
         self.driver_name_entry.delete(0, 'end')
         self.driver_name_entry.insert(0, driver_name)
         if not driver_name:
             self.driver_name_entry['background'] = 'pink'
             self.main.counter = 7
+            # noinspection PyTypeChecker
             self.main.root.after(150, self.main.blink_driver_name_entry)
             return
 
@@ -2376,8 +2382,8 @@ class ExportPanel:
                 invalid_states_pop_up.resizable(False, False)
                 confirm_label = Label(invalid_states_pop_up, text=label_text, justify='center')
                 confirm_label.pack()
-                exit_button = tk.Button(invalid_states_pop_up, text='Cancel', width='10',
-                                        command=invalid_states_pop_up.destroy, justify='center')
+                exit_button = Button(invalid_states_pop_up, text='Cancel', width='10',
+                                     command=invalid_states_pop_up.destroy, justify='center')
                 exit_button.pack(pady=10)
             if self.abort:
                 self.abort = False
@@ -2472,8 +2478,8 @@ class ExportPanel:
             missing_driver_info_pop_up.resizable(False, False)
             confirm_label = Label(missing_driver_info_pop_up, text=label_text, justify='center')
             confirm_label.pack()
-            exit_button = tk.Button(missing_driver_info_pop_up, text='Cancel', width='10',
-                                    command=missing_driver_info_pop_up.destroy, justify='center')
+            exit_button = Button(missing_driver_info_pop_up, text='Cancel', width='10',
+                                 command=missing_driver_info_pop_up.destroy, justify='center')
             exit_button.pack(pady=10)
             return
 
@@ -2511,6 +2517,7 @@ class ExportPanel:
             if attribute[0] == 'name':
                 attribute[1] = driver_name
         for icon_tag in self.main.driver_xml.get_tags('Icon'):
+            # Not OS specific; related to controller directories
             if result := re.search('driver/(.*)/icons', icon_tag.value()):
                 result = result[1]
                 icon_tag.set_value(icon_tag.value().replace(result, driver_name))
@@ -2557,7 +2564,13 @@ class ExportPanel:
         os.rename(f'{xml_path}.bak', xml_path)
 
     def validate_driver_name(self, *_):
-        self.driver_name_var.set(''.join([char for char in self.driver_name_var.get() if char in valid_chars]))
+        driver_name_cmp = re_valid_chars.sub('', driver_name := self.driver_name_var.get())
+
+        if str_diff := len(driver_name) - len(driver_name_cmp):
+            cursor_pos = self.driver_name_entry.index(INSERT)
+            self.driver_name_entry.icursor(cursor_pos - str_diff)
+            self.driver_name_var.set(driver_name_cmp)
+
         self.main.ask_to_save = True
 
     def update_driver_version(self, *_):
@@ -2587,11 +2600,8 @@ def find_valid_id(id_seed: int, list_of_ids: list, inc_count=0):
     return find_valid_id(id_seed + 1, list_of_ids, inc_count=inc_count + 1)
 
 
-def is_valid_image(file_path: str):
-    return any(file_path.endswith(ext) for ext in ['.png', '.jpg', '.gif', '.jpeg'])
-
-
 def natural_key(string: str):
+    # Splits numbers from all other chars and creates list of ['string', int, etc.]
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
 
 
