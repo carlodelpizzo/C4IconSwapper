@@ -384,9 +384,3 @@ class XMLObject:
         if not self.restore_point:
             return
         self.tags = self.restore_point.tags
-
-
-# TODO: Remove before commit
-# with open('compare_driver.xml', 'w', errors='ignore') as out_file:
-#     xml_obj = XMLObject('test_driver.xml')
-#     out_file.writelines(xml_obj.get_lines(use_esc_chars=False))
