@@ -236,6 +236,7 @@ class C4IconSwapper:
         # Create temporary directory
         self.instance_id = str(random.randint(111111, 999999))
         self.cur_dir = os.getcwd()
+        # TODO: Change temp dir to %appdata% location
         self.temp_root_dir = os.path.join(self.cur_dir, 'C4IconSwapperTemp')
         self.temp_dir = os.path.join(self.temp_root_dir, self.instance_id)
         self.checked_in, self.recover_instance, checked_in_instances = False, '', []
@@ -339,7 +340,7 @@ class C4IconSwapper:
 
         # Version Label
         self.version_label = Label(self.root, text=version)
-        self.version_label.place(relx=1, rely=1.01, anchor='se')
+        self.version_label.place(relx=0.997, rely=1.005, anchor='se')
         self.version_label.bind('<Button-1>', self.easter)
 
         # Class variables
@@ -354,6 +355,7 @@ class C4IconSwapper:
         self.driver_version_new_var.set('1')
         self.multi_state_driver, self.states_shown, self.ask_to_save = False, False, False
         self.counter, self.easter_counter = 0, 0
+        self.easter_recall_id = None
         self.img_bank_size = 4
         self.connections = [Connection(self) for _ in range(18)]
         self.conn_ids = []
@@ -366,6 +368,12 @@ class C4IconSwapper:
         self.orig_file_dir, self.orig_file_path, self.restore_entry_string = '', '', ''
         self.driver_selected, self.schedule_entry_restore = False, False
         self.undo_history = deque(maxlen=10)
+
+        # Panel Separators
+        self.separator0 = ttk.Separator(self.root, orient='vertical')
+        self.separator1 = ttk.Separator(self.root, orient='vertical')
+        self.separator0.place(x=305, y=0, height=270)
+        self.separator1.place(x=610, y=0, height=270)
 
         # Panels; Creating blank image for panels
         with Image.open(io.BytesIO(Assets.blank_img_b)) as img:
@@ -407,12 +415,6 @@ class C4IconSwapper:
         self.edit.entryconfig(self.undo_pos, state=DISABLED)
         self.menu.add_cascade(label='File', menu=self.file)
         self.menu.add_cascade(label='Edit', menu=self.edit)
-
-        # Separators
-        self.separator0 = ttk.Separator(self.root, orient='vertical')
-        self.separator1 = ttk.Separator(self.root, orient='vertical')
-        self.separator0.place(x=305, y=0, height=270)
-        self.separator1.place(x=610, y=0, height=270)
 
         # Create window icon
         self.root.wm_iconphoto(True, PhotoImage(data=Assets.win_icon_b64))
@@ -468,17 +470,13 @@ class C4IconSwapper:
 
     def key_release(self, event):
         if event.keysym == 'Right':
-            self.c4z_panel.next_icon()
+            self.c4z_panel.inc_icon()
         elif event.keysym == 'Left':
-            self.c4z_panel.prev_icon()
+            self.c4z_panel.inc_icon(inc=-1)
         elif event.keysym == 'Up':
             self.replacement_panel.inc_img_bank()
         elif event.keysym == 'Down':
             self.replacement_panel.dec_img_bank()
-        elif event.keysym == 'c' and self.easter_counter >= 10:
-            self.version_label.config(text='\u262D', font=('Arial', 25))
-            self.version_label.place(relx=1.005, rely=1.02, anchor='se')
-            self.easter_counter = -1
 
     def get_states(self, lua_file):
         self.states_orig_names = []
@@ -839,20 +837,21 @@ class C4IconSwapper:
         # noinspection PyTypeChecker
         self.root.after(150, self.instance_check)
 
-    def easter(self, *_, decay=False):
+    def easter(self, *_, increment=True):
         if self.easter_counter < 0:
+            self.easter_counter = 0
             return
-        if not decay:
-            if not self.easter_counter:
-                # noinspection PyTypeChecker
-                self.root.after(2000, lambda: self.easter(decay=True))
-            self.easter_counter += 1
-            return
-        self.easter_counter -= 1
-        if not self.easter_counter:
-            return
-        # noinspection PyTypeChecker
-        self.root.after(2000, lambda: self.easter(decay=True))
+        if self.easter_recall_id:
+            self.root.after_cancel(self.easter_recall_id)
+        if self.easter_counter > 10:
+            self.easter_counter = 0
+            text, rely = ('\u262D', 1.027) if self.version_label.cget('text') == '\U0001F339' else ('\U0001F339', 1.02)
+            self.version_label.config(text=text, font=(label_font, 30))
+            self.version_label.place(relx=1.003, rely=rely)
+        else:
+            self.easter_counter += 1 if increment else -1
+            # noinspection PyTypeChecker
+            self.easter_recall_id = self.root.after(500, lambda: self.easter(increment=False))
 
 
 class Icon:
@@ -1295,6 +1294,7 @@ class StateEntry:
         self.name_var.set(self.state_object.name_var.get())
 
 
+# TODO: Add option to see all subicons
 class C4zPanel:
     def __init__(self, main: C4IconSwapper):
         # Initialize C4z Panel
@@ -1315,10 +1315,11 @@ class C4zPanel:
                                          command=self.restore_all, takefocus=0)
         self.restore_all_button['state'] = DISABLED
 
-        self.prev_icon_button = Button(self.main.root, text='Prev', command=self.prev_icon, width=5, takefocus=0)
+        self.prev_icon_button = Button(
+            self.main.root, text='Prev', command=lambda: self.inc_icon(inc=-1), width=5, takefocus=0)
         self.prev_icon_button['state'] = DISABLED
 
-        self.next_icon_button = Button(self.main.root, text='Next', command=self.next_icon, width=5, takefocus=0)
+        self.next_icon_button = Button(self.main.root, text='Next', command=self.inc_icon, width=5, takefocus=0)
         self.next_icon_button['state'] = DISABLED
 
         self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
@@ -1338,18 +1339,18 @@ class C4zPanel:
         # Checkboxes
         self.show_extra_icons = IntVar(value=0)
         self.show_extra_icons.trace_add('write', self.toggle_extra_icons)
-        self.show_sub_icons_check = Checkbutton(self.main.root, text='show extra icons',
-                                                variable=self.show_extra_icons, takefocus=0)
-        self.show_sub_icons_check.place(x=self.x + 177, y=self.y + 176, anchor='nw')
-        self.show_sub_icons_check.config(state='disabled')
+        self.show_extra_icons_check = Checkbutton(self.main.root, text='show extra icons',
+                                                  variable=self.show_extra_icons, takefocus=0)
+        self.show_extra_icons_check.place(x=self.x + 177, y=self.y + 176, anchor='nw')
+        self.show_extra_icons_check.config(state='disabled')
 
         self.show_extraer_icons = IntVar(value=0)
-        self.show_extraer_icons.trace_add('write', self.toggle_extra_icons)
-        self.show_extraer_check = Checkbutton(self.main.root, text=f'show extra-er ({self.extraer_icons})',
-                                                variable=self.show_extra_icons, takefocus=0)
-        self.show_extraer_check.place(x=self.x + 177, y=self.y + 198, anchor='nw')
-        self.show_extraer_check.place_forget()
-        self.show_extraer_check.config(state='disabled')
+        self.show_extraer_icons.trace_add('write', self.toggle_extraer_icons)
+        self.show_extraer_icons_check = Checkbutton(self.main.root, text="Hey! You shouldn't be seeing this!",
+                                                    variable=self.show_extraer_icons, takefocus=0)
+        self.show_extraer_icons_check.place(x=self.x + 177, y=self.y + 198, anchor='nw')
+        self.show_extraer_icons_check.place_forget()
+        self.show_extraer_icons_check.config(state='disabled')
 
         # Labels
         self.panel_label = Label(self.main.root, text='Driver Selection', font=(label_font, 15))
@@ -1359,22 +1360,35 @@ class C4zPanel:
         self.c4_icon_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
 
         self.icon_num_label = Label(self.main.root, text='0 of 0')
-        self.icon_num_label.place(x=108 + self.x, y=176 + self.y, anchor='n')
+        self.icon_num_label.place(x=108 + self.x, y=180 + self.y, anchor='n')
 
         self.icon_name_label = Label(self.main.root, text='icon name')
-        self.icon_name_label.place(x=108 + self.x, y=193 + self.y, anchor='n')
+        self.icon_name_label.place(x=108 + self.x, y=197 + self.y, anchor='n')
 
         self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
         self.c4_icon_label.drop_target_register(DND_FILES)
         self.c4_icon_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
     def toggle_extra_icons(self, *_):
+        if not self.main.driver_selected or not self.extra_icons:
+            return
+        if not self.show_extra_icons.get():
+            self.show_extra_icons_check.config(text=f'show extra ({self.extra_icons})')
+            current_icon = self.icons[self.current_icon]
+            if current_icon.extra or (current_icon.extraer and not self.show_extraer_icons.get()):
+                self.inc_icon()
+        else:
+            self.show_extra_icons_check.config(text=f'show extra icons')
+            if self.extraer_icons:
+                self.show_extraer_icons_check.place(x=self.x + 177, y=self.y + 198, anchor='nw')
+                self.show_extraer_icons_check.config(state='normal', text=f'show extra-er ({self.extraer_icons})')
+        self.update_icon()
+
+    def toggle_extraer_icons(self, *_):
         if not self.main.driver_selected:
             return
-        # TODO: Update for extraer
-        if (not self.show_extra_icons.get() and
-                (self.icons[self.current_icon].extra or self.icons[self.current_icon].extraer)):
-            self.next_icon()
+        if not self.show_extraer_icons.get() and self.icons[self.current_icon].extraer:
+            self.inc_icon(inc=-1)
         self.update_icon()
 
     def load_gen_driver(self, multi=False):
@@ -1426,29 +1440,32 @@ class C4zPanel:
     def update_icon(self):
         if not self.icons:
             return
-        if abs(self.current_icon) >= len(self.icons):
-            self.current_icon = abs(self.current_icon) % len(self.icons)
+        if self.current_icon < 0:
+            raise ValueError
+        if self.current_icon >= len(self.icons):
+            self.current_icon = self.current_icon % len(self.icons)
         icon_image = Image.open(self.icons[self.current_icon].path)
         icon = icon_image.resize((128, 128))
         icon = ImageTk.PhotoImage(icon)
         self.c4_icon_label.configure(image=icon)
         self.c4_icon_label.image = icon
 
-        if not self.extra_icons:
-            self.show_sub_icons_check.config(state='disabled')
-        else:
-            self.show_sub_icons_check.config(state='active')
+        self.icon_name_label.config(text=f'name: {(curr_icon := self.icons[self.current_icon]).name}')
+        visible_icons = len(self.icons)
+        current_icon_num = self.current_icon + 1
+        extras_exist = self.extra_icons or self.extraer_icons
+        if self.extra_icons and self.extraer_icons:
+            if not self.show_extra_icons.get() and not self.show_extraer_icons.get():
+                visible_icons = len(self.icons) - self.extra_icons - self.extraer_icons
+            elif self.show_extra_icons.get() and not self.show_extraer_icons.get():
+                visible_icons = len(self.icons) - self.extraer_icons
+            elif not self.show_extra_icons.get() and self.show_extraer_icons.get():
+                current_icon_num = self.current_icon + 1 - self.extra_icons if curr_icon.extraer else current_icon_num
+                visible_icons = len(self.icons) - self.extra_icons
+        elif extras_exist and (not self.show_extra_icons.get() or not self.show_extraer_icons.get()):
+            visible_icons = len(self.icons) - self.extra_icons - self.extraer_icons
+        self.icon_num_label.config(text=f'icon: {current_icon_num} of {visible_icons}')
 
-        visible_icons = len(self.icons) - self.extra_icons - self.extraer_icons
-        if not self.show_extra_icons.get() and self.extra_icons:
-            self.icon_num_label.config(text=f'icon: {self.current_icon + 1} of {visible_icons}')
-            self.show_sub_icons_check.config(text=f'show extra ({self.extra_icons})')
-        else:
-            self.icon_num_label.config(text=f'icon: {self.current_icon + 1} of {len(self.icons) - self.extraer_icons}')
-            self.show_sub_icons_check.config(text=f'show extra icons')
-        self.icon_name_label.config(text=f'name: {self.icons[self.current_icon].name}')
-
-    # TODO: Completely rewrite c4 icon related code
     def load_c4z(self, given_path=None, recovery=False):
         def get_icons(root_directory: str | Iterable[str]):
             output = []
@@ -1554,41 +1571,21 @@ class C4zPanel:
                     continue
                 standard_icons.append(C4Icon(icon_groups[key]))
 
-            extras.sort(key=lambda c4icon: natural_key(c4icon.name))
-            standard_icons.sort(key=lambda c4icon: natural_key(c4icon.name))
+            # Mark extra icons as standard icons if no standard icons found
+            if not standard_icons and not device_group:
+                for icon in extras:
+                    icon.extra = False
+
             if device_group:
                 output.append(C4Icon(device_group))
+            standard_icons.sort(key=lambda c4icon: natural_key(c4icon.name))
             output.extend(standard_icons)
+            extras.sort(key=lambda c4icon: natural_key(c4icon.name))
             output.extend(extras)
             if other_images:
                 output.extend(other_images)
 
             return output
-
-        def check_dupe_names(recalled=False):
-            recall = False
-            if not recalled:
-                checked_list = []
-                for icon_cmp0 in self.icons:
-                    checked_list.append(icon_cmp0)
-                    dupe_count = 0
-                    for icon_cmp1 in self.icons:
-                        if icon_cmp1 not in checked_list and icon_cmp0.name == icon_cmp1.name:
-                            dupe_count += 1
-                            checked_list.append(icon_cmp1)
-                            icon_cmp1.dupe_number = dupe_count
-            for icon_cmp0 in self.icons:
-                for icon_cmp1 in self.icons:
-                    if icon_cmp0 is not icon_cmp1 and icon_cmp0.name == icon_cmp1.name:
-                        recall = True
-                        if recalled:
-                            icon_cmp1.name = f'{icon_cmp1.name} ({str(icon_cmp1.dupe_number)})'
-                            continue
-                        icon_cmp0.name = icon_cmp0.name_alt
-                        icon_cmp1.name = icon_cmp1.name_alt
-                        break
-            if recall:
-                check_dupe_names(recalled=True)
 
         if self.main.ask_to_save:
             self.main.root.wait_window(self.main.ask_to_save_dialog(on_exit=False))
@@ -1677,6 +1674,18 @@ class C4zPanel:
         self.current_icon = 0
         self.update_icon()
 
+        self.show_extra_icons_check.config(text=f'show extra icons')
+        self.show_extra_icons_check.config(state='normal' if self.extra_icons else 'disabled')
+        self.show_extra_icons.set(0)
+        self.show_extraer_icons.set(0)
+        if not self.extra_icons and self.extraer_icons:
+            self.show_extra_icons_check.place_forget()
+            self.show_extraer_icons_check.place(x=self.x + 177, y=self.y + 176, anchor='nw')
+            self.show_extraer_icons_check.config(state='normal', text=f'show extra-er ({self.extraer_icons})')
+        else:
+            self.show_extra_icons_check.place(x=self.x + 177, y=self.y + 176, anchor='nw')
+            self.show_extraer_icons_check.place_forget()
+
         # Read driver.xml and update variables
         self.main.driver_xml = XMLObject(os.path.join(self.main.temp_dir, 'driver', 'driver.xml'))
         if man_tag := self.main.driver_xml.get_tag('manufacturer'):
@@ -1746,8 +1755,7 @@ class C4zPanel:
         self.restore_all_button['state'] = DISABLED
         for path in list_all_sub_directories(driver_folder):
             for file in os.listdir(path):
-                # TODO: Double check this RegEx works properly
-                # (?<!\.xml) = not preceded by '.xml' and file ends with '.bak' + any characters other than .
+                # (?<!\.xml) = not preceded by '.xml' and file ends with '.bak' + any characters other than '.'
                 if re.search(r'(?<!\.xml)\.bak[^.]*$', file):
                     self.restore_all_button['state'] = NORMAL
                     done = True
@@ -1802,51 +1810,29 @@ class C4zPanel:
         self.update_icon()
 
     # TODO: Update to use Icon.bak flag
-    def prev_icon(self, validate=True):
-        if not self.main.driver_selected:
+    def inc_icon(self, inc=1, validate=True):
+        if not self.main.driver_selected or not inc:
             return
-        if self.current_icon <= 0:
-            self.current_icon = len(self.icons) - 1
+        if inc > 0:
+            validate_inc = 1
+            if self.current_icon + inc >= len(self.icons):
+                self.current_icon = (self.current_icon + inc) % len(self.icons)
+            else:
+                self.current_icon += inc
         else:
-            self.current_icon -= 1
+            validate_inc = -1
+            if self.current_icon + inc < 0:
+                self.current_icon = abs(len(self.icons) + self.current_icon + inc) % len(self.icons)
+            else:
+                self.current_icon += inc
 
         if not validate:
             return
 
-        # TODO: Properly implement this
-        if self.icons[self.current_icon].extraer:
-            while self.icons[self.current_icon].extraer:
-                self.prev_icon(validate=False)
-        if not self.show_extra_icons.get() and self.icons[self.current_icon].extra:
-            while self.icons[self.current_icon].extra or self.icons[self.current_icon].extraer:
-                self.prev_icon(validate=False)
-
-        if os.path.isfile(f'{self.icons[self.current_icon].path}.bak'):
-            self.restore_button['state'] = NORMAL
-        else:
-            self.restore_button['state'] = DISABLED
-
-        self.update_icon()
-
-    # TODO: Update to use Icon.bak flag
-    def next_icon(self, validate=True):
-        if not self.main.driver_selected:
-            return
-        if self.current_icon + 1 >= len(self.icons):
-            self.current_icon = 0
-        else:
-            self.current_icon += 1
-
-        if not validate:
-            return
-
-        # TODO: Properly implement this
-        if self.icons[self.current_icon].extraer:
-            while self.icons[self.current_icon].extraer:
-                self.next_icon(validate=False)
-        if not self.show_extra_icons.get() and self.icons[self.current_icon].extra:
-            while self.icons[self.current_icon].extra or self.icons[self.current_icon].extraer:
-                self.next_icon(validate=False)
+        show_extra = self.show_extra_icons.get()
+        show_extraer = self.show_extraer_icons.get()
+        while ((icon := self.icons[self.current_icon]).extra and not show_extra) or (icon.extraer and not show_extraer):
+            self.inc_icon(inc=validate_inc, validate=False)
 
         if os.path.isfile(f'{self.icons[self.current_icon].path}.bak'):
             self.restore_button['state'] = NORMAL
