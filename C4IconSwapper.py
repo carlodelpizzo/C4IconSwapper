@@ -615,6 +615,8 @@ class C4IconSwapper:
             self.load_c4is(filename)
 
     def load_c4is(self, file):
+        while self.replacement_panel.multi_threading:
+            pass
         save_state = file
         if isinstance(file, str):
             with open(file, 'rb') as file:
@@ -634,22 +636,12 @@ class C4IconSwapper:
                 driver_zip.write(save_state.driver_zip)
             self.c4z_panel.load_c4z(saved_driver_path)
             os.remove(saved_driver_path)
-            self.export_panel.export_button['state'] = NORMAL
-            self.export_panel.export_as_button['state'] = NORMAL
-            if os.path.isfile(f'{self.c4z_panel.icons[self.c4z_panel.current_icon].path}.bak'):
-                self.c4z_panel.restore_button['state'] = NORMAL
         else:
             self.export_panel.export_button['state'] = DISABLED
             self.export_panel.export_as_button['state'] = DISABLED
             self.c4z_panel.icon_name_label.config(text='icon name')
             self.c4z_panel.icon_num_label.config(text='0 of 0')
         self.driver_selected = save_state.driver_selected
-
-        self.c4z_panel.extra_icons = save_state.extra_icons
-        self.c4z_panel.show_extra_icons.set(save_state.show_extra_icons)
-        self.c4z_panel.restore_all_button['state'] = save_state.c4z_panel['restore_all']
-        self.c4z_panel.prev_icon_button['state'] = save_state.c4z_panel['prev']
-        self.c4z_panel.next_icon_button['state'] = save_state.c4z_panel['next']
 
         # Root class
         self.driver_xml = save_state.driver_xml
@@ -677,12 +669,12 @@ class C4IconSwapper:
         for i, conn in enumerate(save_state.connections):
             self.connections[i].id = conn['id']
             self.connections[i].original = conn['original']
+            self.connections[i].id_group = conn['id_group']
             self.connections[i].in_id_group = conn['in_id_group']
             self.connections[i].delete = conn['delete']
             self.connections[i].prior_txt = conn['prior_txt']
             self.connections[i].prior_type = conn['prior_type']
             self.connections[i].tag = conn['tag']
-            self.connections[i].id_group = conn['id_group']
             self.connections[i].type.set(conn['type'])
             self.connections[i].name_entry_var.set(conn['name'])
             self.connections[i].enabled = conn['state']
@@ -693,31 +685,33 @@ class C4IconSwapper:
         self.export_panel.include_backups.set(save_state.include_backups)
 
         # Replacement Panel
+        self.replacement_panel.img_bank_select_lockout = {}
+        replacement_dir = self.replacement_panel.replacement_icons_dir
+        if os.path.isdir(replacement_dir):
+            shutil.rmtree(replacement_dir)
+        os.mkdir(replacement_dir)
         if save_state.replacement:
-            if os.path.isdir(self.replacement_panel.replacement_icons_dir):
-                shutil.rmtree(self.replacement_panel.replacement_icons_dir)
-            os.mkdir(self.replacement_panel.replacement_icons_dir)
-            save_state.replacement.save(os.path.join(self.replacement_panel.replacement_icons_dir, 'replacement.png'))
+            save_state.replacement.save(os.path.join(replacement_dir, 'replacement.png'))
             save_state.replacement.close()
             self.replacement_panel.replacement_icon = (
-                Icon(os.path.join(self.replacement_panel.replacement_icons_dir, 'replacement.png')))
+                Icon(os.path.join(replacement_dir, 'replacement.png')))
             self.replacement_panel.replacement_img_label.configure(
                 image=self.replacement_panel.replacement_icon.tk_icon_lg)
             self.replacement_panel.replacement_img_label.image = self.replacement_panel.replacement_icon.tk_icon_lg
-            self.replacement_panel.img_bank = []
-            for img_bank_label in self.replacement_panel.img_bank_tk_labels:
-                img_bank_label.configure(image=self.img_bank_blank)
-            bank_length = str(len(self.replacement_panel.img_bank))
-            for img in save_state.img_bank:
-                img_path = os.path.join(self.temp_dir, f'img_bank{bank_length}.png')
-                img.save(img_path)
-                img.close()
-                self.replacement_panel.img_bank.append(Icon(img_path))
-            self.replacement_panel.refresh_img_bank()
-            self.replacement_panel.replace_button['state'] = save_state.replacement_panel['replace']
-            self.replacement_panel.replace_all_button['state'] = save_state.replacement_panel['replace_all']
-            self.replacement_panel.prev_icon_button['state'] = save_state.replacement_panel['prev']
-            self.replacement_panel.next_icon_button['state'] = save_state.replacement_panel['next']
+        self.replacement_panel.img_bank = []
+        for img_bank_label in self.replacement_panel.img_bank_tk_labels:
+            img_bank_label.configure(image=self.img_bank_blank)
+        next_num = get_next_num()
+        for img in save_state.img_bank:
+            img_path = os.path.join(replacement_dir, f'img_bank{next(next_num)}.png')
+            img.save(img_path)
+            img.close()
+            self.replacement_panel.img_bank.append(Icon(img_path))
+        self.replacement_panel.refresh_img_bank()
+        self.replacement_panel.replace_button['state'] = save_state.replacement_panel['replace']
+        self.replacement_panel.replace_all_button['state'] = save_state.replacement_panel['replace_all']
+        self.replacement_panel.prev_icon_button['state'] = save_state.replacement_panel['prev']
+        self.replacement_panel.next_icon_button['state'] = save_state.replacement_panel['next']
 
         self.ask_to_save = False
 
@@ -995,7 +989,7 @@ class ConnectionEntry:
             self.del_button['width'] = 4
             self.del_button.place(x=self.del_button.winfo_x() - 6, y=self.y)
             if len(self.conn_object.id_group) > 1:
-                if all(groupie.delete for i, groupie in enumerate(self.conn_object.id_group) if i):
+                if all(self.main.connections[i].delete for i in self.conn_object.id_group if i):
                     self.conn_object.tag.delete = True
                 self.conn_object.tag.delete = True
             return
@@ -1841,10 +1835,10 @@ class C4zPanel:
             not_in_group = True
             for group in id_groups:
                 if group[0] is connections[i][3]:
-                    group.append(self.main.connections[i])
+                    group.append(i)
                     not_in_group = False
             if not_in_group:
-                id_groups.append([connections[i][3], self.main.connections[i]])
+                id_groups.append([connections[i][3], i])
             self.main.connections[i].name_entry_var.set(connections[i][0])
             self.main.connections[i].type.set(connections[i][1])
             self.main.connections[i].id = connections[i][2]
@@ -1865,9 +1859,9 @@ class C4zPanel:
 
         # Form id groups
         for group in id_groups:
-            for conn in group[1:]:
-                new_group = [conn0 for conn0 in group if conn0 != conn]
-                conn.id_group = new_group
+            for conn_i in group[1:]:
+                new_group = [conn_j for conn_j in group if conn_j != conn_i]
+                self.main.connections[conn_i].id_group = new_group
         for conn in self.main.connections:
             conn.update_id()
 
@@ -2643,40 +2637,29 @@ class C4IS:
                              'name': conn.name_entry_var.get(), 'state': conn.enabled}
                             for conn in main.connections]
 
-        # # Export Panel
-        # self.driver_name_var = main.export_panel.driver_name_var.get()
-        # self.inc_driver_version = main.export_panel.inc_driver_version.get()
-        # self.include_backups = main.export_panel.include_backups.get()
-        #
-        # # C4z Panel
-        # self.icons = main.c4z_panel.icons
-        # self.extra_icons = main.c4z_panel.extra_icons
-        # self.extraer_icons = main.c4z_panel.extraer_icons
-        # self.show_extra_icons = main.c4z_panel.show_extra_icons.get()
-        # self.show_extraer_icons = main.c4z_panel.show_extraer_icons.get()
-        # if main.driver_selected:
-        #     shutil.make_archive(driver_path_noext := os.path.join(main.temp_dir, 'driver'), 'zip', driver_path_noext)
-        #     with open(driver_path := f'{driver_path_noext}.zip', 'rb') as driver_zip:
-        #         self.driver_zip = driver_zip.read()
-        #     os.remove(driver_path)
-        # else:
-        #     self.driver_zip = None
-        # self.c4z_panel = {'restore': main.c4z_panel.restore_button['state'],
-        #                   'restore_all': main.c4z_panel.restore_all_button['state'],
-        #                   'prev': main.c4z_panel.prev_icon_button['state'],
-        #                   'next': main.c4z_panel.next_icon_button['state']}
-        #
-        # # Replacement Panel
-        # if main.replacement_panel.replacement_icon:
-        #     self.replacement = Image.open(main.replacement_panel.replacement_icon.path)
-        # else:
-        #     self.replacement = None
-        # self.img_bank = [Image.open(img.path) for img in main.replacement_panel.img_bank]
-        #
-        # self.replacement_panel = {'replace': main.replacement_panel.replace_button['state'],
-        #                           'replace_all': main.replacement_panel.replace_all_button['state'],
-        #                           'prev': main.replacement_panel.prev_icon_button['state'],
-        #                           'next': main.replacement_panel.next_icon_button['state']}
+        # Export Panel
+        self.driver_name_var = main.export_panel.driver_name_var.get()
+        self.inc_driver_version = main.export_panel.inc_driver_version.get()
+        self.include_backups = main.export_panel.include_backups.get()
+
+        # C4z Panel
+        if main.driver_selected:
+            shutil.make_archive(driver_path_noext := os.path.join(main.temp_dir, 'driver'), 'zip', driver_path_noext)
+            with open(driver_path := f'{driver_path_noext}.zip', 'rb') as driver_zip:
+                self.driver_zip = driver_zip.read()
+            os.remove(driver_path)
+
+        # Replacement Panel
+        if main.replacement_panel.replacement_icon:
+            self.replacement = Image.open(main.replacement_panel.replacement_icon.path)
+        else:
+            self.replacement = None
+        self.img_bank = [Image.open(img.path) for img in main.replacement_panel.img_bank]
+
+        self.replacement_panel = {'replace': main.replacement_panel.replace_button['state'],
+                                  'replace_all': main.replacement_panel.replace_all_button['state'],
+                                  'prev': main.replacement_panel.prev_icon_button['state'],
+                                  'next': main.replacement_panel.next_icon_button['state']}
 
 
 def list_all_sub_directories(directory: str, include_root_dir=False):
@@ -2700,6 +2683,7 @@ def natural_key(string: str):
 
 
 def get_next_num(start=0):
+    yield str(start)
     while True:
         start += 1
         yield str(start)
