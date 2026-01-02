@@ -805,14 +805,16 @@ class Icon:
 
 
 class C4Icon(Icon):
-    def __init__(self, icons: list, extra=False):
+    def __init__(self, icons: list, replacement=None, bak=False, extra=False, extraer=False):
         icon = max(icons, key=lambda sub_icon: sub_icon.size[0])
         super().__init__(path=icon.path)
         self.name, self.name_orig = icon.name, icon.name
         self.root = icon.root
-        self.icons, self.extra = icons, extra
-        self.extraer = False
-        self.bak = False
+        self.icons = icons
+        self.extra = extra
+        self.extraer = extraer
+        self.bak = bak
+        self.replacement = replacement
 
 
 class C4SubIcon:
@@ -2028,12 +2030,12 @@ class ReplacementPanel:
             self.replacement_icon = self.img_bank.pop(bank_index)
             self.img_bank_tk_labels[bank_index].configure(image=self.main.img_bank_blank)
             self.img_bank_tk_labels[bank_index].image = self.main.img_bank_blank
-            if len(self.img_bank) == self.main.img_bank_size - 1:
-                self.img_bank_tk_labels[-1].configure(image=self.main.img_bank_blank)
-                self.img_bank_tk_labels[-1].image = self.main.img_bank_blank
-            if len(self.img_bank) <= self.main.img_bank_size:
+            if (label_index := len(self.img_bank)) <= self.main.img_bank_size:
                 self.prev_icon_button['state'] = DISABLED
                 self.next_icon_button['state'] = DISABLED
+            if label_index < self.main.img_bank_size:
+                self.img_bank_tk_labels[label_index].configure(image=self.main.img_bank_blank)
+                self.img_bank_tk_labels[label_index].image = self.main.img_bank_blank
             self.refresh_img_bank()
 
         if file_path:
@@ -2203,9 +2205,12 @@ class ReplacementPanel:
             return
         os.remove(self.img_bank[img_index].path)
         self.img_bank.pop(img_index)
-        if len(self.img_bank) <= self.main.img_bank_size:
+        if (label_index := len(self.img_bank)) <= self.main.img_bank_size:
             self.prev_icon_button['state'] = DISABLED
             self.next_icon_button['state'] = DISABLED
+        if label_index < self.main.img_bank_size:
+            self.img_bank_tk_labels[label_index].configure(image=self.main.img_bank_blank)
+            self.img_bank_tk_labels[label_index].image = self.main.img_bank_blank
         self.refresh_img_bank()
 
 
