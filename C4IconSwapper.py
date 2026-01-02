@@ -29,13 +29,8 @@ from XMLObject import XMLObject, XMLTag
 version = '1.3'
 
 label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
-letters = ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
-           'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z')
-capital_letters = ('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-                   'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z')
-numbers = ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
-valid_chars = ('_', '-', ' ', *letters, *capital_letters, *numbers)
-re_valid_chars = re.compile(f'[^{re.escape("".join(valid_chars))}]')
+
+re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9]')
 valid_img_types = ('.png', '.jpg', '.gif', '.jpeg')
 conn_template = """
 <connection>
