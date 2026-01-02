@@ -14,7 +14,6 @@ import time
 import traceback
 import warnings
 from collections import Counter, deque, defaultdict
-from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
@@ -1394,7 +1393,7 @@ class C4zPanel:
 
     # TODO: Use XML data to organize icon groups
     def load_c4z(self, given_path=None, recovery=False):
-        def get_icons(root_directory: str | Iterable[str]):
+        def get_icons(root_directory):
             output = []
             if not isinstance(root_directory, str):
                 if not root_directory:
