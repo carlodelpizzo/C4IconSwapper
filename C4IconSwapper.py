@@ -183,6 +183,7 @@ class C4IconSwapper:
         if not os.path.isdir(self.appdata_temp):
             os.mkdir(self.appdata_temp)
         if os.path.isdir(self.temp_root_dir):
+            # TODO: Rewrite instance checks using sockets
             if os.path.isfile(instance_path := os.path.join(self.temp_root_dir, 'instance')):
                 with open(instance_path, 'r', errors='ignore') as instance_file:
                     current_instances = instance_file.readlines()
@@ -201,14 +202,14 @@ class C4IconSwapper:
                             waiting_for_response = False
                     failed_to_check_in = []
                     for instance_id in current_instances:
-                        if instance_id.replace('\n', '') not in checked_in_instances:
+                        if instance_id not in [inst_id.strip() for inst_id in checked_in_instances]:
                             failed_to_check_in.append(instance_id.replace('\n', ''))
 
                     # Offer project recovery if applicable
-                    if not os.path.isdir(os.path.join(self.temp_root_dir, failed_to_check_in[0])):
+                    if not os.path.isdir(failed_inst_path := os.path.join(self.temp_root_dir, failed_to_check_in[0])):
                         # Hack to deal with bug cause by crash during recovery
                         failed_to_check_in = []
-                    if failed_to_check_in and os.listdir(os.path.join(self.temp_root_dir, failed_to_check_in[0])):
+                    if failed_to_check_in and 'driver' in os.listdir(failed_inst_path):
                         def win_close():
                             self.main_app_wait = False
                             recovery_win.destroy()
@@ -812,7 +813,7 @@ class C4SubIcon:
 
 
 class C4Icon(Icon):
-    def __init__(self, icons: list[C4SubIcon], name=None, replacement_icon=None, extra=False, extraer=False):
+    def __init__(self, icons: list[C4SubIcon], name=None, replacement_icon=None, extra=False):
         icon = max(icons, key=lambda sub_icon: sub_icon.size[0])
         super().__init__(path=icon.path)
         self.tk_icon_sm = None
@@ -820,7 +821,6 @@ class C4Icon(Icon):
         self.root = icon.root  # Path to directory containing 'icon'
         self.icons = icons
         self.extra = extra
-        self.extraer = extraer
         self.bak = any(icn.bak_path for icn in icons)
         self.replacement_icon = replacement_icon
         self.restore_bak = False
@@ -1251,7 +1251,7 @@ class C4zPanel:
         # Initialize C4z Panel
         self.main = main
         self.x, self.y = 5, 20
-        self.current_icon, self.extra_icons, self.extraer_icons = 0, 0, 0
+        self.current_icon, self.extra_icons = 0, 0
         self.icons = []
         self.valid_connections = ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI', 'STEREO', 'DIGITAL_OPTICAL',
                                   *selectable_connections]
@@ -1293,14 +1293,6 @@ class C4zPanel:
         self.show_extra_icons_check.place(x=self.x + 177, y=self.y + 176, anchor='nw')
         self.show_extra_icons_check.config(state='disabled')
 
-        self.show_extraer_icons = IntVar(value=0)
-        self.show_extraer_icons.trace_add('write', self.toggle_extraer_icons)
-        self.show_extraer_icons_check = Checkbutton(main.root, text="Hey! You shouldn't be seeing this!",
-                                                    variable=self.show_extraer_icons, takefocus=0)
-        self.show_extraer_icons_check.place(x=self.x + 177, y=self.y + 198, anchor='nw')
-        self.show_extraer_icons_check.place_forget()
-        self.show_extraer_icons_check.config(state='disabled')
-
         # Labels
         self.panel_label = Label(main.root, text='Driver Selection', font=(label_font, 15))
 
@@ -1321,38 +1313,18 @@ class C4zPanel:
     def toggle_extra_icons(self, *_):
         if not self.main.driver_selected:
             return
-        show_extraer = self.show_extraer_icons.get()
         if not (show_extra := self.show_extra_icons.get()):
             if self.extra_icons:
                 self.show_extra_icons_check.config(text=f'show extra ({self.extra_icons})')
             current_icon = self.icons[self.current_icon]
-            if current_icon.extra or (current_icon.extraer and not show_extraer):
+            if current_icon.extra:
                 self.inc_icon()
         else:
             self.show_extra_icons_check.config(text='show extra icons')
-            if self.extraer_icons:
-                self.show_extraer_icons_check.place(x=self.x + 177, y=self.y + 198, anchor='nw')
-                self.show_extraer_icons_check.config(state='normal', text=f'show extra-er ({self.extraer_icons})')
 
         self.prev_icon_button['state'] = NORMAL
         self.next_icon_button['state'] = NORMAL
-        hidden_icons = (0 if show_extra else self.extra_icons) + (0 if show_extraer else self.extraer_icons)
-        if len(self.icons) - hidden_icons == 1:
-            self.prev_icon_button['state'] = DISABLED
-            self.next_icon_button['state'] = DISABLED
-        self.update_icon()
-
-    def toggle_extraer_icons(self, *_):
-        if not self.main.driver_selected:
-            return
-        if not (show_extraer := self.show_extraer_icons.get()) and self.icons[self.current_icon].extraer:
-            self.inc_icon(inc=-1)
-
-        self.prev_icon_button['state'] = NORMAL
-        self.next_icon_button['state'] = NORMAL
-        show_extra = self.show_extra_icons.get()
-        hidden_icons = (0 if show_extra else self.extra_icons) + (0 if show_extraer else self.extraer_icons)
-        if len(self.icons) - hidden_icons == 1:
+        if len(self.icons) - (self.extra_icons if not show_extra else 0) == 1:
             self.prev_icon_button['state'] = DISABLED
             self.next_icon_button['state'] = DISABLED
         self.update_icon()
@@ -1417,19 +1389,15 @@ class C4zPanel:
 
         self.icon_name_label.config(text=f'name: {(curr_icon := self.icons[self.current_icon]).name}')
         show_extra = self.show_extra_icons.get()
-        show_extraer = self.show_extraer_icons.get()
-        hidden_count = (self.extra_icons if not show_extra else 0) + (self.extraer_icons if not show_extraer else 0)
-        visible_icons = len(self.icons) - hidden_count
-        extra_offset = self.extra_icons if not show_extra and show_extraer and curr_icon.extraer else 0
-        current_icon_num = self.current_icon + 1 - extra_offset
+        visible_icons = len(self.icons) - (self.extra_icons if not show_extra else 0)
+        current_icon_num = self.current_icon + 1
         self.icon_num_label.config(text=f'icon: {current_icon_num} of {visible_icons}')
 
         bak_check = not curr_icon.restore_bak and curr_icon.bak
         self.restore_button['state'] = NORMAL if (bak_check or curr_icon.replacement_icon) else DISABLED
 
         def skp(icn):
-            return ((icn.extra and not self.show_extra_icons.get()) or
-                    (icn.extraer and not self.show_extraer_icons.get()))
+            return icn.extra and not self.show_extra_icons.get()
 
         self.restore_all_button['state'] = DISABLED
         if any(((not icon.restore_bak and icon.bak) or icon.replacement_icon) for icon in self.icons if not skp(icon)):
@@ -1437,24 +1405,29 @@ class C4zPanel:
 
     def load_c4z(self, given_path=None, recovery=False):
         def get_icons(root_directory):
-            output = []
-            if not isinstance(root_directory, str):
-                if not root_directory:
-                    return output
+            if not root_directory:
+                return []
+            directories = set()
+            if isinstance(root_directory, (list, tuple)):
                 for i in root_directory:
-                    output.extend(get_icons(i))
-                return output
-            if not os.path.isdir(root_directory):
-                return output
+                    if not os.path.isdir(i):
+                        continue
+                    directories.update(list_all_sub_directories(i, include_root_dir=True))
+                if not directories:
+                    return []
+            elif isinstance(root_directory, str):
+                if not os.path.isdir(root_directory):
+                    return []
+                directories.update(list_all_sub_directories(root_directory, include_root_dir=True))
+            else:
+                return []
             self.extra_icons = 0
-            self.extraer_icons = 0
+            output = []
             icon_groups = defaultdict(list)
             both_scheme = deque()
-            device_group = []
-            other_images = []
             all_sub_icons = []
             bak_files = {}
-            for directory in list_all_sub_directories(root_directory, include_root_dir=True):
+            for directory in directories:
                 for item in os.scandir(directory):
                     if not item.is_file():
                         continue
@@ -1468,48 +1441,31 @@ class C4zPanel:
                     except UnidentifiedImageError:
                         continue
                     file_stem, file_ext = os.path.splitext(item.name)
-                    if directory == root_directory:
-                        if file_stem == 'device_lg':
-                            device_group.append(C4SubIcon(directory, item.path, 'device', actual_size))
-                            all_sub_icons.append(device_group[-1])
-                            continue
-                        if file_stem == 'device_sm':
-                            device_group.append(C4SubIcon(directory, item.path, 'device', actual_size))
-                            all_sub_icons.append(device_group[-1])
-                            continue
                     img_info = re.search(r'^(?:(\d+)_)?(.+?)(?:_(\d+))?$', file_stem).groups()
-                    if not (img_name := img_info[1]) or (not img_info[0] and not img_info[2]):
-                        # warnings.warn(f'Failed to parse icon data: {item.path}', RuntimeWarning)
-                        if img_name:
-                            other_images.append(C4SubIcon(directory, item.path, img_name, actual_size))
-                            all_sub_icons.append(other_images[-1])
-                            self.extraer_icons += 1
-                        continue
-
-                    # If XOR left/right size labels
-                    if ((l := img_info[0]) is None) != ((r := img_info[2]) is None):
-                        if l and int(l) == actual_size:
-                            icon_groups[img_name].append(C4SubIcon(directory, item.path, img_name, actual_size))
-                            all_sub_icons.append(icon_groups[img_name][-1])
-                        elif int(r) == actual_size:
+                    img_name = img_info[1]
+                    if not img_name or file_stem in ('device_sm', 'device_lg'):
+                        img_name = file_stem
+                    # If XOR left/right size labels exist
+                    if ((l_label := img_info[0]) is None) != ((r_label := img_info[2]) is None):
+                        if (l_label and int(l_label) == actual_size) or int(r_label) == actual_size:
                             icon_groups[img_name].append(C4SubIcon(directory, item.path, img_name, actual_size))
                             all_sub_icons.append(icon_groups[img_name][-1])
                             continue
-                    elif l and r:
-                        r_size = int(r)
-                        if l == r and r_size == actual_size:
+                    elif l_label and r_label:
+                        r_size = int(r_label)
+                        if l_label == r_label and r_size == actual_size:
                             both_scheme.append(C4SubIcon(directory, item.path, img_name, actual_size))
                             all_sub_icons.append(both_scheme[-1])
                             continue
                         elif r_size == actual_size:
-                            img_name = f'{l}_{img_name}'
-                        elif int(l) == actual_size:
-                            img_name = f'{img_name}_{r}'
+                            img_name = f'{l_label}_{img_name}'
+                        elif int(l_label) == actual_size:
+                            img_name = f'{img_name}_{r_label}'
                         icon_groups[img_name].append(C4SubIcon(directory, item.path, img_name, actual_size))
                         all_sub_icons.append(icon_groups[img_name][-1])
                         continue
-                    icon_groups[file_stem].append(C4SubIcon(directory, item.path, file_stem, actual_size))
-                    all_sub_icons.append(icon_groups[file_stem][-1])
+                    icon_groups[img_name].append(C4SubIcon(directory, item.path, img_name, actual_size))
+                    all_sub_icons.append(icon_groups[img_name][-1])
 
             # Handle icons which have numbers on both sides that match their size
             for sub_icon in both_scheme:
@@ -1533,73 +1489,64 @@ class C4zPanel:
                 else:
                     warnings.warn(f'Failed to parse icon data: {sub_icon.path}', RuntimeWarning)
 
-            # Form the final icon groups
+            # Update .bak status of all sub_icons
+            for sub_icon in all_sub_icons:
+                if bak_path := bak_files.get(sub_icon.path):
+                    sub_icon.bak_path = bak_path
+
+            # Use XML data to form icon groups
             extras = []
             standard_icons = []
-            # Use XML data to form icon groups; really not great implementation
             group_dict = get_icon_groups()
             for group in group_dict:
                 group_list = []
                 # range(start, stop, step)
                 for i in range(len(all_sub_icons) - 1, -1, -1):
                     sub_icon = all_sub_icons[i]
-                    if bak_path := bak_files.get(sub_icon.path):
-                        sub_icon.bak_path = bak_path
                     if sub_icon.rel_path in group_dict[group]:
                         group_list.append(all_sub_icons.pop(i))
                 if not group_list:
                     continue
                 standard_icons.append(C4Icon(group_list, name=group[0]))
-            # Take care of leftover icons
+
+            # Separate 'device' icons from list
+            device_group = []
+            for i in range(len(all_sub_icons) - 1, -1, -1):
+                sub_icon = all_sub_icons[i]
+                if sub_icon.root == main.icon_dir:
+                    if sub_icon.name == 'device_sm':
+                        device_group.append(all_sub_icons.pop(i))
+                    elif sub_icon.name == 'device_lg':
+                        device_group.append(all_sub_icons.pop(i))
+                        continue
+
+            # Flag 'extra' icons
             for key in icon_groups:
                 extra_flag = True
-                for sub_icon in (group_list := [si for si in icon_groups[key] if si in all_sub_icons]):
-                    if bak_path := bak_files.get(sub_icon.path):
-                        sub_icon.bak_path = bak_path
+                if not (group_list := [subicon for subicon in icon_groups[key] if subicon in all_sub_icons]):
+                    continue
+                for sub_icon in group_list:
                     if extra_flag and os.path.basename(os.path.dirname(sub_icon.path)) == 'device':
                         extra_flag = False
-                if not group_list:
-                    continue
                 if extra_flag:
                     extras.append(C4Icon(group_list))
                     extras[-1].extra = True
                     continue
                 standard_icons.append(C4Icon(group_list))
-            extraers = []
-            other_images = [si for si in other_images if si in all_sub_icons]
-            for sub_icon in other_images:
-                if bak_path := bak_files.get(sub_icon.path):
-                    sub_icon.bak_path = bak_path
-                extraers.append(C4Icon([sub_icon]))
-                extraers[-1].extraer = True
 
             # Mark extra icons as standard icons if no standard icons found
-            if not standard_icons and not device_group:
-                if extras:
-                    self.extra_icons = self.extraer_icons
-                    for icon in extras:
-                        icon.extra = False
-                    for icon in extraers:
-                        icon.extra = True
-                        icon.extraer = False
-                else:
-                    # If no extra icons either, set any images found to be standard icons
-                    for icon in extraers:
-                        icon.extraer = False
+            if not standard_icons and not device_group and extras:
+                self.extra_icons = 0
+                for icon in extras:
+                    icon.extra = False
 
-            if device_group := [si for si in device_group if si in all_sub_icons]:
-                for sub_icon in device_group:
-                    if bak_path := bak_files.get(sub_icon.path):
-                        sub_icon.bak_path = bak_path
+            if device_group:
                 output.append(C4Icon(device_group))
             standard_icons.sort(key=lambda c4icon: natural_key(c4icon.name))
             output.extend(standard_icons)
             extras.sort(key=lambda c4icon: natural_key(c4icon.name))
             output.extend(extras)
-            if extraers:
-                output.extend(extraers)
             self.extra_icons = sum(icon.extra for icon in output)
-            self.extraer_icons = sum(icon.extraer for icon in output)
             return output
 
         def get_icon_groups():
@@ -1736,17 +1683,9 @@ class C4zPanel:
         self.update_icon()
 
         self.show_extra_icons.set(0)
-        self.show_extraer_icons.set(0)
         extra_icon_text = 'show extra icons' if not self.extra_icons else f'show extra ({self.extra_icons})'
         self.show_extra_icons_check.config(text=extra_icon_text)
         self.show_extra_icons_check.config(state='disabled' if not self.extra_icons else 'normal')
-        if not self.extra_icons and self.extraer_icons:
-            self.show_extra_icons_check.place_forget()
-            self.show_extraer_icons_check.place(x=self.x + 177, y=self.y + 176, anchor='nw')
-            self.show_extraer_icons_check.config(state='normal', text=f'show extra-er ({self.extraer_icons})')
-        else:
-            self.show_extra_icons_check.place(x=self.x + 177, y=self.y + 176, anchor='nw')
-            self.show_extraer_icons_check.place_forget()
 
         # Update XML variables
         if man_tag := driver_xml.get_tag('manufacturer'):
@@ -1787,10 +1726,7 @@ class C4zPanel:
         main.state_dupes = []
 
         # Update driver prev/next buttons
-        show_extra = self.show_extra_icons.get()
-        show_extraer = self.show_extraer_icons.get()
-        hidden_icons = (0 if show_extra else self.extra_icons) + (0 if show_extraer else self.extraer_icons)
-        if len(self.icons) - hidden_icons == 1:
+        if len(self.icons) - 0 if self.show_extra_icons.get() else self.extra_icons == 1:
             self.prev_icon_button['state'] = DISABLED
             self.next_icon_button['state'] = DISABLED
         else:
@@ -1844,10 +1780,9 @@ class C4zPanel:
     def restore_all(self):
         self.main.update_undo_history()
         show_extra = self.show_extra_icons.get()
-        show_extraer = self.show_extraer_icons.get()
         for i in range(len(self.icons)):
             icon = self.icons[i]
-            if (icon.extra and not show_extra) or (icon.extraer and not show_extraer):
+            if icon.extra and not show_extra:
                 continue
             icon.set_restore()
         self.update_icon()
@@ -1863,8 +1798,7 @@ class C4zPanel:
             return
 
         show_extra = self.show_extra_icons.get()
-        show_extraer = self.show_extraer_icons.get()
-        while ((icon := self.icons[self.current_icon]).extra and not show_extra) or (icon.extraer and not show_extraer):
+        while self.icons[self.current_icon].extra and not show_extra:
             self.inc_icon(inc=1 if inc > 0 else -1, validate=False)
 
         self.update_icon()
@@ -2234,9 +2168,8 @@ class ReplacementPanel:
             return
         self.main.update_undo_history()
         show_extra = self.main.c4z_panel.show_extra_icons.get()
-        show_extraer = self.main.c4z_panel.show_extraer_icons.get()
         for i, icon in enumerate(self.main.c4z_panel.icons):
-            if (icon.extra and not show_extra) or (icon.extraer and not show_extraer):
+            if icon.extra and not show_extra:
                 continue
             self.replace_icon(update_undo_history=False, c4_icn_index=i)
 
