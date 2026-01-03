@@ -9,6 +9,7 @@ import pickle
 import random
 import re
 import shutil
+import sys
 import threading
 import time
 import traceback
@@ -170,7 +171,12 @@ class C4IconSwapper:
         # Create temporary directory
         self.instance_id = str(random.randint(111111, 999999))
         self.cur_dir = os.getcwd()
-        self.appdata_temp = os.path.join(os.environ.get('APPDATA'), 'C4IconSwapper')
+        if sys.platform == 'win32':
+            self.appdata_temp = os.path.join(os.environ.get('APPDATA'), 'C4IconSwapper')
+        elif sys.platform == 'darwin':
+            self.appdata_temp = os.path.expanduser('~/Library/Application Support/C4IconSwapper')
+        else:  # Linux
+            self.appdata_temp = os.path.expanduser('~/.config/C4IconSwapper')
         self.temp_root_dir = os.path.join(self.appdata_temp, 'C4IconSwapperTemp')
         self.temp_dir = os.path.join(self.temp_root_dir, self.instance_id)
         self.checked_in, self.recover_instance, checked_in_instances = False, '', []
@@ -217,7 +223,11 @@ class C4IconSwapper:
                         recovery_win.protocol('WM_DELETE_WINDOW', win_close)
                         recovery_win.title('Driver Recovery')
                         recovery_win.geometry('300x100')
-                        recovery_win.attributes('-toolwindow', True)
+                        if sys.platform == 'win32':
+                            recovery_win.attributes('-toolwindow', True)
+                        elif sys.platform == 'darwin':
+                            recovery_win.attributes('-type', 'utility')
+                        recovery_win.attributes('-topmost', True)
                         recovery_win.resizable(False, False)
                         label_text = 'Existing driver found.'
                         recovery_label = Label(recovery_win, text=label_text)
@@ -373,6 +383,7 @@ class C4IconSwapper:
         # noinspection PyTypeChecker
         self.root.after(150, self.instance_check)
         self.root.protocol('WM_DELETE_WINDOW', self.on_program_exit)
+        self.root.focus_force()
         self.root.mainloop()
 
     def restore_entry_text(self):
