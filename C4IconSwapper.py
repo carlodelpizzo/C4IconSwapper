@@ -227,11 +227,7 @@ class C4IconSwapper:
                         recovery_label2.pack()
                         recovery_button = Button(recovery_win, text='Recover Driver', command=flag_recovery)
                         recovery_button.pack()
-                        recovery_win.mainloop()
-
-                    while self.main_app_wait:
-                        pass
-                    del self.main_app_wait
+                        recovery_win.wait_window()
 
                     for failed_id in failed_to_check_in:
                         if failed_id == self.recover_instance:
@@ -247,8 +243,6 @@ class C4IconSwapper:
                 current_instances.append(f'{self.instance_id}\n')
                 with open(instance_path, 'w', errors='ignore') as out_file:
                     out_file.writelines(current_instances)
-                if self.recover_instance and os.path.isdir(os.path.join(self.temp_root_dir, self.recover_instance)):
-                    os.rename(os.path.join(self.temp_root_dir, self.recover_instance), self.temp_dir)
             else:
                 shutil.rmtree(self.temp_root_dir)
                 os.mkdir(self.temp_root_dir)
@@ -258,8 +252,7 @@ class C4IconSwapper:
             os.mkdir(self.temp_root_dir)
             with open(os.path.join(self.temp_root_dir, 'instance'), 'w', errors='ignore') as out_file:
                 out_file.writelines(f'{self.instance_id}\n')
-        if not self.recover_instance:
-            os.mkdir(self.temp_dir)
+        os.mkdir(self.temp_dir)
         # Initialize main program
         self.root = TkinterDnD.Tk()
         self.root.report_callback_exception = exception_handler
@@ -355,40 +348,25 @@ class C4IconSwapper:
         # Create window icon
         self.root.wm_iconphoto(True, PhotoImage(data=Assets.win_icon_b64))
 
-        # Do recovery if necessary
-        if self.recover_instance:
-            # Recover Driver
-            self.c4z_panel.load_c4z(recovery=True)
-            # Recover replacement images; Need to make this more efficient
-            first_time = True
-            recovery_path = os.path.join(self.temp_dir, 'img_recovery')
-            for file in os.listdir(self.temp_dir):
-                if file.endswith(valid_img_types):
-                    if first_time:
-                        os.mkdir(recovery_path)
-                        first_time = False
-                    shutil.copy(temp_path := os.path.join(self.temp_dir, file), os.path.join(recovery_path, file))
-                    os.remove(temp_path)
-            if not first_time:
-                multi_images = False
-                multi_check = 0
-                for file in os.listdir(recovery_path):
-                    self.replacement_panel.load_replacement(file_path=os.path.join(recovery_path, file))
-                    if multi_check > self.img_bank_size + 1:
-                        multi_images = True
-                        continue
-                    multi_check += 1
-                shutil.rmtree(os.path.join(self.temp_dir, 'img_recovery'))
-                self.replacement_panel.file_entry_field['state'] = NORMAL
-                self.replacement_panel.file_entry_field.delete(0, END)
-                self.replacement_panel.file_entry_field.insert(0, 'Recovered Image')
-                self.replacement_panel.file_entry_field['state'] = 'readonly'
-                if multi_images:
-                    self.replacement_panel.next_icon_button['state'] = NORMAL
-                    self.replacement_panel.prev_icon_button['state'] = NORMAL
-
         global global_instance_id
         global_instance_id = self.instance_id
+
+        # Do recovery if necessary
+        if self.recover_instance:
+            self.c4z_panel.load_c4z(recovery=True)
+            recovery_path = os.path.join(self.temp_root_dir, self.recover_instance, 'Replacement Icons')
+            for file in os.listdir(recovery_path):
+                if file.endswith(valid_img_types):
+                    img_path = os.path.join(recovery_path, file)
+                    self.replacement_panel.load_replacement(file_path=img_path)
+                    os.remove(img_path)
+            self.replacement_panel.file_entry_field['state'] = NORMAL
+            self.replacement_panel.file_entry_field.delete(0, END)
+            self.replacement_panel.file_entry_field.insert(0, 'Recovered Image')
+            self.replacement_panel.file_entry_field['state'] = 'readonly'
+            shutil.rmtree(os.path.join(self.temp_root_dir, self.recover_instance))
+            self.ask_to_save = True
+            self.recover_instance = ''
 
         # Main Loop
         self.root.config(menu=self.menu)
@@ -490,8 +468,8 @@ class C4IconSwapper:
                 if instance_id.replace('\n', '') not in os.listdir(check_in_path):
                     failed_to_check_in.append(instance_id.replace('\n', ''))
             for failed_id in failed_to_check_in:
-                if os.path.isdir(os.path.join(self.temp_root_dir, failed_id)):
-                    shutil.rmtree(self.temp_root_dir + failed_id)
+                if os.path.isdir(failed_id_path := os.path.join(self.temp_root_dir, failed_id)):
+                    shutil.rmtree(failed_id_path)
             current_instances = [f'{instance_id}\n' for instance_id in os.listdir(check_in_path)]
             shutil.rmtree(check_in_path)
             if current_instances:
@@ -906,11 +884,13 @@ class Connection:
         if not refresh:
             return
         conn_type = self.type.get()
-        valid_id = find_valid_id(conn_id_type[conn_type][0], self.main.conn_ids)
+        valid_id = conn_id_type[conn_type][0]
+        while valid_id in self.main.conn_ids:
+            valid_id += 1
         self.tag.get_tag('type').set_value(conn_id_type[conn_type][1])
         if self.id in self.main.conn_ids:
             self.main.conn_ids.pop(self.main.conn_ids.index(self.id))
-        self.id = valid_id[0]
+        self.id = valid_id
         self.tag.get_tag('id').set_value(str(self.id))
         self.main.conn_ids.append(self.id)
 
@@ -1647,6 +1627,9 @@ class C4zPanel:
 
             return icon_groups
 
+        if recovery and not self.main.recover_instance:
+            return
+
         if (main := self.main).ask_to_save:
             main.root.wait_window(main.ask_to_save_dialog(on_exit=False))
 
@@ -1691,6 +1674,8 @@ class C4zPanel:
         # Unpack selected driver
         if not recovery:
             shutil.unpack_archive(filename, driver_folder, 'zip')
+        else:
+            shutil.copytree(os.path.join(self.main.temp_root_dir, self.main.recover_instance, 'driver'), driver_folder)
 
         # Read XML
         curr_xml = main.driver_xml
@@ -2769,12 +2754,6 @@ def list_all_sub_directories(directory: str, include_root_dir=False):
             subs.append(os.path.join(root, sub))
     subs.sort()
     return [directory, *subs] if include_root_dir else subs
-
-
-def find_valid_id(id_seed: int, list_of_ids: list, inc_count=0):
-    if id_seed not in list_of_ids:
-        return [id_seed, inc_count]
-    return find_valid_id(id_seed + 1, list_of_ids, inc_count=inc_count + 1)
 
 
 def natural_key(string: str):
