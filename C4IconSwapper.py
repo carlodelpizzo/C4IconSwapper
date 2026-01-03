@@ -1330,24 +1330,40 @@ class C4zPanel:
     def toggle_extra_icons(self, *_):
         if not self.main.driver_selected:
             return
-        if not self.show_extra_icons.get():
+        show_extraer = self.show_extraer_icons.get()
+        if not (show_extra := self.show_extra_icons.get()):
             if self.extra_icons:
                 self.show_extra_icons_check.config(text=f'show extra ({self.extra_icons})')
             current_icon = self.icons[self.current_icon]
-            if current_icon.extra or (current_icon.extraer and not self.show_extraer_icons.get()):
+            if current_icon.extra or (current_icon.extraer and not show_extraer):
                 self.inc_icon()
         else:
             self.show_extra_icons_check.config(text='show extra icons')
             if self.extraer_icons:
                 self.show_extraer_icons_check.place(x=self.x + 177, y=self.y + 198, anchor='nw')
                 self.show_extraer_icons_check.config(state='normal', text=f'show extra-er ({self.extraer_icons})')
+
+        self.prev_icon_button['state'] = NORMAL
+        self.next_icon_button['state'] = NORMAL
+        hidden_icons = (0 if show_extra else self.extra_icons) + (0 if show_extraer else self.extraer_icons)
+        if len(self.icons) - hidden_icons == 1:
+            self.prev_icon_button['state'] = DISABLED
+            self.next_icon_button['state'] = DISABLED
         self.update_icon()
 
     def toggle_extraer_icons(self, *_):
         if not self.main.driver_selected:
             return
-        if not self.show_extraer_icons.get() and self.icons[self.current_icon].extraer:
+        if not (show_extraer := self.show_extraer_icons.get()) and self.icons[self.current_icon].extraer:
             self.inc_icon(inc=-1)
+
+        self.prev_icon_button['state'] = NORMAL
+        self.next_icon_button['state'] = NORMAL
+        show_extra = self.show_extra_icons.get()
+        hidden_icons = (0 if show_extra else self.extra_icons) + (0 if show_extraer else self.extraer_icons)
+        if len(self.icons) - hidden_icons == 1:
+            self.prev_icon_button['state'] = DISABLED
+            self.next_icon_button['state'] = DISABLED
         self.update_icon()
 
     def load_gen_driver(self, multi=False):
@@ -1530,7 +1546,8 @@ class C4zPanel:
             extras = []
             standard_icons = []
             # Use XML data to form icon groups; really not great implementation
-            for group in (group_dict := get_icon_groups()):
+            group_dict = get_icon_groups()
+            for group in group_dict:
                 group_list = []
                 # range(start, stop, step)
                 for i in range(len(all_sub_icons) - 1, -1, -1):
@@ -1539,11 +1556,9 @@ class C4zPanel:
                         sub_icon.bak_path = bak_path
                     if sub_icon.rel_path in group_dict[group]:
                         group_list.append(all_sub_icons.pop(i))
-                        if sub_icon in other_images:
-                            self.extraer_icons -= 1
                 if not group_list:
                     continue
-                standard_icons.append(C4Icon(group_list, name=group))
+                standard_icons.append(C4Icon(group_list, name=group[0]))
             # Take care of leftover icons
             for key in icon_groups:
                 extra_flag = True
@@ -1555,13 +1570,13 @@ class C4zPanel:
                 if not group_list:
                     continue
                 if extra_flag:
-                    self.extra_icons += 1
                     extras.append(C4Icon(group_list))
                     extras[-1].extra = True
                     continue
                 standard_icons.append(C4Icon(group_list))
             extraers = []
-            for sub_icon in [si for si in other_images if si in all_sub_icons]:
+            other_images = [si for si in other_images if si in all_sub_icons]
+            for sub_icon in other_images:
                 if bak_path := bak_files.get(sub_icon.path):
                     sub_icon.bak_path = bak_path
                 extraers.append(C4Icon([sub_icon]))
@@ -1571,7 +1586,6 @@ class C4zPanel:
             if not standard_icons and not device_group:
                 if extras:
                     self.extra_icons = self.extraer_icons
-                    self.extraer_icons = 0
                     for icon in extras:
                         icon.extra = False
                     for icon in extraers:
@@ -1579,7 +1593,6 @@ class C4zPanel:
                         icon.extraer = False
                 else:
                     # If no extra icons either, set any images found to be standard icons
-                    self.extra_icons, self.extraer_icons = 0, 0
                     for icon in extraers:
                         icon.extraer = False
 
@@ -1594,6 +1607,8 @@ class C4zPanel:
             output.extend(extras)
             if extraers:
                 output.extend(extraers)
+            self.extra_icons = sum(icon.extra for icon in output)
+            self.extraer_icons = sum(icon.extraer for icon in output)
             return output
 
         def get_icon_groups():
@@ -1602,17 +1617,34 @@ class C4zPanel:
                 if value := tag.attributes.get('small_image'):
                     group_name = tag.attributes.get('name')
                     rel_path = os.path.join(*Path(value).parts)
-                    icon_groups[group_name if group_name else 'Device Icon'].add(rel_path)
+                    icon_groups[(group_name if group_name else 'Device Icon', tag.parent)].add(rel_path)
                 if value := tag.attributes.get('large_image'):
                     group_name = tag.attributes.get('name')
                     rel_path = os.path.join(*Path(value).parts)
-                    icon_groups[group_name if group_name else 'Device Icon'].add(rel_path)
+                    icon_groups[(group_name if group_name else 'Device Icon', tag.parent)].add(rel_path)
             for tag in driver_xml.get_tags('Icon'):
                 path_parts = Path(tag.value()).parts
                 split_i = next(path_parts.index(part) for part in path_parts if part in ('icons', 'images'))
                 group_name = tag.parent.attributes.get('id')
-                rel_path = os.path.join(*list(path_parts[split_i+1:]))
-                icon_groups[group_name if group_name else tag.parent.name].add(rel_path)
+                rel_path = os.path.join(*list(path_parts[split_i:]))
+                icon_groups[(group_name if group_name else tag.parent.name, tag.parent)].add(rel_path)
+
+            seen_groups = {}
+            duplicates = set()
+            for key, group in icon_groups.items():
+                f_group = frozenset(group)
+                if f_group in seen_groups:
+                    first_key = seen_groups[f_group]
+                    if not first_key[1].attributes.get('id') and key[1].attributes.get('id'):
+                        duplicates.add(first_key)
+                        seen_groups[f_group] = key
+                    else:
+                        duplicates.add(key)
+                else:
+                    seen_groups[f_group] = key
+            for dupe in duplicates:
+                del icon_groups[dupe]
+
             return icon_groups
 
         if (main := self.main).ask_to_save:
@@ -1759,7 +1791,10 @@ class C4zPanel:
         main.state_dupes = []
 
         # Update driver prev/next buttons
-        if len(self.icons) <= 1:
+        show_extra = self.show_extra_icons.get()
+        show_extraer = self.show_extraer_icons.get()
+        hidden_icons = (0 if show_extra else self.extra_icons) + (0 if show_extraer else self.extraer_icons)
+        if len(self.icons) - hidden_icons == 1:
             self.prev_icon_button['state'] = DISABLED
             self.next_icon_button['state'] = DISABLED
         else:
@@ -1801,7 +1836,7 @@ class C4zPanel:
         if main.states_win:
             main.states_win.refresh()
 
-        main.ask_to_save = True
+        main.ask_to_save = False
 
     def restore_icon(self):
         self.main.update_undo_history()
