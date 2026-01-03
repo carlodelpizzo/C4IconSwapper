@@ -59,7 +59,7 @@ conn_id_type = {'HDMI IN': (2000, '5'), 'COMPOSITE IN': (2000, '5'), 'VGA IN': (
 global_instance_id = None
 
 
-# TODO: Overhaul multistate handling
+# TODO: Completely overhaul multistate handling
 class C4IconSwapper:
     def __init__(self):
         def valid_instance_id(instance_ids: list):
@@ -809,7 +809,7 @@ class C4SubIcon:
         path_parts = Path(img_path).parts
         split_i = next(path_parts.index(part) for part in path_parts if part == global_instance_id)
         split_i = next(path_parts.index(part) for part in path_parts[split_i+1:] if part in ('icons', 'images'))
-        self.rel_path = os.path.join(*list(path_parts[split_i+1:]))
+        self.rel_path = os.path.join(*list(path_parts[split_i:]))
         self.full_name = os.path.split(img_path)[-1]
         self.name = name
         self.bak_path = bak_path
@@ -823,11 +823,11 @@ class C4SubIcon:
 
 
 class C4Icon(Icon):
-    def __init__(self, icons: list[C4SubIcon], replacement_icon=None, extra=False, extraer=False):
+    def __init__(self, icons: list[C4SubIcon], name=None, replacement_icon=None, extra=False, extraer=False):
         icon = max(icons, key=lambda sub_icon: sub_icon.size[0])
         super().__init__(path=icon.path)
         self.tk_icon_sm = None
-        self.name = icon.name
+        self.name = icon.name if not name else name
         self.root = icon.root  # Path to directory containing 'icon'
         self.icons = icons
         self.extra = extra
@@ -1543,7 +1543,7 @@ class C4zPanel:
                             self.extraer_icons -= 1
                 if not group_list:
                     continue
-                standard_icons.append(C4Icon(group_list))
+                standard_icons.append(C4Icon(group_list, name=group))
             # Take care of leftover icons
             for key in icon_groups:
                 extra_flag = True
@@ -1583,8 +1583,8 @@ class C4zPanel:
                     for icon in extraers:
                         icon.extraer = False
 
-            if device_group:
-                for sub_icon in (device_group := [si for si in device_group if si in all_sub_icons]):
+            if device_group := [si for si in device_group if si in all_sub_icons]:
+                for sub_icon in device_group:
                     if bak_path := bak_files.get(sub_icon.path):
                         sub_icon.bak_path = bak_path
                 output.append(C4Icon(device_group))
@@ -1600,11 +1600,13 @@ class C4zPanel:
             icon_groups = defaultdict(set)
             for tag in driver_xml.get_tags('proxy'):
                 if value := tag.attributes.get('small_image'):
+                    group_name = tag.attributes.get('name')
                     rel_path = os.path.join(*Path(value).parts)
-                    icon_groups['Device Icon'].add(rel_path)
-                if tag.attributes.get('large_image'):
+                    icon_groups[group_name if group_name else 'Device Icon'].add(rel_path)
+                if value := tag.attributes.get('large_image'):
+                    group_name = tag.attributes.get('name')
                     rel_path = os.path.join(*Path(value).parts)
-                    icon_groups['Device Icon'].add(rel_path)
+                    icon_groups[group_name if group_name else 'Device Icon'].add(rel_path)
             for tag in driver_xml.get_tags('Icon'):
                 path_parts = Path(tag.value()).parts
                 split_i = next(path_parts.index(part) for part in path_parts if part in ('icons', 'images'))
