@@ -1,5 +1,6 @@
 import contextlib
 import copy
+import ctypes
 import filecmp
 import itertools
 import os
@@ -28,7 +29,6 @@ from XMLObject import XMLObject, XMLTag
 version = '1.3'
 
 label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
-mono_font = label_font
 
 re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9]')
 valid_img_types = ('.png', '.jpg', '.gif', '.jpeg')
@@ -60,6 +60,7 @@ global_instance_id = None
 
 
 # TODO: Completely overhaul everything related to multistate
+# TODO: Look into using frames for panel objects
 class C4IconSwapper:
     def __init__(self):
         def valid_instance_id(instance_ids: list):
@@ -261,6 +262,7 @@ class C4IconSwapper:
             with open(os.path.join(self.temp_root_dir, 'instance'), 'w', errors='ignore') as out_file:
                 out_file.writelines(f'{self.instance_id}\n')
         os.mkdir(self.temp_dir)
+
         # Initialize main program
         self.root = TkinterDnD.Tk()
         self.root.report_callback_exception = exception_handler
@@ -794,7 +796,7 @@ class Icon:
         if img:
             create_tk_icons(img)
         else:
-            with Image.open(self.path) as img:
+            with Image.open(path) as img:
                 create_tk_icons(img)
 
 
@@ -1255,9 +1257,10 @@ class StateEntry:
 class SubIconWin:
     def __init__(self, main: C4IconSwapper):
         self.main = main
-        self.icons = main.c4z_panel.icons[main.c4z_panel.current_icon].icons
-        self.current_icon = 0
+        self.curr_c4_icon = main.c4z_panel.icons[main.c4z_panel.current_icon]
+        self.icons = self.curr_c4_icon.icons
         self.num_of_icons = len(self.icons)
+        self.curr_index = 0
 
         # Initialize window
         self.window = window = Toplevel(main.root)
@@ -1274,13 +1277,13 @@ class SubIconWin:
         self.sub_icon_label.place(relx=0.5, y=10, anchor='n')
         self.sub_icon_label.bind('<Button-3>', self.right_click_menu)
 
-        self.name_label = Label(window, text='icon name', font=(mono_font, 10, 'bold'))
+        self.name_label = Label(window, text='icon name', font=(label_font, 10, 'bold'))
         self.name_label.place(relx=0.5, y=180, anchor='n')
 
-        self.size_label = Label(window, text='0x0', font=(mono_font, 10))
+        self.size_label = Label(window, text='0x0', font=(label_font, 10))
         self.size_label.place(relx=0.5, y=164, anchor='n')
 
-        self.num_label = Label(window, text='0 of 0', font=(mono_font, 10))
+        self.num_label = Label(window, text='0 of 0', font=(label_font, 10))
         self.num_label.place(relx=0.5, y=146, anchor='n')
 
         # Buttons
@@ -1292,17 +1295,22 @@ class SubIconWin:
         self.update_icon()
 
     def update_icon(self):
-        curr_icon = self.icons[self.current_icon]
-        with Image.open(curr_icon.path) as img:
+        if self.curr_c4_icon is not self.main.c4z_panel.icons[self.main.c4z_panel.current_icon]:
+            self.curr_c4_icon = self.main.c4z_panel.icons[self.main.c4z_panel.current_icon]
+            self.icons = self.curr_c4_icon.icons
+            self.num_of_icons = len(self.icons)
+            self.curr_index = self.num_of_icons - 1 if self.curr_index >= self.num_of_icons else self.curr_index
+        curr_sub_icon = self.icons[self.curr_index]
+        with Image.open(curr_sub_icon.path) as img:
             icon_image = ImageTk.PhotoImage(img.resize((128, 128), Resampling.LANCZOS))
             self.sub_icon_label.configure(image=icon_image)
             self.sub_icon_label.image = icon_image
-        self.num_label.config(text=f'{self.current_icon + 1} of {self.num_of_icons}')
-        self.size_label.config(text=f'{curr_icon.size[0]}x{curr_icon.size[1]}')
-        self.name_label.config(text=curr_icon.full_name)
+        self.num_label.config(text=f'{self.curr_index + 1} of {self.num_of_icons}')
+        self.size_label.config(text=f'{curr_sub_icon.size[0]}x{curr_sub_icon.size[1]}')
+        self.name_label.config(text=curr_sub_icon.full_name)
 
     def inc_icon(self, inc=1):
-        self.current_icon = (self.current_icon + inc) % self.num_of_icons
+        self.curr_index = (self.curr_index + inc) % self.num_of_icons
         self.update_icon()
 
     def right_click_menu(self, event):
@@ -1312,7 +1320,7 @@ class SubIconWin:
         context_menu.grab_release()
 
     def open_icon_folder(self, *_):
-        path = os.path.normpath(self.icons[self.current_icon].path)  # normalize just to be safe
+        path = os.path.normpath(self.icons[self.curr_index].path)  # normalize just to be safe
         subprocess.Popen(f'explorer /select,"{path}"')
 
 
@@ -1336,10 +1344,10 @@ class C4zPanel:
         self.c4_icon_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
         self.c4_icon_label.bind('<Button-3>', self.right_click_menu)
 
-        self.icon_num_label = Label(main.root, text='0 of 0', font=(mono_font, 10))
+        self.icon_num_label = Label(main.root, text='0 of 0', font=(label_font, 10))
         self.icon_num_label.place(x=108 + self.x, y=180 + self.y, anchor='n')
 
-        self.icon_name_label = Label(main.root, text='icon name', font=(mono_font, 10, 'bold'))
+        self.icon_name_label = Label(main.root, text='icon name', font=(label_font, 10, 'bold'))
         self.icon_name_label.place(x=108 + self.x, y=197 + self.y, anchor='n')
 
         self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
@@ -1893,6 +1901,9 @@ class C4zPanel:
         show_extra = self.show_extra_icons.get()
         while self.icons[self.current_icon].extra and not show_extra:
             self.inc_icon(inc=1 if inc > 0 else -1, validate=False)
+
+        if self.sub_icon_win:
+            self.sub_icon_win.update_icon()
 
         self.update_icon()
 
