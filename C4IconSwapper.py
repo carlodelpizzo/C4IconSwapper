@@ -7,6 +7,7 @@ import pickle
 import random
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -1254,15 +1255,14 @@ class StateEntry:
 class SubIconWin:
     def __init__(self, main: C4IconSwapper):
         self.main = main
-        self.c4z_panel = main.c4z_panel
-        self.icons = self.c4z_panel.icons[self.c4z_panel.current_icon].icons
+        self.icons = main.c4z_panel.icons[main.c4z_panel.current_icon].icons
         self.current_icon = 0
         self.num_of_icons = len(self.icons)
 
         # Initialize window
         self.window = window = Toplevel(main.root)
         self.window.focus()
-        self.window.protocol('WM_DELETE_WINDOW', lambda: self.c4z_panel.toggle_sub_icon_win(close=True))
+        self.window.protocol('WM_DELETE_WINDOW', lambda: main.c4z_panel.toggle_sub_icon_win(close=True))
         self.window.title('Sub Icons')
         self.window.geometry('225x255')
         self.window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
@@ -1272,6 +1272,7 @@ class SubIconWin:
         self.sub_icon_label = Label(window, image=main.blank)
         self.sub_icon_label.image = main.blank
         self.sub_icon_label.place(relx=0.5, y=10, anchor='n')
+        self.sub_icon_label.bind('<Button-3>', self.right_click_menu)
 
         self.name_label = Label(window, text='icon name', font=(mono_font, 10, 'bold'))
         self.name_label.place(relx=0.5, y=180, anchor='n')
@@ -1303,6 +1304,16 @@ class SubIconWin:
     def inc_icon(self, inc=1):
         self.current_icon = (self.current_icon + inc) % self.num_of_icons
         self.update_icon()
+
+    def right_click_menu(self, event):
+        context_menu = Menu(self.main.root, tearoff=0)
+        context_menu.add_command(label='Show icon in folder', command=self.open_icon_folder)
+        context_menu.tk_popup(event.x_root, event.y_root)
+        context_menu.grab_release()
+
+    def open_icon_folder(self, *_):
+        path = os.path.normpath(self.icons[self.current_icon].path)  # normalize just to be safe
+        subprocess.Popen(f'explorer /select,"{path}"')
 
 
 class C4zPanel:
@@ -1973,12 +1984,10 @@ class C4zPanel:
             # noinspection PyUnboundLocalVariable
             self.load_c4z(given_path=c4z_path)
 
-    # TODO: Add option to see all subicons
     def right_click_menu(self, event):
         context_menu = Menu(self.main.root, tearoff=0)
         context_menu.add_command(label='View Sub Icons', command=self.toggle_sub_icon_win)
-        # menu_state = NORMAL if self.icons else DISABLED
-        menu_state = NORMAL
+        menu_state = NORMAL if self.icons else DISABLED
         context_menu.entryconfig(1, state=menu_state)
         context_menu.tk_popup(event.x_root, event.y_root)
         context_menu.grab_release()
@@ -2831,7 +2840,7 @@ def get_next_num(start=0, yield_start=True):
 
 def asset_path(relative_path):
     base_path = getattr(sys, '_MEIPASS', os.path.abspath(os.path.dirname(__file__)))
-    return str(os.path.join(base_path, relative_path))
+    return os.path.normpath(os.path.join(base_path, relative_path))
 
 
 if __name__ == '__main__':
