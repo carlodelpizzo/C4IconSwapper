@@ -343,16 +343,25 @@ class C4IconSwapper:
         self.file.add_separator()
         self.file.add_command(label='Load Generic Driver', command=self.c4z_panel.load_gen_driver)
         self.file.add_command(label='Load Multi Driver', command=lambda: self.c4z_panel.load_gen_driver(multi=True))
+
         self.edit = Menu(self.menu, tearoff=0)
         self.edit.add_command(label='Driver Info', command=lambda: self.open_edit_win(self.driver_info_win, 'driver'))
         self.edit.add_command(label='Connections', command=lambda: self.open_edit_win(self.connections_win, 'conn'))
         self.edit.add_command(label='States', command=lambda: self.open_edit_win(self.states_win, 'states'))
         self.edit.add_separator()
+        self.edit.add_command(label='UnRestore All', command=lambda: self.c4z_panel.unrestore(do_all=True))
+        self.edit.add_command(label='UnRestore Icon', command=self.c4z_panel.unrestore)
+        self.edit.add_separator()
         self.edit.add_command(label='Undo', command=self.undo)
         self.states_pos = 2
         self.edit.entryconfig(self.states_pos, state=DISABLED)
-        self.undo_pos = 4
+        self.unrestore_all_pos = 4
+        self.edit.entryconfig(self.unrestore_all_pos, state=DISABLED)
+        self.unrestore_pos = 5
+        self.edit.entryconfig(self.unrestore_pos, state=DISABLED)
+        self.undo_pos = 7
         self.edit.entryconfig(self.undo_pos, state=DISABLED)
+
         self.menu.add_cascade(label='File', menu=self.file)
         self.menu.add_cascade(label='Edit', menu=self.edit)
 
@@ -1245,7 +1254,38 @@ class StateEntry:
         self.name_var.set(self.state_object.name_var.get())
 
 
-# TODO: Add option to see all subicons
+class SubIconWin:
+    def __init__(self, main: C4IconSwapper):
+        self.main = main
+        self.c4z_panel = main.c4z_panel
+
+        # Initialize window
+        self.window = window = Toplevel(main.root)
+        self.window.focus()
+        self.window.protocol('WM_DELETE_WINDOW', lambda: self.c4z_panel.toggle_sub_icon_win(close=True))
+        self.window.title('Sub Icons')
+        self.window.geometry('235x257')
+        self.window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
+        self.window.resizable(False, False)
+
+        # Labels
+        self.sub_icon_label = Label(window, image=main.blank)
+        self.sub_icon_label.image = main.blank
+        self.sub_icon_label.place(relx=0.5, y=10, anchor='n')
+
+        self.num_label = Label(window, text='0 of 0')
+        self.num_label.place(relx=0.5, y=145, anchor='n')
+
+        self.name_label = Label(window, text='icon name')
+        self.name_label.place(relx=0.5, y=162, anchor='n')
+
+        # Buttons
+        self.prev_button = Button(window, text='Prev', command=lambda: print('prev'), width=5, takefocus=0)
+        self.prev_button.place(relx=0.5, x=-3, y=246, anchor='e')
+        self.next_button = Button(window, text='Next', command=lambda: print('next'), width=5, takefocus=0)
+        self.next_button.place(relx=0.5, x=3, y=246, anchor='w')
+
+
 class C4zPanel:
     def __init__(self, main: C4IconSwapper):
         # Initialize C4z Panel
@@ -1255,6 +1295,8 @@ class C4zPanel:
         self.icons = []
         self.valid_connections = ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI', 'STEREO', 'DIGITAL_OPTICAL',
                                   *selectable_connections]
+
+        self.sub_icon_win = None
 
         # Buttons
         self.open_file_button = Button(main.root, text='Open', width=10, command=self.load_c4z, takefocus=0)
@@ -1299,6 +1341,7 @@ class C4zPanel:
         self.c4_icon_label = Label(main.root, image=main.blank)
         self.c4_icon_label.image = main.blank
         self.c4_icon_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+        self.c4_icon_label.bind('<Button-3>', self.right_click_menu)
 
         self.icon_num_label = Label(main.root, text='0 of 0')
         self.icon_num_label.place(x=108 + self.x, y=180 + self.y, anchor='n')
@@ -1376,32 +1419,52 @@ class C4zPanel:
         main.ask_to_save = False
 
     def update_icon(self):
-        if not self.icons:
+        if not (icons := self.icons):
             return
         if self.current_icon < 0:
             raise ValueError('Expected positive icon index')
-        if self.current_icon >= len(self.icons):
-            self.current_icon = self.current_icon % len(self.icons)
+        if self.current_icon >= len(icons):
+            self.current_icon = self.current_icon % len(icons)
 
-        icon_image = self.icons[self.current_icon].get_tk_img()
+        icon_image = icons[self.current_icon].get_tk_img()
         self.c4_icon_label.configure(image=icon_image)
         self.c4_icon_label.image = icon_image
 
-        self.icon_name_label.config(text=f'name: {(curr_icon := self.icons[self.current_icon]).name}')
+        curr_icon = icons[self.current_icon]
+        self.icon_name_label.config(text=f'{curr_icon.name}')
         show_extra = self.show_extra_icons.get()
-        visible_icons = len(self.icons) - (self.extra_icons if not show_extra else 0)
+        visible_icons = len(icons) - (self.extra_icons if not show_extra else 0)
         current_icon_num = self.current_icon + 1
-        self.icon_num_label.config(text=f'icon: {current_icon_num} of {visible_icons}')
+        self.icon_num_label.config(text=f'{current_icon_num} of {visible_icons}')
 
         bak_check = not curr_icon.restore_bak and curr_icon.bak
-        self.restore_button['state'] = NORMAL if (bak_check or curr_icon.replacement_icon) else DISABLED
+        restore_state = NORMAL if (bak_check or curr_icon.replacement_icon) else DISABLED
+        self.restore_button['state'] = restore_state
 
         def skp(icn):
             return icn.extra and not self.show_extra_icons.get()
 
-        self.restore_all_button['state'] = DISABLED
-        if any(((not icon.restore_bak and icon.bak) or icon.replacement_icon) for icon in self.icons if not skp(icon)):
+        if restore_state is NORMAL:
             self.restore_all_button['state'] = NORMAL
+        elif any((icon.replacement_icon or (not icon.restore_bak and icon.bak)) for icon in icons if not skp(icon)):
+            self.restore_all_button['state'] = NORMAL
+        else:
+            self.restore_all_button['state'] = DISABLED
+
+        unrestore_state = DISABLED
+        if restore_state is NORMAL:
+            self.main.edit.entryconfig(self.main.unrestore_pos, state=DISABLED)
+        elif not curr_icon.replacement_icon and (curr_icon.restore_bak and curr_icon.bak):
+            self.main.edit.entryconfig(self.main.unrestore_pos, state=(unrestore_state := NORMAL))
+        else:
+            self.main.edit.entryconfig(self.main.unrestore_pos, state=DISABLED)
+
+        if unrestore_state is NORMAL:
+            self.main.edit.entryconfig(self.main.unrestore_all_pos, state=NORMAL)
+        elif any(not icon.replacement_icon and (icon.restore_bak and icon.bak) for icon in icons if not skp(icon)):
+            self.main.edit.entryconfig(self.main.unrestore_all_pos, state=NORMAL)
+        else:
+            self.main.edit.entryconfig(self.main.unrestore_all_pos, state=DISABLED)
 
     def load_c4z(self, given_path=None, recovery=False):
         def get_icons(root_directory):
@@ -1772,21 +1835,28 @@ class C4zPanel:
 
     def restore_icon(self):
         self.main.update_undo_history()
-        curr_icon = self.icons[self.current_icon]
-        curr_icon.set_restore()
+        self.icons[self.current_icon].set_restore()
         self.update_icon()
         self.main.ask_to_save = True
 
     def restore_all(self):
         self.main.update_undo_history()
         show_extra = self.show_extra_icons.get()
-        for i in range(len(self.icons)):
-            icon = self.icons[i]
-            if icon.extra and not show_extra:
-                continue
-            icon.set_restore()
+        for icon in self.icons:
+            if show_extra or not icon.extra:
+                icon.set_restore()
         self.update_icon()
         self.main.ask_to_save = True
+
+    def unrestore(self, *_, do_all=False):
+        if not do_all:
+            self.icons[self.current_icon].restore_bak = False
+            self.update_icon()
+            return
+        for icon in self.icons:
+            if not icon.replacement_icon and (icon.restore_bak and icon.bak):
+                icon.restore_bak = False
+        self.update_icon()
 
     def inc_icon(self, inc=1, validate=True):
         if not self.main.driver_selected or not inc:
@@ -1890,6 +1960,26 @@ class C4zPanel:
         if c4z_path := next((path for path in paths if path.endswith('.c4z') and os.path.isfile(path)), None):
             # noinspection PyUnboundLocalVariable
             self.load_c4z(given_path=c4z_path)
+
+    # TODO: Add option to see all subicons
+    def right_click_menu(self, event):
+        context_menu = Menu(self.main.root, tearoff=0)
+        context_menu.add_command(label='View Sub Icons', command=self.toggle_sub_icon_win)
+        # menu_state = NORMAL if self.icons else DISABLED
+        menu_state = NORMAL
+        context_menu.entryconfig(1, state=menu_state)
+        context_menu.tk_popup(event.x_root, event.y_root)
+        context_menu.grab_release()
+
+    def toggle_sub_icon_win(self, close=False):
+        if close and self.sub_icon_win:
+            self.sub_icon_win.window.destroy()
+            self.sub_icon_win = None
+            return
+        if not self.sub_icon_win:
+            self.sub_icon_win = SubIconWin(self.main)
+            return
+        self.sub_icon_win.window.deiconify()
 
 
 class ReplacementPanel:
@@ -2563,6 +2653,10 @@ class ExportPanel:
             out_file.writelines(driver_xml.get_lines())
 
         # Make icon changes
+        bak_folder = os.path.join(main.temp_dir, 'bak_files')
+        if os.path.isdir(bak_folder):
+            shutil.rmtree(bak_folder)
+        os.mkdir(bak_folder)
         include_bak = self.include_backups.get()
         for icon in main.c4z_panel.icons:
             if icon.replacement_icon:
@@ -2577,8 +2671,18 @@ class ExportPanel:
                 icon.refresh_tk_img()
             elif icon.restore_bak and icon.bak:
                 for sub_icon in icon.icons:
-                    shutil.copy(sub_icon.bak_path, sub_icon.path)
-                    os.remove(sub_icon.bak_path)
+                    if not sub_icon.bak_path:
+                        continue
+                    if include_bak:
+                        temp_bak_path = os.path.join(bak_folder, sub_icon.name)
+                        shutil.copy(sub_icon.path, temp_bak_path)
+                        shutil.copy(sub_icon.bak_path, sub_icon.path)
+                        shutil.copy(temp_bak_path, sub_icon.bak_path)
+                        os.remove(temp_bak_path)
+                    else:
+                        shutil.copy(sub_icon.bak_path, sub_icon.path)
+                        os.remove(sub_icon.bak_path)
+                        sub_icon.bak_path = None
                 icon.restore_bak = False
                 icon.bak = None
                 icon.bak_tk_icon = None
@@ -2705,11 +2809,12 @@ def natural_key(string: str):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
 
 
-def get_next_num(start=0):
-    yield str(start)
-    while True:
+def get_next_num(start=0, yield_start=True):
+    if not yield_start:
         start += 1
+    while True:
         yield str(start)
+        start += 1
 
 
 if __name__ == '__main__':
