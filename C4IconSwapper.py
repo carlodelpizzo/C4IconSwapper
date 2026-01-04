@@ -1,8 +1,6 @@
-import base64
 import contextlib
 import copy
 import filecmp
-import io
 import itertools
 import os
 import pickle
@@ -21,15 +19,15 @@ from pathlib import Path
 from PIL import Image, ImageTk, UnidentifiedImageError
 from PIL.Image import Resampling
 from tkinter import Tk, filedialog, ttk, Toplevel, Checkbutton, IntVar, StringVar, Label, Menu, OptionMenu
-from tkinter import DISABLED, NORMAL, END, INSERT, Scrollbar, Text, Button, Entry, PhotoImage, Frame
+from tkinter import DISABLED, NORMAL, END, INSERT, Scrollbar, Text, Button, Entry, Frame
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
-import Assets
 from XMLObject import XMLObject, XMLTag
 
 version = '1.3'
 
 label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
+mono_font = label_font
 
 re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9]')
 valid_img_types = ('.png', '.jpg', '.gif', '.jpeg')
@@ -60,7 +58,7 @@ conn_id_type = {'HDMI IN': (2000, '5'), 'COMPOSITE IN': (2000, '5'), 'VGA IN': (
 global_instance_id = None
 
 
-# TODO: Completely overhaul multistate handling
+# TODO: Completely overhaul everything related to multistate
 class C4IconSwapper:
     def __init__(self):
         def valid_instance_id(instance_ids: list):
@@ -75,8 +73,6 @@ class C4IconSwapper:
             root.attributes('-toolwindow', True)
             frame = Frame(root)
             frame.pack(expand=True, fill='both', padx=10, pady=10)
-            # Create window icon
-            root.wm_iconphoto(True, PhotoImage(data=Assets.win_icon_b64))
 
             h_scroll = Scrollbar(frame, orient='horizontal')
             h_scroll.pack(side='bottom', fill='x')
@@ -316,7 +312,7 @@ class C4IconSwapper:
         self.separator1.place(x=610, y=0, height=270)
 
         # Panels; Creating blank image for panels
-        with Image.open(io.BytesIO(Assets.blank_img_b)) as img:
+        with Image.open(asset_path('assets/blank_img.png')) as img:
             self.blank = ImageTk.PhotoImage(img.resize((128, 128)))
             self.img_bank_blank = ImageTk.PhotoImage(img.resize((60, 60)))
 
@@ -366,7 +362,7 @@ class C4IconSwapper:
         self.menu.add_cascade(label='Edit', menu=self.edit)
 
         # Create window icon
-        self.root.wm_iconphoto(True, PhotoImage(data=Assets.win_icon_b64))
+        self.root.iconbitmap(default=asset_path('assets/icon.ico'))
 
         global global_instance_id
         global_instance_id = self.instance_id
@@ -823,7 +819,8 @@ class C4SubIcon:
 
 class C4Icon(Icon):
     def __init__(self, icons: list[C4SubIcon], name=None, replacement_icon=None, extra=False):
-        icon = max(icons, key=lambda sub_icon: sub_icon.size[0])
+        icons.sort(key=lambda sub_icon: sub_icon.size[0], reverse=True)
+        icon = icons[0]
         super().__init__(path=icon.path)
         self.tk_icon_sm = None
         self.name = icon.name if not name else name
@@ -1258,13 +1255,16 @@ class SubIconWin:
     def __init__(self, main: C4IconSwapper):
         self.main = main
         self.c4z_panel = main.c4z_panel
+        self.icons = self.c4z_panel.icons[self.c4z_panel.current_icon].icons
+        self.current_icon = 0
+        self.num_of_icons = len(self.icons)
 
         # Initialize window
         self.window = window = Toplevel(main.root)
         self.window.focus()
         self.window.protocol('WM_DELETE_WINDOW', lambda: self.c4z_panel.toggle_sub_icon_win(close=True))
         self.window.title('Sub Icons')
-        self.window.geometry('235x257')
+        self.window.geometry('225x255')
         self.window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
 
@@ -1273,17 +1273,35 @@ class SubIconWin:
         self.sub_icon_label.image = main.blank
         self.sub_icon_label.place(relx=0.5, y=10, anchor='n')
 
-        self.num_label = Label(window, text='0 of 0')
-        self.num_label.place(relx=0.5, y=145, anchor='n')
+        self.name_label = Label(window, text='icon name', font=(mono_font, 10, 'bold'))
+        self.name_label.place(relx=0.5, y=180, anchor='n')
 
-        self.name_label = Label(window, text='icon name')
-        self.name_label.place(relx=0.5, y=162, anchor='n')
+        self.size_label = Label(window, text='0x0', font=(mono_font, 10))
+        self.size_label.place(relx=0.5, y=164, anchor='n')
+
+        self.num_label = Label(window, text='0 of 0', font=(mono_font, 10))
+        self.num_label.place(relx=0.5, y=146, anchor='n')
 
         # Buttons
-        self.prev_button = Button(window, text='Prev', command=lambda: print('prev'), width=5, takefocus=0)
-        self.prev_button.place(relx=0.5, x=-3, y=246, anchor='e')
-        self.next_button = Button(window, text='Next', command=lambda: print('next'), width=5, takefocus=0)
-        self.next_button.place(relx=0.5, x=3, y=246, anchor='w')
+        self.prev_button = Button(window, text='Prev', command=lambda: self.inc_icon(inc=-1), width=5, takefocus=0)
+        self.prev_button.place(relx=0.5, x=-4, y=222, anchor='e')
+        self.next_button = Button(window, text='Next', command=self.inc_icon, width=5, takefocus=0)
+        self.next_button.place(relx=0.5, x=4, y=222, anchor='w')
+
+        self.update_icon()
+
+    def update_icon(self):
+        curr_icon = self.icons[self.current_icon]
+        with Image.open(curr_icon.path) as img:
+            icon_image = ImageTk.PhotoImage(img.resize((128, 128), Resampling.LANCZOS))
+            self.sub_icon_label.configure(image=icon_image)
+            self.sub_icon_label.image = icon_image
+        self.num_label.config(text=f'{self.current_icon + 1} of {self.num_of_icons}')
+        self.name_label.config(text=curr_icon.full_name)
+
+    def inc_icon(self, inc=1):
+        self.current_icon = (self.current_icon + inc) % self.num_of_icons
+        self.update_icon()
 
 
 class C4zPanel:
@@ -1297,6 +1315,24 @@ class C4zPanel:
                                   *selectable_connections]
 
         self.sub_icon_win = None
+
+        # Labels
+        self.panel_label = Label(main.root, text='Driver Selection', font=(label_font, 15))
+
+        self.c4_icon_label = Label(main.root, image=main.blank)
+        self.c4_icon_label.image = main.blank
+        self.c4_icon_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+        self.c4_icon_label.bind('<Button-3>', self.right_click_menu)
+
+        self.icon_num_label = Label(main.root, text='0 of 0', font=(mono_font, 10))
+        self.icon_num_label.place(x=108 + self.x, y=180 + self.y, anchor='n')
+
+        self.icon_name_label = Label(main.root, text='icon name', font=(mono_font, 10, 'bold'))
+        self.icon_name_label.place(x=108 + self.x, y=197 + self.y, anchor='n')
+
+        self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
+        self.c4_icon_label.drop_target_register(DND_FILES)
+        self.c4_icon_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
         # Buttons
         self.open_file_button = Button(main.root, text='Open', width=10, command=self.load_c4z, takefocus=0)
@@ -1335,24 +1371,6 @@ class C4zPanel:
         self.show_extra_icons_check.place(x=self.x + 177, y=self.y + 176, anchor='nw')
         self.show_extra_icons_check.config(state='disabled')
 
-        # Labels
-        self.panel_label = Label(main.root, text='Driver Selection', font=(label_font, 15))
-
-        self.c4_icon_label = Label(main.root, image=main.blank)
-        self.c4_icon_label.image = main.blank
-        self.c4_icon_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
-        self.c4_icon_label.bind('<Button-3>', self.right_click_menu)
-
-        self.icon_num_label = Label(main.root, text='0 of 0')
-        self.icon_num_label.place(x=108 + self.x, y=180 + self.y, anchor='n')
-
-        self.icon_name_label = Label(main.root, text='icon name')
-        self.icon_name_label.place(x=108 + self.x, y=197 + self.y, anchor='n')
-
-        self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
-        self.c4_icon_label.drop_target_register(DND_FILES)
-        self.c4_icon_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
-
     def toggle_extra_icons(self, *_):
         if not self.main.driver_selected:
             return
@@ -1376,23 +1394,15 @@ class C4zPanel:
         main = self.main
         if main.ask_to_save:
             main.root.wait_window(main.ask_to_save_dialog(on_exit=False))
-        if multi:
-            with Image.open(io.BytesIO(Assets.loading_img_b)) as img:
-                icon = ImageTk.PhotoImage(img)
-                self.c4_icon_label.configure(image=icon)
-                self.c4_icon_label.image = icon
-            main.root.update()
-            # Load generic multi-state driver from Base64Assets
-            gen_driver_path = os.path.join(main.temp_dir, 'multi generic.c4z')
-            with open(gen_driver_path, 'wb') as gen_driver:
-                gen_driver.write(base64.b64decode(Assets.generic_multi_b64))
-        else:
-            # Load generic two-state driver from Base64Assets
-            gen_driver_path = os.path.join(main.temp_dir, 'generic.c4z')
-            with open(gen_driver_path, 'wb') as gen_driver:
-                gen_driver.write(base64.b64decode(Assets.generic_driver_b64))
-        if self.file_entry_field.get() == gen_driver_path:
-            return
+
+        with Image.open(asset_path('assets/loading_img.png')) as img:
+            icon = ImageTk.PhotoImage(img)
+            self.c4_icon_label.configure(image=icon)
+            self.c4_icon_label.image = icon
+        main.root.update()
+
+        rel_path = 'assets/multi_generic.c4z' if multi else 'assets/generic.c4z'
+        gen_driver_path = asset_path(rel_path)
 
         if os.path.isdir(temp_driver_path := os.path.join(main.temp_dir, 'driver')):
             shutil.rmtree(temp_driver_path)
@@ -1400,13 +1410,18 @@ class C4zPanel:
         shutil.unpack_archive(gen_driver_path, temp_driver_path, 'zip')
         os.remove(gen_driver_path)
 
-        sizes = [90, 300, 512, 1024] if multi else [70, 90, 300, 512]
-        root_size = '70' if multi else '1024'
-        for picture in os.listdir(main.device_icon_dir):
-            resized_icon = Image.open(img_path := os.path.join(main.device_icon_dir, picture))
+        sizes = [70, 90, 300, 512]
+        root_size = '1024'
+        temp_dir = os.path.join(main.temp_dir, 'temp_unpacking')
+        os.mkdir(temp_dir)
+        for img_name in os.listdir(main.device_icon_dir):
+            img = Image.open(os.path.join(main.device_icon_dir, img_name))
             for size in sizes:
-                new_icon = resized_icon.resize((size, size), Resampling.LANCZOS)
-                new_icon.save(img_path.replace(root_size, str(size)))
+                resized_img = img.resize((size, size), Resampling.LANCZOS)
+                resized_img.save(os.path.join(temp_dir, img_name.replace(root_size, str(size))))
+        for img in os.listdir(temp_dir):
+            shutil.copy(os.path.join(temp_dir, img), os.path.join(main.device_icon_dir, img))
+        shutil.rmtree(temp_dir)
 
         shutil.make_archive(gen_driver_path.replace('.c4z', ''), 'zip',
                             os.path.join(main.temp_dir, 'driver'))
@@ -1415,7 +1430,6 @@ class C4zPanel:
         self.load_c4z(gen_driver_path)
         main.export_panel.driver_name_entry.delete(0, 'end')
         main.export_panel.driver_name_entry.insert(0, 'New Driver')
-        os.remove(gen_driver_path)
         main.ask_to_save = False
 
     def update_icon(self):
@@ -2815,6 +2829,11 @@ def get_next_num(start=0, yield_start=True):
     while True:
         yield str(start)
         start += 1
+
+
+def asset_path(relative_path):
+    base_path = getattr(sys, '_MEIPASS', os.path.abspath(os.path.dirname(__file__)))
+    return str(os.path.join(base_path, relative_path))
 
 
 if __name__ == '__main__':

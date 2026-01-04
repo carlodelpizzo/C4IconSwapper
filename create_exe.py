@@ -20,8 +20,13 @@ def make_exe(python_file: str):
     python_file_name = python_file.replace('.py', '')
     # Remove old builds if any
     clean_up()
+    # Include Assets
+    assets = ['--add-data', 'assets/generic.c4z;assets',
+              '--add-data', 'assets/icon.ico;assets',
+              '--add-data', 'assets/blank_img.png;assets',
+              '--add-data', 'assets/loading_img.png;assets']
     # Build Exe
-    PyInstaller.__main__.run([python_file, '--onefile', '-w', '--icon=icon.ico'])
+    PyInstaller.__main__.run([python_file, '--onefile', '-w', '--icon=assets/icon.ico', *assets])
     # Move and Rename
     if os.path.isfile(f'{cur_dir}dist/{python_file_name}.exe'):
         if os.path.isfile(f'{cur_dir}C4IconSwapper.{version}.exe'):
