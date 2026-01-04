@@ -1297,6 +1297,7 @@ class SubIconWin:
             self.sub_icon_label.configure(image=icon_image)
             self.sub_icon_label.image = icon_image
         self.num_label.config(text=f'{self.current_icon + 1} of {self.num_of_icons}')
+        self.size_label.config(text=f'{curr_icon.size[0]}x{curr_icon.size[1]}')
         self.name_label.config(text=curr_icon.full_name)
 
     def inc_icon(self, inc=1):
@@ -1408,7 +1409,6 @@ class C4zPanel:
             shutil.rmtree(temp_driver_path)
 
         shutil.unpack_archive(gen_driver_path, temp_driver_path, 'zip')
-        os.remove(gen_driver_path)
 
         sizes = [70, 90, 300, 512]
         root_size = '1024'
@@ -1421,13 +1421,11 @@ class C4zPanel:
                 resized_img.save(os.path.join(temp_dir, img_name.replace(root_size, str(size))))
         for img in os.listdir(temp_dir):
             shutil.copy(os.path.join(temp_dir, img), os.path.join(main.device_icon_dir, img))
+
+        shutil.make_archive(os.path.join(temp_dir, 'driver'), 'zip', temp_driver_path)
+        self.load_c4z(f'{os.path.join(temp_dir, "driver")}.zip')
         shutil.rmtree(temp_dir)
 
-        shutil.make_archive(gen_driver_path.replace('.c4z', ''), 'zip',
-                            os.path.join(main.temp_dir, 'driver'))
-        os.rename(gen_driver_path.replace('.c4z', '.zip'), gen_driver_path)
-
-        self.load_c4z(gen_driver_path)
         main.export_panel.driver_name_entry.delete(0, 'end')
         main.export_panel.driver_name_entry.insert(0, 'New Driver')
         main.ask_to_save = False
@@ -1628,7 +1626,7 @@ class C4zPanel:
 
         def get_icon_groups():
             icon_groups = defaultdict(set)
-            for tag in driver_xml.get_tags('proxy'):
+            for tag in main.driver_xml.get_tags('proxy'):
                 if value := tag.attributes.get('small_image'):
                     group_name = tag.attributes.get('name')
                     rel_path = os.path.join(*Path(value).parts)
@@ -1637,7 +1635,7 @@ class C4zPanel:
                     group_name = tag.attributes.get('name')
                     rel_path = os.path.join(*Path(value).parts)
                     icon_groups[(group_name if group_name else 'Device Icon', tag.parent)].add(rel_path)
-            for tag in driver_xml.get_tags('Icon'):
+            for tag in main.driver_xml.get_tags('Icon'):
                 path_parts = Path(tag.value()).parts
                 split_i = next(path_parts.index(part) for part in path_parts if part in ('icons', 'images'))
                 group_name = tag.parent.attributes.get('id')
@@ -1713,8 +1711,8 @@ class C4zPanel:
             shutil.copytree(os.path.join(self.main.temp_root_dir, self.main.recover_instance, 'driver'), driver_folder)
 
         # Read XML
-        curr_xml = main.driver_xml
-        driver_xml = main.driver_xml = XMLObject(os.path.join(main.temp_dir, 'driver', 'driver.xml'))
+        curr_xml = main.driver_xml  # store current XML in case of abort
+        main.driver_xml = XMLObject(os.path.join(main.temp_dir, 'driver', 'driver.xml'))
 
         # Get icons
         self.icons = get_icons((main.icon_dir, main.images_dir))
@@ -1765,11 +1763,11 @@ class C4zPanel:
         self.show_extra_icons_check.config(state='disabled' if not self.extra_icons else 'normal')
 
         # Update XML variables
-        if man_tag := driver_xml.get_tag('manufacturer'):
+        if man_tag := main.driver_xml.get_tag('manufacturer'):
             main.driver_manufac_var.set(man_tag.value())
-        if creator_tag := driver_xml.get_tag('creator'):
+        if creator_tag := main.driver_xml.get_tag('creator'):
             main.driver_creator_var.set(creator_tag.value())
-        if version_tag := driver_xml.get_tag('version'):
+        if version_tag := main.driver_xml.get_tag('version'):
             main.driver_ver_orig.set(version_tag.value())
             ver_num = re.search(r'\d*', version_tag.value())[0]
             if ver_num:
@@ -1779,7 +1777,7 @@ class C4zPanel:
             else:
                 main.driver_version_var.set('0')
                 main.driver_version_new_var.set('1')
-        if id_tags := driver_xml.get_tags('id'):
+        if id_tags := main.driver_xml.get_tags('id'):
             main.conn_ids = []
             for id_tag in id_tags:
                 with contextlib.suppress(ValueError):
