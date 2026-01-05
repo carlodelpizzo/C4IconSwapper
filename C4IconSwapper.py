@@ -1,6 +1,5 @@
 import contextlib
 import copy
-import ctypes
 import filecmp
 import itertools
 import os
@@ -8,6 +7,7 @@ import pickle
 import random
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -27,7 +27,6 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 from XMLObject import XMLObject, XMLTag
 
 version = '1.3'
-
 label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
 
 re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9]')
@@ -175,93 +174,101 @@ class C4IconSwapper:
             self.appdata_temp = os.path.expanduser('~/Library/Application Support/C4IconSwapper')
         else:  # Linux
             self.appdata_temp = os.path.expanduser('~/.config/C4IconSwapper')
-        self.temp_root_dir = os.path.join(self.appdata_temp, 'C4IconSwapperTemp')
-        self.temp_dir = os.path.join(self.temp_root_dir, self.instance_id)
+        self.global_temp = os.path.join(self.appdata_temp, 'C4IconSwapperTemp')
+        self.instance_temp = os.path.join(self.global_temp, self.instance_id)
         self.checked_in, self.recover_instance, checked_in_instances = False, '', []
+
+        self.server = None
+        self.client_dict = {}
+        self.socket_dict = {}
+        self.socket_lock = threading.Lock()
+        self.ipc()
+
         if not os.path.isdir(self.appdata_temp):
             os.mkdir(self.appdata_temp)
-        if os.path.isdir(self.temp_root_dir):
-            # TODO: Rewrite instance checks using sockets
-            if os.path.isfile(instance_path := os.path.join(self.temp_root_dir, 'instance')):
-                with open(instance_path, 'r', errors='ignore') as instance_file:
-                    current_instances = instance_file.readlines()
-                if current_instances:
-                    if not os.path.isdir(check_in_path := os.path.join(self.temp_root_dir, 'check_in')):
-                        os.mkdir(check_in_path)
-                    waiting_for_response = True
-                    self.main_app_wait = False
-                    # I'm sure there is a better way to format this timestamp lol
-                    begin_time = float(time.mktime(datetime.now().timetuple()))
-                    while waiting_for_response:
-                        checked_in_instances = os.listdir(check_in_path)
-                        if len(checked_in_instances) == len(current_instances):
-                            waiting_for_response = False
-                        if float(time.mktime(datetime.now().timetuple())) - begin_time >= 2:
-                            waiting_for_response = False
-                    failed_to_check_in = []
-                    for instance_id in current_instances:
-                        if instance_id not in [inst_id.strip() for inst_id in checked_in_instances]:
-                            failed_to_check_in.append(instance_id.replace('\n', ''))
-
-                    # Offer project recovery if applicable
-                    if not os.path.isdir(failed_inst_path := os.path.join(self.temp_root_dir, failed_to_check_in[0])):
-                        # Hack to deal with bug cause by crash during recovery
-                        failed_to_check_in = []
-                    if failed_to_check_in and 'driver' in os.listdir(failed_inst_path):
-                        def win_close():
-                            self.main_app_wait = False
-                            recovery_win.destroy()
-
-                        def flag_recovery():
-                            self.recover_instance = failed_to_check_in[0]
-                            win_close()
-
-                        self.main_app_wait = True
-                        recovery_win = Tk()
-                        recovery_win.focus()
-                        recovery_win.protocol('WM_DELETE_WINDOW', win_close)
-                        recovery_win.title('Driver Recovery')
-                        recovery_win.geometry('300x100')
-                        if sys.platform == 'win32':
-                            recovery_win.attributes('-toolwindow', True)
-                        elif sys.platform == 'darwin':
-                            recovery_win.attributes('-type', 'utility')
-                        recovery_win.attributes('-topmost', True)
-                        recovery_win.resizable(False, False)
-                        label_text = 'Existing driver found.'
-                        recovery_label = Label(recovery_win, text=label_text)
-                        recovery_label.pack()
-                        label_text = 'Would you like to recover previous driver?'
-                        recovery_label2 = Label(recovery_win, text=label_text)
-                        recovery_label2.pack()
-                        recovery_button = Button(recovery_win, text='Recover Driver', command=flag_recovery)
-                        recovery_button.pack()
-                        recovery_win.wait_window()
-
-                    for failed_id in failed_to_check_in:
-                        if failed_id == self.recover_instance:
-                            continue
-                        if os.path.isdir(os.path.join(self.temp_root_dir, failed_id)):
-                            shutil.rmtree(os.path.join(self.temp_root_dir, failed_id))
-                    current_instances = []
-                    for instance_id in os.listdir(check_in_path):
-                        current_instances.append(f'{instance_id}\n')
-                    shutil.rmtree(check_in_path)
-                if f'{self.instance_id}\n' in current_instances:
-                    self.instance_id = valid_instance_id(current_instances)
-                current_instances.append(f'{self.instance_id}\n')
-                with open(instance_path, 'w', errors='ignore') as out_file:
-                    out_file.writelines(current_instances)
-            else:
-                shutil.rmtree(self.temp_root_dir)
-                os.mkdir(self.temp_root_dir)
-                with open(instance_path, 'w', errors='ignore') as out_file:
-                    out_file.writelines(f'{self.instance_id}\n')
-        else:
-            os.mkdir(self.temp_root_dir)
-            with open(os.path.join(self.temp_root_dir, 'instance'), 'w', errors='ignore') as out_file:
-                out_file.writelines(f'{self.instance_id}\n')
-        os.mkdir(self.temp_dir)
+        if not os.path.isdir(self.global_temp):
+            os.mkdir(self.global_temp)
+        # if os.path.isdir(self.temp_root_dir):
+        #     if os.path.isfile(instance_path := os.path.join(self.temp_root_dir, 'instance')):
+        #         with open(instance_path, 'r', errors='ignore') as instance_file:
+        #             current_instances = instance_file.readlines()
+        #         if current_instances:
+        #             if not os.path.isdir(check_in_path := os.path.join(self.temp_root_dir, 'check_in')):
+        #                 os.mkdir(check_in_path)
+        #             waiting_for_response = True
+        #             self.main_app_wait = False
+        #             # I'm sure there is a better way to format this timestamp lol
+        #             begin_time = float(time.mktime(datetime.now().timetuple()))
+        #             while waiting_for_response:
+        #                 checked_in_instances = os.listdir(check_in_path)
+        #                 if len(checked_in_instances) == len(current_instances):
+        #                     waiting_for_response = False
+        #                 if float(time.mktime(datetime.now().timetuple())) - begin_time >= 2:
+        #                     waiting_for_response = False
+        #             failed_to_check_in = []
+        #             for instance_id in current_instances:
+        #                 if instance_id not in [inst_id.strip() for inst_id in checked_in_instances]:
+        #                     failed_to_check_in.append(instance_id.replace('\n', ''))
+        #
+        #             # Offer project recovery if applicable
+        #             if not os.path.isdir(failed_inst_path := os.path.join(self.temp_root_dir, failed_to_check_in[0])):
+        #                 # Hack to deal with bug cause by crash during recovery
+        #                 failed_to_check_in = []
+        #             if failed_to_check_in and 'driver' in os.listdir(failed_inst_path):
+        #                 def win_close():
+        #                     self.main_app_wait = False
+        #                     recovery_win.destroy()
+        #
+        #                 def flag_recovery():
+        #                     self.recover_instance = failed_to_check_in[0]
+        #                     win_close()
+        #
+        #                 self.main_app_wait = True
+        #                 recovery_win = Tk()
+        #                 recovery_win.focus()
+        #                 recovery_win.protocol('WM_DELETE_WINDOW', win_close)
+        #                 recovery_win.title('Driver Recovery')
+        #                 recovery_win.geometry('300x100')
+        #                 if sys.platform == 'win32':
+        #                     recovery_win.attributes('-toolwindow', True)
+        #                 elif sys.platform == 'darwin':
+        #                     recovery_win.attributes('-type', 'utility')
+        #                 recovery_win.attributes('-topmost', True)
+        #                 recovery_win.resizable(False, False)
+        #                 label_text = 'Existing driver found.'
+        #                 recovery_label = Label(recovery_win, text=label_text)
+        #                 recovery_label.pack()
+        #                 label_text = 'Would you like to recover previous driver?'
+        #                 recovery_label2 = Label(recovery_win, text=label_text)
+        #                 recovery_label2.pack()
+        #                 recovery_button = Button(recovery_win, text='Recover Driver', command=flag_recovery)
+        #                 recovery_button.pack()
+        #                 recovery_win.wait_window()
+        #
+        #             for failed_id in failed_to_check_in:
+        #                 if failed_id == self.recover_instance:
+        #                     continue
+        #                 if os.path.isdir(os.path.join(self.temp_root_dir, failed_id)):
+        #                     shutil.rmtree(os.path.join(self.temp_root_dir, failed_id))
+        #             current_instances = []
+        #             for instance_id in os.listdir(check_in_path):
+        #                 current_instances.append(f'{instance_id}\n')
+        #             shutil.rmtree(check_in_path)
+        #         if f'{self.instance_id}\n' in current_instances:
+        #             self.instance_id = valid_instance_id(current_instances)
+        #         current_instances.append(f'{self.instance_id}\n')
+        #         with open(instance_path, 'w', errors='ignore') as out_file:
+        #             out_file.writelines(current_instances)
+        #     else:
+        #         shutil.rmtree(self.temp_root_dir)
+        #         os.mkdir(self.temp_root_dir)
+        #         with open(instance_path, 'w', errors='ignore') as out_file:
+        #             out_file.writelines(f'{self.instance_id}\n')
+        # else:
+        #     os.mkdir(self.temp_root_dir)
+        #     with open(os.path.join(self.temp_root_dir, 'instance'), 'w', errors='ignore') as out_file:
+        #         out_file.writelines(f'{self.instance_id}\n')
+        os.mkdir(self.instance_temp)
 
         # Initialize main program
         self.root = TkinterDnD.Tk()
@@ -301,7 +308,7 @@ class C4IconSwapper:
         self.states = [State('') for _ in range(13)]
         self.state_dupes = []
         self.states_orig_names = []
-        self.device_icon_dir = os.path.join(www_path := os.path.join(self.temp_dir, 'driver', 'www'), 'icons', 'device')
+        self.device_icon_dir = os.path.join(www_path := os.path.join(self.instance_temp, 'driver', 'www'), 'icons', 'device')
         self.icon_dir = os.path.join(www_path, 'icons')
         self.images_dir = os.path.join(www_path, 'images')
         self.orig_file_dir, self.orig_file_path, self.restore_entry_string = '', '', ''
@@ -370,27 +377,27 @@ class C4IconSwapper:
         global global_instance_id
         global_instance_id = self.instance_id
 
-        # Do recovery if necessary
-        if self.recover_instance:
-            self.c4z_panel.load_c4z(recovery=True)
-            recovery_path = os.path.join(self.temp_root_dir, self.recover_instance, 'Replacement Icons')
-            for file in os.listdir(recovery_path):
-                if file.endswith(valid_img_types):
-                    img_path = os.path.join(recovery_path, file)
-                    self.replacement_panel.load_replacement(file_path=img_path)
-                    os.remove(img_path)
-            self.replacement_panel.file_entry_field['state'] = NORMAL
-            self.replacement_panel.file_entry_field.delete(0, END)
-            self.replacement_panel.file_entry_field.insert(0, 'Recovered Image')
-            self.replacement_panel.file_entry_field['state'] = 'readonly'
-            shutil.rmtree(os.path.join(self.temp_root_dir, self.recover_instance))
-            self.ask_to_save = True
-            self.recover_instance = ''
+        # # Do recovery if necessary
+        # if self.recover_instance:
+        #     self.c4z_panel.load_c4z(recovery=True)
+        #     recovery_path = os.path.join(self.global_temp, self.recover_instance, 'Replacement Icons')
+        #     for file in os.listdir(recovery_path):
+        #         if file.endswith(valid_img_types):
+        #             img_path = os.path.join(recovery_path, file)
+        #             self.replacement_panel.load_replacement(file_path=img_path)
+        #             os.remove(img_path)
+        #     self.replacement_panel.file_entry_field['state'] = NORMAL
+        #     self.replacement_panel.file_entry_field.delete(0, END)
+        #     self.replacement_panel.file_entry_field.insert(0, 'Recovered Image')
+        #     self.replacement_panel.file_entry_field['state'] = 'readonly'
+        #     shutil.rmtree(os.path.join(self.global_temp, self.recover_instance))
+        #     self.ask_to_save = True
+        #     self.recover_instance = ''
 
         # Main Loop
         self.root.config(menu=self.menu)
         # noinspection PyTypeChecker
-        self.root.after(150, self.instance_check)
+        # self.root.after(150, self.instance_check)
         self.root.protocol('WM_DELETE_WINDOW', self.on_program_exit)
         self.root.focus_force()
         self.root.mainloop()
@@ -463,43 +470,49 @@ class C4IconSwapper:
         self.end_program()
 
     def end_program(self):
-        with open(instance_path := os.path.join(self.temp_root_dir, 'instance'), 'r', errors='ignore') as instance_file:
-            current_instances = instance_file.readlines()
-        if len(current_instances) > 1:
-            if os.path.isdir(check_in_path := os.path.join(self.temp_root_dir, 'check_in')) and not self.checked_in:
-                return
-            elif os.path.isdir(check_in_path):
-                begin_time = float(time.mktime(datetime.now().timetuple()))
-                while os.path.isdir(check_in_path):
-                    if float(time.mktime(datetime.now().timetuple())) - begin_time >= 5:
-                        return
-            os.mkdir(check_in_path)
-            waiting = True
-            begin_time = float(time.mktime(datetime.now().timetuple()))
-            while waiting:
-                if len(os.listdir(check_in_path)) == len(current_instances):
-                    waiting = False
-                if float(time.mktime(datetime.now().timetuple())) - begin_time >= 2:
-                    waiting = False
-            failed_to_check_in = []
-            for instance_id in current_instances:
-                if instance_id == f'{self.instance_id}\n':
-                    continue
-                if instance_id.replace('\n', '') not in os.listdir(check_in_path):
-                    failed_to_check_in.append(instance_id.replace('\n', ''))
-            for failed_id in failed_to_check_in:
-                if os.path.isdir(failed_id_path := os.path.join(self.temp_root_dir, failed_id)):
-                    shutil.rmtree(failed_id_path)
-            current_instances = [f'{instance_id}\n' for instance_id in os.listdir(check_in_path)]
-            shutil.rmtree(check_in_path)
-            if current_instances:
-                with open(instance_path, 'w', errors='ignore') as out_file:
-                    out_file.writelines(current_instances)
-                shutil.rmtree(self.temp_dir)
-            else:
-                shutil.rmtree(self.temp_root_dir)
+        if self.server and not self.client_dict:
+            print('Global Delete')
+            shutil.rmtree(self.global_temp)
         else:
-            shutil.rmtree(self.temp_root_dir)
+            print('Local Delete')
+            shutil.rmtree(self.instance_temp)
+        # with open(instance_path := os.path.join(self.temp_root_dir, 'instance'), 'r', errors='ignore') as instance_file:
+        #     current_instances = instance_file.readlines()
+        # if len(current_instances) > 1:
+        #     if os.path.isdir(check_in_path := os.path.join(self.temp_root_dir, 'check_in')) and not self.checked_in:
+        #         return
+        #     elif os.path.isdir(check_in_path):
+        #         begin_time = float(time.mktime(datetime.now().timetuple()))
+        #         while os.path.isdir(check_in_path):
+        #             if float(time.mktime(datetime.now().timetuple())) - begin_time >= 5:
+        #                 return
+        #     os.mkdir(check_in_path)
+        #     waiting = True
+        #     begin_time = float(time.mktime(datetime.now().timetuple()))
+        #     while waiting:
+        #         if len(os.listdir(check_in_path)) == len(current_instances):
+        #             waiting = False
+        #         if float(time.mktime(datetime.now().timetuple())) - begin_time >= 2:
+        #             waiting = False
+        #     failed_to_check_in = []
+        #     for instance_id in current_instances:
+        #         if instance_id == f'{self.instance_id}\n':
+        #             continue
+        #         if instance_id.replace('\n', '') not in os.listdir(check_in_path):
+        #             failed_to_check_in.append(instance_id.replace('\n', ''))
+        #     for failed_id in failed_to_check_in:
+        #         if os.path.isdir(failed_id_path := os.path.join(self.temp_root_dir, failed_id)):
+        #             shutil.rmtree(failed_id_path)
+        #     current_instances = [f'{instance_id}\n' for instance_id in os.listdir(check_in_path)]
+        #     shutil.rmtree(check_in_path)
+        #     if current_instances:
+        #         with open(instance_path, 'w', errors='ignore') as out_file:
+        #             out_file.writelines(current_instances)
+        #         shutil.rmtree(self.temp_dir)
+        #     else:
+        #         shutil.rmtree(self.temp_root_dir)
+        # else:
+        #     shutil.rmtree(self.temp_root_dir)
 
         self.root.destroy()
 
@@ -631,11 +644,11 @@ class C4IconSwapper:
         self.c4z_panel.icons = []
         self.c4z_panel.current_icon = 0
         self.c4z_panel.c4_icon_label.configure(image=self.blank)
-        if os.path.isdir(driver_folder := os.path.join(self.temp_dir, 'driver')):
+        if os.path.isdir(driver_folder := os.path.join(self.instance_temp, 'driver')):
             shutil.rmtree(driver_folder)
         self.c4z_panel.restore_button['state'] = DISABLED
         if save_state.driver_selected:
-            with open(saved_driver_path := os.path.join(self.temp_dir, 'saved_driver.c4z'), 'wb') as driver_zip:
+            with open(saved_driver_path := os.path.join(self.instance_temp, 'saved_driver.c4z'), 'wb') as driver_zip:
                 driver_zip.write(save_state.driver_zip)
             self.c4z_panel.load_c4z(saved_driver_path)
             os.remove(saved_driver_path)
@@ -730,6 +743,141 @@ class C4IconSwapper:
         elif win_type == 'states':
             self.states_win = StatesWin(self)
 
+    def ipc(self):
+        port = 61352
+        try:
+            server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server.bind(('127.0.0.1', port))
+            server.listen(5)
+            print(f'Is Server: {self.instance_id}')
+            self.server = server
+            threading.Thread(target=self.ipc_server, args=[server, port], daemon=True).start()
+        except OSError:
+            try:
+                print(f'Is Client: {self.instance_id}')
+                self.server = None
+                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                client.settimeout(2.0)
+                client.connect(('127.0.0.1', port))
+
+                client.sendall(f'ID:{self.instance_id}\n'.encode('utf-8'))
+                response = client.recv(1024).decode('utf-8')
+                if not response.startswith('OK'):
+                    print('From Server:', repr(response))
+                    while True:
+                        self.instance_id = str(random.randint(111111, 999999))
+                        client.sendall(f'ID:{self.instance_id}\n'.encode('utf-8'))
+                        response = client.recv(1024).decode('utf-8')
+                        print(response)
+                        if response.startswith('OK'):
+                            break
+                print('From Server:', repr(response))
+                for msg in response.strip().split('\n'):
+                    match msg.split(':'):
+                        case ['OK', client_data]:
+                            client_list = client_data.split('|')
+                            self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
+                            print(self.client_dict)
+                            threading.Thread(target=self.ipc_client, args=[client, port], daemon=True).start()
+                            break
+                        case _:
+                            print('Handshake Failed')
+            except OSError:  # If server disconnects during first handshake
+                print('Server disconnected during handshake')
+                time.sleep(0.5)
+                self.ipc()
+
+    def ipc_server(self, server, port, takeover=False):
+        if takeover:
+            print('Trying takeover')
+            try:
+                server.bind(('127.0.0.1', port))
+                server.listen(5)
+                print(f'Became Server: {self.instance_id}')
+                self.client_dict.pop(self.instance_id)
+                self.server = server
+            except OSError as e:
+                if not threading.main_thread().is_alive():
+                    raise RuntimeError('👻Ghost Client👻')
+                print(e)
+                return
+        while True:
+            if not threading.main_thread().is_alive():
+                raise RuntimeError('👻Ghost Server👻')
+            client, _ = server.accept()
+            client.settimeout(2.0)
+            threading.Thread(target=self.ipc_server_socket, args=[client], daemon=True).start()
+
+    def ipc_server_socket(self, client):
+        # Do check for client set size change
+        client_id = None
+        while True:
+            try:
+                data = client.recv(1024).decode('utf-8')
+                for msg in data.strip().split('\n'):
+                    match msg.split(':'):
+                        case ['ID', client_id]:
+                            print(f'New Client: {msg}')
+                            client_id = msg[3:]
+                            with self.socket_lock:
+                                client_dict = self.client_dict.copy()
+                            if client_id in client_dict:
+                                print('ID collision', client_id, 'in', client_dict)
+                                client.sendall('Instance id collision\n'.encode('utf-8'))
+                                continue
+                            with self.socket_lock:
+                                self.client_dict[client_id] = str(time.time())
+                                self.socket_dict[client_id] = client
+                                new_client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
+                                client.sendall(f'OK:{new_client_list}\n'.encode('utf-8'))
+                                for client_id, sock in self.socket_dict.items():
+                                    if sock is client:
+                                        continue
+                                    try:
+                                        sock.sendall(f'UPDATE:{new_client_list}\n'.encode('utf-8'))
+                                    except OSError:
+                                        self.socket_dict.pop(client_id)
+                        case ['HB', client_id]:
+                            client.sendall('ACK\n'.encode('utf-8'))
+            except OSError:
+                print(f'Client {client_id} timed out')  # Do timeout logic, check folder, remove from set
+                with self.socket_lock:
+                    if client_id in self.client_dict:
+                        self.client_dict.pop(client_id)
+                        new_client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
+                        for client_id, sock in self.socket_dict.items():
+                            try:
+                                sock.sendall(f'UPDATE:{new_client_list}\n'.encode('utf-8'))
+                            except OSError:
+                                self.socket_dict.pop(client_id)
+                break
+
+    def ipc_client(self, client, port):
+        server_to = 0
+        while True:
+            try:
+                while True:
+                    client.sendall(f'HB: {self.instance_id}\n'.encode('utf-8'))  # Heartbeat
+                    data = client.recv(1024).decode('utf-8')
+                    for msg in data.strip().split('\n'):
+                        match msg.split(':'):
+                            case ['UPDATE', client_data]:
+                                client_list = client_data.split('|')
+                                self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
+                                print(self.client_dict)
+                    time.sleep(1)
+            except OSError:
+                server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                if server_to > 3:
+                    self.ipc_server(server, port, takeover=True)
+                server_to += 1
+                print('Current Server timed out')
+                compare_dict = {k: float(v) for k, v in self.client_dict.items()}
+                if min(self.client_dict, key=compare_dict.get) == self.instance_id:
+                    self.ipc_server(server, port, takeover=True)
+                del server
+                # time.sleep(0.005)
+
     # TODO: Make the undo feature in an actually decent way
     def undo(self, *_):
         if not self.undo_history:
@@ -751,17 +899,17 @@ class C4IconSwapper:
         self.undo_history.append(copy.deepcopy(C4IS(self)))
         self.edit.entryconfig(self.undo_pos, state=NORMAL)
 
-    def instance_check(self):
-        if self.checked_in and not os.path.isdir(os.path.join(self.temp_root_dir, 'check_in')):
-            self.checked_in = False
-        elif not self.checked_in and os.path.isdir(check_in_path := os.path.join(self.temp_root_dir, 'check_in')):
-            with open(os.path.join(check_in_path, self.instance_id), 'w', errors='ignore') as check_in_file:
-                check_in_file.writelines('')
-            self.checked_in = True
-            self.root.title(f'C4 Icon Swapper ({self.instance_id})')
-
-        # noinspection PyTypeChecker
-        self.root.after(150, self.instance_check)
+    # def instance_check(self):
+    #     if self.checked_in and not os.path.isdir(os.path.join(self.global_temp, 'check_in')):
+    #         self.checked_in = False
+    #     elif not self.checked_in and os.path.isdir(check_in_path := os.path.join(self.global_temp, 'check_in')):
+    #         with open(os.path.join(check_in_path, self.instance_id), 'w', errors='ignore') as check_in_file:
+    #             check_in_file.writelines('')
+    #         self.checked_in = True
+    #         self.root.title(f'C4 Icon Swapper ({self.instance_id})')
+    #
+    #     # noinspection PyTypeChecker
+    #     self.root.after(150, self.instance_check)
 
     def easter(self, *_, increment=True):
         if self.easter_counter < 0:
@@ -1424,14 +1572,14 @@ class C4zPanel:
         rel_path = 'assets/multi_generic.c4z' if multi else 'assets/generic.c4z'
         gen_driver_path = asset_path(rel_path)
 
-        if os.path.isdir(temp_driver_path := os.path.join(main.temp_dir, 'driver')):
+        if os.path.isdir(temp_driver_path := os.path.join(main.instance_temp, 'driver')):
             shutil.rmtree(temp_driver_path)
 
         shutil.unpack_archive(gen_driver_path, temp_driver_path, 'zip')
 
         sizes = [70, 90, 300, 512]
         root_size = '1024'
-        temp_dir = os.path.join(main.temp_dir, 'temp_unpacking')
+        temp_dir = os.path.join(main.instance_temp, 'temp_unpacking')
         os.mkdir(temp_dir)
         for img_name in os.listdir(main.device_icon_dir):
             img = Image.open(os.path.join(main.device_icon_dir, img_name))
@@ -1698,11 +1846,11 @@ class C4zPanel:
             main.schedule_entry_restore = False
 
         # Backup existing driver data
-        temp_bak = os.path.join(main.temp_dir, 'temp_driver_backup')
+        temp_bak = os.path.join(main.instance_temp, 'temp_driver_backup')
         icons_bak = None
         if self.icons:
             icons_bak = self.icons
-            if os.path.isdir(temp_driver_path := os.path.join(main.temp_dir, 'driver')):
+            if os.path.isdir(temp_driver_path := os.path.join(main.instance_temp, 'driver')):
                 shutil.copytree(temp_driver_path, temp_bak)
 
         # File select dialog
@@ -1720,18 +1868,18 @@ class C4zPanel:
 
         # Delete existing driver
         main.driver_selected = False
-        if os.path.isdir(driver_folder := os.path.join(main.temp_dir, 'driver')) and not recovery:
+        if os.path.isdir(driver_folder := os.path.join(main.instance_temp, 'driver')) and not recovery:
             shutil.rmtree(driver_folder)
 
         # Unpack selected driver
         if not recovery:
             shutil.unpack_archive(filename, driver_folder, 'zip')
         else:
-            shutil.copytree(os.path.join(self.main.temp_root_dir, self.main.recover_instance, 'driver'), driver_folder)
+            shutil.copytree(os.path.join(self.main.global_temp, self.main.recover_instance, 'driver'), driver_folder)
 
         # Read XML
         curr_xml = main.driver_xml  # store current XML in case of abort
-        main.driver_xml = XMLObject(os.path.join(main.temp_dir, 'driver', 'driver.xml'))
+        main.driver_xml = XMLObject(os.path.join(main.instance_temp, 'driver', 'driver.xml'))
 
         # Get icons
         self.icons = get_icons((main.icon_dir, main.images_dir))
@@ -1806,7 +1954,7 @@ class C4zPanel:
         # Check Lua file for multi-state
         main.multi_state_driver = False
         main.edit.entryconfig(main.states_pos, state=DISABLED)
-        if os.path.isfile(lua_path := os.path.join(main.temp_dir, 'driver', 'driver.lua')):
+        if os.path.isfile(lua_path := os.path.join(main.instance_temp, 'driver', 'driver.lua')):
             with open(lua_path, errors='ignore') as driver_lua_file:
                 driver_lua = driver_lua_file.read()
                 if main.get_states(driver_lua):
@@ -1909,7 +2057,7 @@ class C4zPanel:
 
     def get_connections(self):
         main = self.main
-        if not os.path.isfile(os.path.join(main.temp_dir, 'driver', 'driver.xml')) or not main.driver_selected:
+        if not os.path.isfile(os.path.join(main.instance_temp, 'driver', 'driver.xml')) or not main.driver_selected:
             return
         # Reinitialize all connections
         for conn in main.connections:
@@ -2023,7 +2171,7 @@ class ReplacementPanel:
         self.img_bank, self.img_bank_tk_labels = [], []
         self.img_bank_select_lockout = {}
         self.multi_threading = False
-        self.replacement_icons_dir = os.path.join(main.temp_dir, 'Replacement Icons')
+        self.replacement_icons_dir = os.path.join(main.instance_temp, 'Replacement Icons')
         if not os.path.isdir(self.replacement_icons_dir):
             os.mkdir(self.replacement_icons_dir)
 
@@ -2453,8 +2601,8 @@ class ExportPanel:
             path = os.path.join(main.cur_dir, f'{driver_name}.c4z')
         bak_files_dict = {}
         bak_files = []
-        bak_folder = os.path.join(main.temp_dir, 'bak_files')
-        driver_folder = os.path.join(main.temp_dir, 'driver')
+        bak_folder = os.path.join(main.instance_temp, 'bak_files')
+        driver_folder = os.path.join(main.instance_temp, 'driver')
 
         # Backup and move all .bak files if not included
         if not self.include_backups.get():
@@ -2548,7 +2696,7 @@ class ExportPanel:
 
             # Update state names in Lua file
             state_name_changes = {}
-            if os.path.isfile(lua_path := os.path.join(main.temp_dir, 'driver', 'driver.lua')):
+            if os.path.isfile(lua_path := os.path.join(main.instance_temp, 'driver', 'driver.lua')):
                 # Lua file backup
                 if os.path.isfile(lua_bak_path := f'{lua_path}.bak'):
                     os.remove(lua_bak_path)
@@ -2678,14 +2826,14 @@ class ExportPanel:
                 icon_tag.set_value(icon_tag.value().replace(result, driver_name))
 
         # Backup XML file and write new XML
-        if os.path.isfile(xml_bak_path := os.path.join(main.temp_dir, 'driver', 'driver.xml.bak')):
+        if os.path.isfile(xml_bak_path := os.path.join(main.instance_temp, 'driver', 'driver.xml.bak')):
             os.remove(xml_bak_path)
-        os.rename(xml_path := os.path.join(main.temp_dir, 'driver', 'driver.xml'), xml_bak_path)
+        os.rename(xml_path := os.path.join(main.instance_temp, 'driver', 'driver.xml'), xml_bak_path)
         with open(xml_path, 'w', errors='ignore') as out_file:
             out_file.writelines(driver_xml.get_lines())
 
         # Make icon changes
-        bak_folder = os.path.join(main.temp_dir, 'bak_files')
+        bak_folder = os.path.join(main.instance_temp, 'bak_files')
         if os.path.isdir(bak_folder):
             shutil.rmtree(bak_folder)
         os.mkdir(bak_folder)
@@ -2745,10 +2893,10 @@ class ExportPanel:
         if self.inc_driver_version.get():
             main.driver_version_new_var.set(str(int(main.driver_version_new_var.get()) + 1))
         driver_xml.restore()
-        if os.path.isfile(lua_bak_path := os.path.join(main.temp_dir, 'driver', 'driver.lua.bak')):
-            os.remove(lua_path := os.path.join(main.temp_dir, 'driver', 'driver.lua'))
+        if os.path.isfile(lua_bak_path := os.path.join(main.instance_temp, 'driver', 'driver.lua.bak')):
+            os.remove(lua_path := os.path.join(main.instance_temp, 'driver', 'driver.lua'))
             os.rename(lua_bak_path, lua_path)
-        os.remove(xml_path := os.path.join(main.temp_dir, 'driver', 'driver.xml'))
+        os.remove(xml_path := os.path.join(main.instance_temp, 'driver', 'driver.xml'))
         os.rename(f'{xml_path}.bak', xml_path)
 
     def validate_driver_name(self, *_):
@@ -2809,7 +2957,7 @@ class C4IS:
 
         # C4z Panel
         if main.driver_selected:
-            shutil.make_archive(driver_path_noext := os.path.join(main.temp_dir, 'driver'), 'zip', driver_path_noext)
+            shutil.make_archive(driver_path_noext := os.path.join(main.instance_temp, 'driver'), 'zip', driver_path_noext)
             with open(driver_path := f'{driver_path_noext}.zip', 'rb') as driver_zip:
                 self.driver_zip = driver_zip.read()
             os.remove(driver_path)
