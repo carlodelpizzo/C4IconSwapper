@@ -752,12 +752,13 @@ class C4IconSwapper:
             print(f'Is Server: {self.instance_id}')
             self.server = server
             threading.Thread(target=self.ipc_server, args=[server, port], daemon=True).start()
-        except OSError:
+        except OSError as e:
+            print(f'IPC Error: {e}')
             try:
                 print(f'Is Client: {self.instance_id}')
                 self.server = None
                 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                client.settimeout(2.0)
+                client.settimeout(2)
                 client.connect(('127.0.0.1', port))
 
                 client.sendall(f'ID:{self.instance_id}\n'.encode('utf-8'))
@@ -782,101 +783,141 @@ class C4IconSwapper:
                             break
                         case _:
                             print('Handshake Failed')
-            except OSError:  # If server disconnects during first handshake
+            except OSError as e:  # If server disconnects during first handshake
+                print(e)
                 print('Server disconnected during handshake')
                 time.sleep(0.5)
                 self.ipc()
 
+    # TODO: Handle takeover logic; Reestablish connections and broadcast new client list
     def ipc_server(self, server, port, takeover=False):
         if takeover:
-            print('Trying takeover')
-            try:
-                server.bind(('127.0.0.1', port))
-                server.listen(5)
-                print(f'Became Server: {self.instance_id}')
-                self.client_dict.pop(self.instance_id)
-                self.server = server
-            except OSError as e:
-                if not threading.main_thread().is_alive():
-                    raise RuntimeError('👻Ghost Client👻')
-                print(e)
-                return
+            for _ in range(3):
+                time.sleep(0.025)
+                print('Trying takeover')
+                try:
+                    server.bind(('127.0.0.1', port))
+                    server.listen(5)
+                    print(f'Became Server: {self.instance_id}')
+                    self.client_dict.pop(self.instance_id)
+                    self.server = server
+                    takeover = False
+                    break
+                except OSError as e:
+                    print(f'Takeover Error: {e}')
+            if takeover:
+                self.ipc()
         while True:
-            if not threading.main_thread().is_alive():
-                raise RuntimeError('👻Ghost Server👻')
             client, _ = server.accept()
-            client.settimeout(2.0)
+            client.settimeout(2)
             threading.Thread(target=self.ipc_server_socket, args=[client], daemon=True).start()
+            if not self.root.winfo_exists():
+                raise RuntimeError('👻')
 
     def ipc_server_socket(self, client):
-        # Do check for client set size change
         client_id = None
         while True:
+            if not self.root.winfo_exists():
+                raise RuntimeError('👻')
             try:
+                # Server-side Socket
                 data = client.recv(1024).decode('utf-8')
                 for msg in data.strip().split('\n'):
                     match msg.split(':'):
                         case ['ID', client_id]:
                             print(f'New Client: {msg}')
-                            client_id = msg[3:]
+                            client_id = msg.split(':')[-1]
                             with self.socket_lock:
                                 client_dict = self.client_dict.copy()
                             if client_id in client_dict:
                                 print('ID collision', client_id, 'in', client_dict)
                                 client.sendall('Instance id collision\n'.encode('utf-8'))
                                 continue
-                            with self.socket_lock:
-                                self.client_dict[client_id] = str(time.time())
-                                self.socket_dict[client_id] = client
-                                new_client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
-                                client.sendall(f'OK:{new_client_list}\n'.encode('utf-8'))
-                                for client_id, sock in self.socket_dict.items():
-                                    if sock is client:
-                                        continue
-                                    try:
-                                        sock.sendall(f'UPDATE:{new_client_list}\n'.encode('utf-8'))
-                                    except OSError:
-                                        self.socket_dict.pop(client_id)
+                            self.server_broadcast_id_update(new_connection=(client_id, client))
                         case ['HB', client_id]:
                             client.sendall('ACK\n'.encode('utf-8'))
-            except OSError:
-                print(f'Client {client_id} timed out')  # Do timeout logic, check folder, remove from set
+            except OSError as e:
+                print(e)
+                # TODO: check folder, delete or flag for recovery
+                print(f'Client {client_id} disconnected')
+                if client_id in os.listdir(self.global_temp):
+                    if 'driver' not in os.listdir(client_folder := os.path.join(self.global_temp, client_id)):
+                        shutil.rmtree(client_folder)
+                        print(f'Deleted {client_id} folder')
+                    else:
+                        # TODO: Flag for recovery?
+                        pass
                 with self.socket_lock:
-                    if client_id in self.client_dict:
-                        self.client_dict.pop(client_id)
-                        new_client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
-                        for client_id, sock in self.socket_dict.items():
-                            try:
-                                sock.sendall(f'UPDATE:{new_client_list}\n'.encode('utf-8'))
-                            except OSError:
-                                self.socket_dict.pop(client_id)
-                break
+                    self.client_dict.pop(client_id)
+                    print(self.client_dict)
+                self.server_broadcast_id_update()
+                return
 
     def ipc_client(self, client, port):
-        server_to = 0
+        server_timeouts = 0
+        reconnect = False
         while True:
             try:
                 while True:
-                    client.sendall(f'HB: {self.instance_id}\n'.encode('utf-8'))  # Heartbeat
+                    # Client-side Socket
+                    client.sendall(f'HB:{self.instance_id}\n'.encode('utf-8'))  # Heartbeat
                     data = client.recv(1024).decode('utf-8')
+                    if reconnect and data:
+                        client.settimeout(2)
+                        reconnect = False
                     for msg in data.strip().split('\n'):
                         match msg.split(':'):
                             case ['UPDATE', client_data]:
                                 client_list = client_data.split('|')
                                 self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
+                                print('__New client list__')
                                 print(self.client_dict)
+                            case _:
+                                print(msg)
                     time.sleep(1)
-            except OSError:
-                server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                if server_to > 3:
-                    self.ipc_server(server, port, takeover=True)
-                server_to += 1
-                print('Current Server timed out')
+            except OSError as e:
+                print(e)
+                print('Current Server disconnected')
                 compare_dict = {k: float(v) for k, v in self.client_dict.items()}
-                if min(self.client_dict, key=compare_dict.get) == self.instance_id:
-                    self.ipc_server(server, port, takeover=True)
+                if not min(self.client_dict, key=compare_dict.get) == self.instance_id:
+                    client.settimeout(6)
+                    continue
+                del compare_dict
+                if server_timeouts <= 3:
+                    print('Selected self as server')
+                server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.ipc_server(server, port, takeover=True)
                 del server
-                # time.sleep(0.005)
+
+    def server_broadcast_id_update(self, new_connection=None):
+        if new_connection:
+            client_id = new_connection[0]
+            client = new_connection[1]
+            with self.socket_lock:
+                self.client_dict[client_id] = str(time.time())
+                self.socket_dict[client_id] = client
+        with self.socket_lock:
+            current_sockets = list(self.socket_dict.items())
+            new_client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
+        if new_connection:
+            # noinspection PyUnboundLocalVariable
+            client.sendall(f'OK:{new_client_list}\n'.encode('utf-8'))
+            # noinspection PyUnboundLocalVariable
+            current_sockets = [(k, v) for k, v in current_sockets if k != client_id]
+        print('__Broadcast New Client List__')
+        print(new_client_list)
+        resend = False
+        for cid, sock in current_sockets:
+            try:
+                sock.sendall(f'UPDATE:{new_client_list}\n'.encode('utf-8'))
+            except OSError as e:
+                print(f'Broadcast Error: {e}')
+                with self.socket_lock:
+                    self.socket_dict.pop(cid)
+                    resend = True
+        if resend:
+            print('__Broadcast Resend__')
+            self.server_broadcast_id_update()
 
     # TODO: Make the undo feature in an actually decent way
     def undo(self, *_):
