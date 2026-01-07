@@ -181,6 +181,8 @@ class C4IconSwapper:
         self.server = None
         self.client_dict = {}
         self.socket_dict = {}
+        self.last_seen = {}
+        self.reestablish = False
         self.socket_lock = threading.Lock()
         self.ipc()
 
@@ -743,70 +745,71 @@ class C4IconSwapper:
         elif win_type == 'states':
             self.states_win = StatesWin(self)
 
-    def ipc(self):
+    # TODO: When self.reestablish, check folders against instance ids, new thread for func?
+    def ipc(self, takeover=False):
         port = 61352
-        try:
-            server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            server.bind(('127.0.0.1', port))
-            server.listen(5)
-            print(f'Is Server: {self.instance_id}')
-            self.server = server
-            threading.Thread(target=self.ipc_server, args=[server, port], daemon=True).start()
-        except OSError as e:
-            print(f'IPC Error: {e}')
-            try:
-                print(f'Is Client: {self.instance_id}')
-                self.server = None
-                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                client.settimeout(2)
-                client.connect(('127.0.0.1', port))
-
-                client.sendall(f'ID:{self.instance_id}\n'.encode('utf-8'))
-                response = client.recv(1024).decode('utf-8')
-                if not response.startswith('OK'):
-                    print('From Server:', repr(response))
-                    while True:
-                        self.instance_id = str(random.randint(111111, 999999))
-                        client.sendall(f'ID:{self.instance_id}\n'.encode('utf-8'))
-                        response = client.recv(1024).decode('utf-8')
-                        print(response)
-                        if response.startswith('OK'):
-                            break
-                print('From Server:', repr(response))
-                for msg in response.strip().split('\n'):
-                    match msg.split(':'):
-                        case ['OK', client_data]:
-                            client_list = client_data.split('|')
-                            self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
-                            print(self.client_dict)
-                            threading.Thread(target=self.ipc_client, args=[client, port], daemon=True).start()
-                            break
-                        case _:
-                            print('Handshake Failed')
-            except OSError as e:  # If server disconnects during first handshake
-                print(e)
-                print('Server disconnected during handshake')
-                time.sleep(0.5)
-                self.ipc()
-
-    # TODO: Handle takeover logic; Reestablish connections and broadcast new client list
-    def ipc_server(self, server, port, takeover=False):
         if takeover:
-            for _ in range(3):
-                time.sleep(0.025)
-                print('Trying takeover')
+            for _ in range(5):
                 try:
+                    print('Trying Takeover')
+                    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     server.bind(('127.0.0.1', port))
                     server.listen(5)
-                    print(f'Became Server: {self.instance_id}')
-                    self.client_dict.pop(self.instance_id)
+                    print(f'Is Server: {self.instance_id}')
                     self.server = server
-                    takeover = False
-                    break
+                    self.ipc_server(server, port)
+                    return
                 except OSError as e:
-                    print(f'Takeover Error: {e}')
-            if takeover:
-                self.ipc()
+                    print(f'Takeover Failed: {e}')
+                    time.sleep(0.01)
+        while True:
+            try:
+                server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                server.bind(('127.0.0.1', port))
+                server.listen(5)
+                print(f'Is Server: {self.instance_id}')
+                self.server = server
+                threading.Thread(target=self.ipc_server, args=[server, port], daemon=True).start()
+                break
+            except OSError as e:
+                print(f'IPC Error: {e}')
+                try:
+                    print(f'Is Client: {self.instance_id}')
+                    self.server = None
+                    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    client.settimeout(2)
+                    client.connect(('127.0.0.1', port))
+
+                    client.sendall(f'ID:{self.instance_id}\n'.encode('utf-8'))
+                    response = client.recv(1024).decode('utf-8')
+                    if not response.startswith('OK'):
+                        print('From Server:', repr(response))
+                        while True:
+                            self.instance_id = str(random.randint(111111, 999999))
+                            client.sendall(f'ID:{self.instance_id}\n'.encode('utf-8'))
+                            response = client.recv(1024).decode('utf-8')
+                            print(response)
+                            if response.startswith('OK'):
+                                break
+                    print('From Server:', repr(response))
+                    for msg in response.strip().split('\n'):
+                        match msg.split(':'):
+                            case ['OK', client_data]:
+                                client_list = client_data.split('|')
+                                self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
+                                print(self.client_dict)
+                                threading.Thread(target=self.ipc_client, args=[client, port], daemon=True).start()
+                                break
+                            case _:
+                                print('Handshake Failed')
+                    break
+                except OSError as e:  # If server disconnects during first handshake
+                    print(e)
+                    print('IPC Initialization Failed')
+                    time.sleep(0.1)
+
+    # TODO: Handle takeover logic; Reestablish connections and broadcast new client list
+    def ipc_server(self, server, port):
         while True:
             client, _ = server.accept()
             client.settimeout(2)
@@ -822,11 +825,15 @@ class C4IconSwapper:
             try:
                 # Server-side Socket
                 data = client.recv(1024).decode('utf-8')
+                if client_id and client_id not in self.last_seen:
+                    self.last_seen[client_id] = time.time()
                 for msg in data.strip().split('\n'):
                     match msg.split(':'):
                         case ['ID', client_id]:
                             print(f'New Client: {msg}')
                             client_id = msg.split(':')[-1]
+                            client.settimeout(0.125)
+                            self.last_seen[client_id] = time.time()
                             with self.socket_lock:
                                 client_dict = self.client_dict.copy()
                             if client_id in client_dict:
@@ -836,7 +843,10 @@ class C4IconSwapper:
                             self.server_broadcast_id_update(new_connection=(client_id, client))
                         case ['HB', client_id]:
                             client.sendall('ACK\n'.encode('utf-8'))
+                            self.last_seen[client_id] = time.time()
             except OSError as e:
+                if client_id and time.time() - self.last_seen[client_id] < 2:
+                    continue
                 print(e)
                 # TODO: check folder, delete or flag for recovery
                 print(f'Client {client_id} disconnected')
@@ -851,20 +861,17 @@ class C4IconSwapper:
                     self.client_dict.pop(client_id)
                     print(self.client_dict)
                 self.server_broadcast_id_update()
+                if client_id:
+                    self.last_seen.pop(client_id)
                 return
 
     def ipc_client(self, client, port):
-        server_timeouts = 0
-        reconnect = False
         while True:
             try:
                 while True:
                     # Client-side Socket
                     client.sendall(f'HB:{self.instance_id}\n'.encode('utf-8'))  # Heartbeat
                     data = client.recv(1024).decode('utf-8')
-                    if reconnect and data:
-                        client.settimeout(2)
-                        reconnect = False
                     for msg in data.strip().split('\n'):
                         match msg.split(':'):
                             case ['UPDATE', client_data]:
@@ -880,14 +887,19 @@ class C4IconSwapper:
                 print('Current Server disconnected')
                 compare_dict = {k: float(v) for k, v in self.client_dict.items()}
                 if not min(self.client_dict, key=compare_dict.get) == self.instance_id:
-                    client.settimeout(6)
-                    continue
-                del compare_dict
-                if server_timeouts <= 3:
+                    del compare_dict
+                    client.close()
+                    time.sleep(1)
+                    self.reestablish = True
+                    self.client_dict = {}
+                    self.ipc()
+                else:
                     print('Selected self as server')
-                server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.ipc_server(server, port, takeover=True)
-                del server
+                    del compare_dict
+                    self.reestablish = True
+                    self.client_dict = {}
+                    self.ipc(takeover=True)
+                return
 
     def server_broadcast_id_update(self, new_connection=None):
         if new_connection:
