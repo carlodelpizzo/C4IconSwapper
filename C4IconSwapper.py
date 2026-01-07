@@ -178,11 +178,11 @@ class C4IconSwapper:
         self.instance_temp = os.path.join(self.global_temp, self.instance_id)
         self.checked_in, self.recover_instance, checked_in_instances = False, '', []
 
-        self.server = None
         self.client_dict = {}
         self.socket_dict = {}
         self.last_seen = {}
         self.reestablish = False
+        self.reestablish_start = None
         self.socket_lock = threading.Lock()
         self.ipc()
 
@@ -756,41 +756,30 @@ class C4IconSwapper:
                     server.bind(('127.0.0.1', port))
                     server.listen(5)
                     print(f'Is Server: {self.instance_id}')
-                    self.server = server
-                    self.ipc_server(server, port)
+                    self.ipc_server(server)
                     return
                 except OSError as e:
                     print(f'Takeover Failed: {e}')
                     time.sleep(0.01)
+            self.client_dict = {}
         while True:
             try:
                 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 server.bind(('127.0.0.1', port))
                 server.listen(5)
                 print(f'Is Server: {self.instance_id}')
-                self.server = server
-                threading.Thread(target=self.ipc_server, args=[server, port], daemon=True).start()
+                threading.Thread(target=self.ipc_server, args=[server], daemon=True).start()
                 break
             except OSError as e:
                 print(f'IPC Error: {e}')
                 try:
                     print(f'Is Client: {self.instance_id}')
-                    self.server = None
                     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     client.settimeout(2)
                     client.connect(('127.0.0.1', port))
 
                     client.sendall(f'ID:{self.instance_id}\n'.encode('utf-8'))
                     response = client.recv(1024).decode('utf-8')
-                    if not response.startswith('OK'):
-                        print('From Server:', repr(response))
-                        while True:
-                            self.instance_id = str(random.randint(111111, 999999))
-                            client.sendall(f'ID:{self.instance_id}\n'.encode('utf-8'))
-                            response = client.recv(1024).decode('utf-8')
-                            print(response)
-                            if response.startswith('OK'):
-                                break
                     print('From Server:', repr(response))
                     for msg in response.strip().split('\n'):
                         match msg.split(':'):
@@ -798,10 +787,12 @@ class C4IconSwapper:
                                 client_list = client_data.split('|')
                                 self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
                                 print(self.client_dict)
-                                threading.Thread(target=self.ipc_client, args=[client, port], daemon=True).start()
+                                threading.Thread(target=self.ipc_client, args=[client], daemon=True).start()
                                 break
-                            case _:
-                                print('Handshake Failed')
+                            case ['INSTANCE ID COLLISION']:
+                                self.instance_id = str(random.randint(111111, 999999))
+                                print('New id:', self.instance_id)
+                                continue
                     break
                 except OSError as e:  # If server disconnects during first handshake
                     print(e)
@@ -809,7 +800,9 @@ class C4IconSwapper:
                     time.sleep(0.1)
 
     # TODO: Handle takeover logic; Reestablish connections and broadcast new client list
-    def ipc_server(self, server, port):
+    def ipc_server(self, server):
+        if self.reestablish:
+            self.reestablish_start = time.time()
         while True:
             client, _ = server.accept()
             client.settimeout(2)
@@ -822,6 +815,9 @@ class C4IconSwapper:
         while True:
             if not self.root.winfo_exists():
                 raise RuntimeError('👻')
+            if self.reestablish and time.time() - self.reestablish_start > 5:
+                self.server_broadcast_id_update()
+                self.reestablish_start = False
             try:
                 # Server-side Socket
                 data = client.recv(1024).decode('utf-8')
@@ -830,15 +826,23 @@ class C4IconSwapper:
                 for msg in data.strip().split('\n'):
                     match msg.split(':'):
                         case ['ID', client_id]:
-                            print(f'New Client: {msg}')
                             client_id = msg.split(':')[-1]
                             client.settimeout(0.125)
                             self.last_seen[client_id] = time.time()
                             with self.socket_lock:
                                 client_dict = self.client_dict.copy()
+                                self.socket_dict[client_id] = client
+                            if self.reestablish:
+                                print(f'Reestablished Client: {msg}')
+                                message = f'OK:{client_id}~{self.last_seen[client_id]}\n'
+                                if client_id in client_dict:
+                                    message = f'{client_id}~{client_dict[client_id]}\n'
+                                client.sendall(message.encode('utf-8'))
+                                continue
+                            print(f'New Client: {msg}')
                             if client_id in client_dict:
                                 print('ID collision', client_id, 'in', client_dict)
-                                client.sendall('Instance id collision\n'.encode('utf-8'))
+                                client.sendall('INSTANCE ID COLLISION\n'.encode('utf-8'))
                                 continue
                             self.server_broadcast_id_update(new_connection=(client_id, client))
                         case ['HB', client_id]:
@@ -865,7 +869,7 @@ class C4IconSwapper:
                     self.last_seen.pop(client_id)
                 return
 
-    def ipc_client(self, client, port):
+    def ipc_client(self, client):
         while True:
             try:
                 while True:
@@ -897,7 +901,6 @@ class C4IconSwapper:
                     print('Selected self as server')
                     del compare_dict
                     self.reestablish = True
-                    self.client_dict = {}
                     self.ipc(takeover=True)
                 return
 
