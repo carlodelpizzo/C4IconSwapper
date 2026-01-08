@@ -58,7 +58,7 @@ conn_id_type = {'HDMI IN': (2000, '5'), 'COMPOSITE IN': (2000, '5'), 'VGA IN': (
 global_instance_id = None
 
 
-# TODO: Change shutil.copy() to shutil.move() where applicable
+# TODO: Double check .move changes, use .rename in some places?
 
 # TODO: Completely overhaul everything related to multistate
 # TODO: Look into using frames for panel objects
@@ -511,7 +511,8 @@ class C4IconSwapper:
             return
         if not (out_file_path := out_file.name).endswith('.c4is'):
             out_file.close()
-            os.rename(out_file_path, (out_file_path := f'{out_file_path}.c4is'))
+            curr_path = out_file_path
+            os.rename(curr_path, (out_file_path := f'{out_file_path}.c4is'))
         with open(out_file_path, 'wb') as output:
             # noinspection PyTypeChecker
             pickle.dump(C4IS(self), output)
@@ -1550,7 +1551,7 @@ class C4zPanel:
                 resized_img = img.resize((size, size), Resampling.LANCZOS)
                 resized_img.save(os.path.join(temp_dir, img_name.replace(root_size, str(size))))
         for img in os.listdir(temp_dir):
-            shutil.copy(os.path.join(temp_dir, img), os.path.join(main.device_icon_dir, img))
+            shutil.move(os.path.join(temp_dir, img), os.path.join(main.device_icon_dir, img))
 
         shutil.make_archive(os.path.join(temp_dir, 'driver'), 'zip', temp_driver_path)
         self.load_c4z(f'{os.path.join(temp_dir, "driver")}.zip')
@@ -1608,7 +1609,7 @@ class C4zPanel:
         else:
             self.main.edit.entryconfig(self.main.unrestore_all_pos, state=DISABLED)
 
-    def load_c4z(self, given_path=None, recovery=False):
+    def load_c4z(self, given_path=None):
         def get_icons(root_directory):
             if not root_directory:
                 return []
@@ -1790,9 +1791,6 @@ class C4zPanel:
 
             return icon_groups
 
-        if recovery and not self.main.recover_instance:
-            return
-
         if (main := self.main).ask_to_save:
             main.root.wait_window(main.ask_to_save_dialog(on_exit=False))
 
@@ -1810,35 +1808,31 @@ class C4zPanel:
 
         # Backup existing driver data
         temp_bak = os.path.join(main.instance_temp, 'temp_driver_backup')
+        driver_path = os.path.join(main.instance_temp, 'driver')
         icons_bak = None
         if self.icons:
             icons_bak = self.icons
-            if os.path.isdir(temp_driver_path := os.path.join(main.instance_temp, 'driver')):
-                shutil.copytree(temp_driver_path, temp_bak)
+            if os.path.isdir(driver_path):
+                shutil.move(driver_path, temp_bak)
 
         # File select dialog
-        if given_path is None and not recovery:
+        if given_path is None:
             filename = filedialog.askopenfilename(filetypes=[('Control4 Drivers', '*.c4z *.zip')])
             # If no file selected
             if not filename:
                 if os.path.isdir(temp_bak):
-                    shutil.rmtree(temp_bak)
+                    shutil.move(temp_bak, driver_path)
                 return
-        elif recovery:
-            filename = 'Recovered Driver'
         else:
             filename = given_path
 
         # Delete existing driver
         main.driver_selected = False
-        if os.path.isdir(driver_folder := os.path.join(main.instance_temp, 'driver')) and not recovery:
+        if os.path.isdir(driver_folder := os.path.join(main.instance_temp, 'driver')):
             shutil.rmtree(driver_folder)
 
         # Unpack selected driver
-        if not recovery:
-            shutil.unpack_archive(filename, driver_folder, 'zip')
-        else:
-            shutil.copytree(os.path.join(self.main.global_temp, self.main.recover_instance, 'driver'), driver_folder)
+        shutil.unpack_archive(filename, driver_folder, 'zip')
 
         # Read XML
         curr_xml = main.driver_xml  # store current XML in case of abort
@@ -1857,8 +1851,7 @@ class C4zPanel:
                 if os.path.isdir(temp_bak):
                     if os.path.isdir(driver_folder):
                         shutil.rmtree(driver_folder)
-                    shutil.copytree(temp_bak, driver_folder)
-                    shutil.rmtree(temp_bak)
+                    shutil.move(temp_bak, driver_folder)
                 # noinspection PyTypeChecker
                 main.root.after(3000, main.restore_entry_text)
                 main.schedule_entry_restore = True
@@ -2582,19 +2575,17 @@ class ExportPanel:
                         new_path = os.path.join(bak_folder, f'{file}{next(suffix_num)}')
                         bak_files.append(current_path)
                         bak_files_dict[current_path] = new_path
-                        shutil.copy(current_path, new_path)
-                        os.remove(current_path)
+                        shutil.move(current_path, new_path)
 
         # Create .c4z file
         zip_path = f'{driver_folder}.zip'
         shutil.make_archive(driver_folder, 'zip', driver_folder)
-        shutil.copy(zip_path, path)
-        os.remove(zip_path)
+        shutil.move(zip_path, path)
 
         # Restore .bak files
         if not self.include_backups.get():
             for file in bak_files:
-                shutil.copy(bak_files_dict[file], file)
+                shutil.move(bak_files_dict[file], file)
             shutil.rmtree(bak_folder)
 
     def do_export(self, quick_export=None):
@@ -2660,15 +2651,11 @@ class ExportPanel:
             # Update state names in Lua file
             state_name_changes = {}
             if os.path.isfile(lua_path := os.path.join(main.instance_temp, 'driver', 'driver.lua')):
-                # Lua file backup
-                if os.path.isfile(lua_bak_path := f'{lua_path}.bak'):
-                    os.remove(lua_bak_path)
-                shutil.copy(lua_path, lua_bak_path)
                 for state in main.states:
                     if state.original_name != state.name_var.get():
                         state_name_changes[state.original_name] = state.name_var.get()
 
-                # Modify Lua file
+                # Read Lua file
                 modified_lua_lines = []
                 with open(lua_path, errors='ignore') as driver_lua_file:
                     driver_lua_lines = driver_lua_file.readlines()
@@ -2691,6 +2678,10 @@ class ExportPanel:
                             new_line = new_line.replace(f'{orig_name}=', f'{new}=')
                             new_line = new_line.replace(f'{orig_lower}=', f'{new_lower}=')
                     modified_lua_lines.append(new_line)
+                # Backup Lua file and write modified version
+                if os.path.isfile(lua_bak_path := f'{lua_path}.bak'):
+                    os.remove(lua_bak_path)
+                shutil.move(lua_path, lua_bak_path)
                 with open(lua_path, 'w', errors='ignore') as driver_lua_file:
                     driver_lua_file.writelines(modified_lua_lines)
 
@@ -2789,9 +2780,8 @@ class ExportPanel:
                 icon_tag.set_value(icon_tag.value().replace(result, driver_name))
 
         # Backup XML file and write new XML
-        if os.path.isfile(xml_bak_path := os.path.join(main.instance_temp, 'driver', 'driver.xml.bak')):
-            os.remove(xml_bak_path)
-        os.rename(xml_path := os.path.join(main.instance_temp, 'driver', 'driver.xml'), xml_bak_path)
+        xml_path = os.path.join(main.instance_temp, 'driver', 'driver.xml')
+        os.replace(xml_path, f'{xml_path}.bak')
         with open(xml_path, 'w', errors='ignore') as out_file:
             out_file.writelines(driver_xml.get_lines())
 
@@ -2818,13 +2808,12 @@ class ExportPanel:
                         continue
                     if include_bak:
                         temp_bak_path = os.path.join(bak_folder, sub_icon.name)
-                        shutil.copy(sub_icon.path, temp_bak_path)
-                        shutil.copy(sub_icon.bak_path, sub_icon.path)
-                        shutil.copy(temp_bak_path, sub_icon.bak_path)
+                        shutil.move(sub_icon.path, temp_bak_path)
+                        shutil.move(sub_icon.bak_path, sub_icon.path)
+                        shutil.move(temp_bak_path, sub_icon.bak_path)
                         os.remove(temp_bak_path)
                     else:
-                        shutil.copy(sub_icon.bak_path, sub_icon.path)
-                        os.remove(sub_icon.bak_path)
+                        shutil.move(sub_icon.bak_path, sub_icon.path)
                         sub_icon.bak_path = None
                 icon.restore_bak = False
                 icon.bak = None
@@ -2856,11 +2845,10 @@ class ExportPanel:
         if self.inc_driver_version.get():
             main.driver_version_new_var.set(str(int(main.driver_version_new_var.get()) + 1))
         driver_xml.restore()
-        if os.path.isfile(lua_bak_path := os.path.join(main.instance_temp, 'driver', 'driver.lua.bak')):
-            os.remove(lua_path := os.path.join(main.instance_temp, 'driver', 'driver.lua'))
-            os.rename(lua_bak_path, lua_path)
-        os.remove(xml_path := os.path.join(main.instance_temp, 'driver', 'driver.xml'))
-        os.rename(f'{xml_path}.bak', xml_path)
+        lua_path = os.path.join(main.instance_temp, 'driver', 'driver.lua')
+        if os.path.isfile(lua_bak_path := f'{lua_path}.bak'):
+            os.replace(lua_bak_path, lua_path)
+        os.replace(f'{xml_path}.bak', os.path.join(main.instance_temp, 'driver', 'driver.xml'))
 
     def validate_driver_name(self, *_):
         driver_name_cmp = re_valid_chars.sub('', driver_name := self.driver_name_var.get())
