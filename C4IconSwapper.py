@@ -58,6 +58,8 @@ conn_id_type = {'HDMI IN': (2000, '5'), 'COMPOSITE IN': (2000, '5'), 'VGA IN': (
 global_instance_id = None
 
 
+# TODO: Change shutil.copy() to shutil.move() where applicable
+
 # TODO: Completely overhaul everything related to multistate
 # TODO: Look into using frames for panel objects
 class C4IconSwapper:
@@ -178,99 +180,23 @@ class C4IconSwapper:
         self.instance_temp = os.path.join(self.global_temp, self.instance_id)
         self.checked_in, self.recover_instance, checked_in_instances = False, '', []
 
-        self.client_dict = {}
-        self.socket_dict = {}
-        self.last_seen = {}
-        self.reestablish = False
-        self.reestablish_start = None
-        self.socket_lock = threading.Lock()
-        self.ipc()
-
         if not os.path.isdir(self.appdata_temp):
             os.mkdir(self.appdata_temp)
         if not os.path.isdir(self.global_temp):
             os.mkdir(self.global_temp)
-        # if os.path.isdir(self.temp_root_dir):
-        #     if os.path.isfile(instance_path := os.path.join(self.temp_root_dir, 'instance')):
-        #         with open(instance_path, 'r', errors='ignore') as instance_file:
-        #             current_instances = instance_file.readlines()
-        #         if current_instances:
-        #             if not os.path.isdir(check_in_path := os.path.join(self.temp_root_dir, 'check_in')):
-        #                 os.mkdir(check_in_path)
-        #             waiting_for_response = True
-        #             self.main_app_wait = False
-        #             # I'm sure there is a better way to format this timestamp lol
-        #             begin_time = float(time.mktime(datetime.now().timetuple()))
-        #             while waiting_for_response:
-        #                 checked_in_instances = os.listdir(check_in_path)
-        #                 if len(checked_in_instances) == len(current_instances):
-        #                     waiting_for_response = False
-        #                 if float(time.mktime(datetime.now().timetuple())) - begin_time >= 2:
-        #                     waiting_for_response = False
-        #             failed_to_check_in = []
-        #             for instance_id in current_instances:
-        #                 if instance_id not in [inst_id.strip() for inst_id in checked_in_instances]:
-        #                     failed_to_check_in.append(instance_id.replace('\n', ''))
-        #
-        #             # Offer project recovery if applicable
-        #             if not os.path.isdir(failed_inst_path := os.path.join(self.temp_root_dir, failed_to_check_in[0])):
-        #                 # Hack to deal with bug cause by crash during recovery
-        #                 failed_to_check_in = []
-        #             if failed_to_check_in and 'driver' in os.listdir(failed_inst_path):
-        #                 def win_close():
-        #                     self.main_app_wait = False
-        #                     recovery_win.destroy()
-        #
-        #                 def flag_recovery():
-        #                     self.recover_instance = failed_to_check_in[0]
-        #                     win_close()
-        #
-        #                 self.main_app_wait = True
-        #                 recovery_win = Tk()
-        #                 recovery_win.focus()
-        #                 recovery_win.protocol('WM_DELETE_WINDOW', win_close)
-        #                 recovery_win.title('Driver Recovery')
-        #                 recovery_win.geometry('300x100')
-        #                 if sys.platform == 'win32':
-        #                     recovery_win.attributes('-toolwindow', True)
-        #                 elif sys.platform == 'darwin':
-        #                     recovery_win.attributes('-type', 'utility')
-        #                 recovery_win.attributes('-topmost', True)
-        #                 recovery_win.resizable(False, False)
-        #                 label_text = 'Existing driver found.'
-        #                 recovery_label = Label(recovery_win, text=label_text)
-        #                 recovery_label.pack()
-        #                 label_text = 'Would you like to recover previous driver?'
-        #                 recovery_label2 = Label(recovery_win, text=label_text)
-        #                 recovery_label2.pack()
-        #                 recovery_button = Button(recovery_win, text='Recover Driver', command=flag_recovery)
-        #                 recovery_button.pack()
-        #                 recovery_win.wait_window()
-        #
-        #             for failed_id in failed_to_check_in:
-        #                 if failed_id == self.recover_instance:
-        #                     continue
-        #                 if os.path.isdir(os.path.join(self.temp_root_dir, failed_id)):
-        #                     shutil.rmtree(os.path.join(self.temp_root_dir, failed_id))
-        #             current_instances = []
-        #             for instance_id in os.listdir(check_in_path):
-        #                 current_instances.append(f'{instance_id}\n')
-        #             shutil.rmtree(check_in_path)
-        #         if f'{self.instance_id}\n' in current_instances:
-        #             self.instance_id = valid_instance_id(current_instances)
-        #         current_instances.append(f'{self.instance_id}\n')
-        #         with open(instance_path, 'w', errors='ignore') as out_file:
-        #             out_file.writelines(current_instances)
-        #     else:
-        #         shutil.rmtree(self.temp_root_dir)
-        #         os.mkdir(self.temp_root_dir)
-        #         with open(instance_path, 'w', errors='ignore') as out_file:
-        #             out_file.writelines(f'{self.instance_id}\n')
-        # else:
-        #     os.mkdir(self.temp_root_dir)
-        #     with open(os.path.join(self.temp_root_dir, 'instance'), 'w', errors='ignore') as out_file:
-        #         out_file.writelines(f'{self.instance_id}\n')
+        while os.path.isdir(self.instance_temp):
+            self.instance_id = str(random.randint(111111, 999999))
+            self.instance_temp = os.path.join(self.global_temp, self.instance_id)
         os.mkdir(self.instance_temp)
+
+        self.client_dict = {}
+        self.socket_dict = {}
+        self.last_seen = {}
+        self.server = None  # Used to determine behavior on app close
+        self.reestablish = False
+        self.reestablish_start = None
+        self.socket_lock = threading.Lock()
+        self.ipc()
 
         # Initialize main program
         self.root = TkinterDnD.Tk()
@@ -478,43 +404,6 @@ class C4IconSwapper:
         else:
             print('Local Delete')
             shutil.rmtree(self.instance_temp)
-        # with open(instance_path := os.path.join(self.temp_root_dir, 'instance'), 'r', errors='ignore') as instance_file:
-        #     current_instances = instance_file.readlines()
-        # if len(current_instances) > 1:
-        #     if os.path.isdir(check_in_path := os.path.join(self.temp_root_dir, 'check_in')) and not self.checked_in:
-        #         return
-        #     elif os.path.isdir(check_in_path):
-        #         begin_time = float(time.mktime(datetime.now().timetuple()))
-        #         while os.path.isdir(check_in_path):
-        #             if float(time.mktime(datetime.now().timetuple())) - begin_time >= 5:
-        #                 return
-        #     os.mkdir(check_in_path)
-        #     waiting = True
-        #     begin_time = float(time.mktime(datetime.now().timetuple()))
-        #     while waiting:
-        #         if len(os.listdir(check_in_path)) == len(current_instances):
-        #             waiting = False
-        #         if float(time.mktime(datetime.now().timetuple())) - begin_time >= 2:
-        #             waiting = False
-        #     failed_to_check_in = []
-        #     for instance_id in current_instances:
-        #         if instance_id == f'{self.instance_id}\n':
-        #             continue
-        #         if instance_id.replace('\n', '') not in os.listdir(check_in_path):
-        #             failed_to_check_in.append(instance_id.replace('\n', ''))
-        #     for failed_id in failed_to_check_in:
-        #         if os.path.isdir(failed_id_path := os.path.join(self.temp_root_dir, failed_id)):
-        #             shutil.rmtree(failed_id_path)
-        #     current_instances = [f'{instance_id}\n' for instance_id in os.listdir(check_in_path)]
-        #     shutil.rmtree(check_in_path)
-        #     if current_instances:
-        #         with open(instance_path, 'w', errors='ignore') as out_file:
-        #             out_file.writelines(current_instances)
-        #         shutil.rmtree(self.temp_dir)
-        #     else:
-        #         shutil.rmtree(self.temp_root_dir)
-        # else:
-        #     shutil.rmtree(self.temp_root_dir)
 
         self.root.destroy()
 
@@ -756,6 +645,7 @@ class C4IconSwapper:
                     server.bind(('127.0.0.1', port))
                     server.listen(5)
                     print(f'Is Server: {self.instance_id}')
+                    self.server = server
                     self.ipc_server(server)
                     return
                 except OSError as e:
@@ -768,6 +658,7 @@ class C4IconSwapper:
                 server.bind(('127.0.0.1', port))
                 server.listen(5)
                 print(f'Is Server: {self.instance_id}')
+                self.server = server
                 threading.Thread(target=self.ipc_server, args=[server], daemon=True).start()
                 break
             except OSError as e:
@@ -780,6 +671,8 @@ class C4IconSwapper:
 
                     client.sendall(f'ID:{self.instance_id}\n'.encode('utf-8'))
                     response = client.recv(1024).decode('utf-8')
+                    if not response:
+                        raise OSError('Server disconnected; Sent Empty Message')
                     print('From Server:', repr(response))
                     for msg in response.strip().split('\n'):
                         match msg.split(':'):
@@ -801,38 +694,51 @@ class C4IconSwapper:
 
     # TODO: Handle takeover logic; Reestablish connections and broadcast new client list
     def ipc_server(self, server):
+        server.settimeout(1)
+        gui_is_alive = self.root.winfo_exists
         if self.reestablish:
             self.reestablish_start = time.time()
         while True:
-            client, _ = server.accept()
-            client.settimeout(2)
-            threading.Thread(target=self.ipc_server_socket, args=[client], daemon=True).start()
-            if not self.root.winfo_exists():
-                raise RuntimeError('👻')
+            try:
+                client, _ = server.accept()
+                client.settimeout(2)
+                threading.Thread(target=self.ipc_server_socket, args=[client], daemon=True).start()
+            except Exception as e:
+                print(e)
+                if not gui_is_alive():
+                    server.close()
+                    raise RuntimeError('👻')
 
     def ipc_server_socket(self, client):
         client_id = None
+        gui_is_alive = self.root.winfo_exists
         while True:
-            if not self.root.winfo_exists():
+            if not gui_is_alive():
+                client.close()
                 raise RuntimeError('👻')
-            if self.reestablish and time.time() - self.reestablish_start > 5:
+            with self.socket_lock:
+                reestablish = self.reestablish
+            if reestablish and time.time() - self.reestablish_start > 5:
                 self.server_broadcast_id_update()
-                self.reestablish_start = False
+                with self.socket_lock:
+                    self.reestablish = False
             try:
                 # Server-side Socket
                 data = client.recv(1024).decode('utf-8')
-                if client_id and client_id not in self.last_seen:
-                    self.last_seen[client_id] = time.time()
+                if not data:
+                    raise OSError('Client disconnected; Sent Empty Message')
+                with self.socket_lock:
+                    if client_id:
+                        self.last_seen[client_id] = time.time()
                 for msg in data.strip().split('\n'):
                     match msg.split(':'):
-                        case ['ID', client_id]:
-                            client_id = msg.split(':')[-1]
-                            client.settimeout(0.125)
-                            self.last_seen[client_id] = time.time()
+                        case ['ID', cid]:
+                            client_id = cid
+                            client.settimeout(0.5)
                             with self.socket_lock:
                                 client_dict = self.client_dict.copy()
-                                self.socket_dict[client_id] = client
-                            if self.reestablish:
+                                reestablish = self.reestablish
+                            if reestablish:
                                 print(f'Reestablished Client: {msg}')
                                 message = f'OK:{client_id}~{self.last_seen[client_id]}\n'
                                 if client_id in client_dict:
@@ -844,6 +750,7 @@ class C4IconSwapper:
                                 print('ID collision', client_id, 'in', client_dict)
                                 client.sendall('INSTANCE ID COLLISION\n'.encode('utf-8'))
                                 continue
+                            # New client added to dicts in broadcast call
                             self.server_broadcast_id_update(new_connection=(client_id, client))
                         case ['HB', client_id]:
                             client.sendall('ACK\n'.encode('utf-8'))
@@ -852,6 +759,9 @@ class C4IconSwapper:
                 if client_id and time.time() - self.last_seen[client_id] < 2:
                     continue
                 print(e)
+                if not client_id:
+                    print(f'Failed to establish client id: {client}')
+                    return
                 # TODO: check folder, delete or flag for recovery
                 print(f'Client {client_id} disconnected')
                 if client_id in os.listdir(self.global_temp):
@@ -863,10 +773,10 @@ class C4IconSwapper:
                         pass
                 with self.socket_lock:
                     self.client_dict.pop(client_id)
+                    self.socket_dict.pop(client_id)
+                    self.last_seen.pop(client_id)
                     print(self.client_dict)
                 self.server_broadcast_id_update()
-                if client_id:
-                    self.last_seen.pop(client_id)
                 return
 
     def ipc_client(self, client):
@@ -876,6 +786,8 @@ class C4IconSwapper:
                     # Client-side Socket
                     client.sendall(f'HB:{self.instance_id}\n'.encode('utf-8'))  # Heartbeat
                     data = client.recv(1024).decode('utf-8')
+                    if not data:
+                        raise OSError('Server disconnected; Sent Empty Message')
                     for msg in data.strip().split('\n'):
                         match msg.split(':'):
                             case ['UPDATE', client_data]:
@@ -904,35 +816,42 @@ class C4IconSwapper:
                     self.ipc(takeover=True)
                 return
 
-    def server_broadcast_id_update(self, new_connection=None):
+    def server_broadcast_id_update(self, new_connection=None, force=False):
+        with self.socket_lock:
+            if self.reestablish and not force:
+                return
         if new_connection:
             client_id = new_connection[0]
             client = new_connection[1]
             with self.socket_lock:
                 self.client_dict[client_id] = str(time.time())
                 self.socket_dict[client_id] = client
-        with self.socket_lock:
-            current_sockets = list(self.socket_dict.items())
-            new_client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
-        if new_connection:
-            # noinspection PyUnboundLocalVariable
-            client.sendall(f'OK:{new_client_list}\n'.encode('utf-8'))
-            # noinspection PyUnboundLocalVariable
-            current_sockets = [(k, v) for k, v in current_sockets if k != client_id]
-        print('__Broadcast New Client List__')
-        print(new_client_list)
-        resend = False
-        for cid, sock in current_sockets:
-            try:
-                sock.sendall(f'UPDATE:{new_client_list}\n'.encode('utf-8'))
-            except OSError as e:
-                print(f'Broadcast Error: {e}')
-                with self.socket_lock:
-                    self.socket_dict.pop(cid)
-                    resend = True
-        if resend:
-            print('__Broadcast Resend__')
-            self.server_broadcast_id_update()
+        resend = True
+        while resend:
+            resend = False
+            with self.socket_lock:
+                current_sockets = list(self.socket_dict.items())
+                new_client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
+            if new_connection:
+                # noinspection PyUnboundLocalVariable
+                client.sendall(f'OK:{new_client_list}\n'.encode('utf-8'))
+                # noinspection PyUnboundLocalVariable
+                current_sockets = [(k, v) for k, v in current_sockets if k != client_id]
+            print('__Broadcast New Client List__')
+            print(new_client_list)
+            for cid, sock in current_sockets:
+                try:
+                    sock.settimeout(1.125)
+                    sock.sendall(f'UPDATE:{new_client_list}\n'.encode('utf-8'))
+                    sock.settimeout(0.5)
+                except OSError as e:
+                    print(f'Broadcast Error with {cid}: {e}')
+                    with self.socket_lock:
+                        self.client_dict.pop(cid)
+                        self.socket_dict.pop(cid)
+                        if not self.socket_dict:
+                            return
+                        resend = True
 
     # TODO: Make the undo feature in an actually decent way
     def undo(self, *_):
@@ -954,18 +873,6 @@ class C4IconSwapper:
         # EXTREMELY memory inefficient! 😎
         self.undo_history.append(copy.deepcopy(C4IS(self)))
         self.edit.entryconfig(self.undo_pos, state=NORMAL)
-
-    # def instance_check(self):
-    #     if self.checked_in and not os.path.isdir(os.path.join(self.global_temp, 'check_in')):
-    #         self.checked_in = False
-    #     elif not self.checked_in and os.path.isdir(check_in_path := os.path.join(self.global_temp, 'check_in')):
-    #         with open(os.path.join(check_in_path, self.instance_id), 'w', errors='ignore') as check_in_file:
-    #             check_in_file.writelines('')
-    #         self.checked_in = True
-    #         self.root.title(f'C4 Icon Swapper ({self.instance_id})')
-    #
-    #     # noinspection PyTypeChecker
-    #     self.root.after(150, self.instance_check)
 
     def easter(self, *_, increment=True):
         if self.easter_counter < 0:
