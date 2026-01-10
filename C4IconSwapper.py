@@ -27,8 +27,8 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 from XMLObject import XMLObject, XMLTag
 
 version = '1.3'
-label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
 
+label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
 re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9]')
 valid_img_types = ('.png', '.jpg', '.gif', '.jpeg')
 conn_template = """
