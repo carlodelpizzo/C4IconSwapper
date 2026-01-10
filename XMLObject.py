@@ -380,7 +380,10 @@ class XMLObject:
     def set_restore_point(self):
         self.restore_point = copy.deepcopy(self)
 
-    def restore(self):
+    def restore(self, keep_restore_point=False):
         if not self.restore_point:
             return
         self.tags = self.restore_point.tags
+        if keep_restore_point:
+            return
+        self.restore_point = None
