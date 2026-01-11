@@ -167,15 +167,16 @@ class C4IconSwapper:
         self.exceptions = deque()
         self.handler_recall_id = None
 
+        if not sys.platform == 'win32':
+            print('***************************************************')
+            print('This application is designed to only run on Windows')
+            print('***************************************************')
+            return
+
         # Create temporary directory
         self.instance_id = str(random.randint(111111, 999999))
         self.cur_dir = os.getcwd()
-        if sys.platform == 'win32':
-            self.appdata_temp = pathjoin(os.environ.get('APPDATA'), 'C4IconSwapper')
-        elif sys.platform == 'darwin':  # macOS
-            self.appdata_temp = os.path.expanduser('~/Library/Application Support/C4IconSwapper')
-        else:  # Linux
-            self.appdata_temp = os.path.expanduser('~/.config/C4IconSwapper')
+        self.appdata_temp = pathjoin(os.environ.get('APPDATA'), 'C4IconSwapper')
         self.global_temp = pathjoin(self.appdata_temp, 'C4IconSwapperTemp')
         self.instance_temp = pathjoin(self.global_temp, self.instance_id)
         self.checked_in, self.recover_instance, checked_in_instances = False, '', []
