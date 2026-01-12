@@ -713,7 +713,7 @@ class C4IconSwapper:
                 data = client.recv(1024).decode('utf-8')
                 if not data:
                     raise OSError('Client disconnected; Sent Empty Message')
-                last_seen_time = str(time.time())
+                last_seen_time = time.time()
                 for msg in data.strip().split('\n'):
                     match msg.split(':'):
                         case ['ID', cid]:
