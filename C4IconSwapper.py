@@ -200,6 +200,7 @@ class C4IconSwapper:
         self.client_dict = {}
         self.socket_dict = {}
         self.last_seen = {}
+        self.curr_server_id = ''
         self.server = None  # Used to determine behavior on app close
         self.reestablish = False
         self.reestablish_start = None
@@ -385,6 +386,7 @@ class C4IconSwapper:
             shutil.rmtree(self.global_temp)
         else:
             print('Local Delete')
+            print(self.client_dict)
             shutil.rmtree(self.instance_temp)
 
         self.root.destroy()
@@ -616,8 +618,8 @@ class C4IconSwapper:
         elif win_type == 'states':
             self.states_win = StatesWin(self)
 
-    # TODO: When self.reestablish, check folders against instance ids, new thread for func?
     def ipc(self, takeover=False):
+        # TODO: Do port search
         port = 61352
         if takeover:
             for _ in range(5):
@@ -625,8 +627,9 @@ class C4IconSwapper:
                     print('Trying Takeover')
                     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     server.bind(('127.0.0.1', port))
-                    server.listen(5)
                     print(f'Is Server: {self.instance_id}')
+                    self.curr_server_id = self.instance_id
+                    server.listen(5)
                     self.server = server
                     self.ipc_server(server)
                     return
@@ -638,8 +641,9 @@ class C4IconSwapper:
             try:
                 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 server.bind(('127.0.0.1', port))
-                server.listen(5)
                 print(f'Is Server: {self.instance_id}')
+                self.curr_server_id = self.instance_id
+                server.listen(5)
                 self.server = server
                 threading.Thread(target=self.ipc_server, args=[server], daemon=True).start()
                 break
@@ -658,7 +662,9 @@ class C4IconSwapper:
                     print('From Server:', repr(response))
                     for msg in response.strip().split('\n'):
                         match msg.split(':'):
-                            case ['OK', client_data]:
+                            case ['OK', server_id, client_data]:
+                                self.curr_server_id = server_id
+                                print(f'Current Server: {server_id}')
                                 client_list = client_data.split('|')
                                 self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
                                 print(self.client_dict)
@@ -674,7 +680,7 @@ class C4IconSwapper:
                     print('IPC Initialization Failed')
                     time.sleep(0.1)
 
-    # TODO: Handle takeover logic; Reestablish connections and broadcast new client list
+    # TODO: when becoming server and not reestablish, check for stray folders and recovery files
     def ipc_server(self, server):
         server.settimeout(1)
         gui_is_alive = self.root.winfo_exists
@@ -692,7 +698,7 @@ class C4IconSwapper:
             except Exception as e:
                 print(f'Server loop error: {e}')
 
-    # TODO: add variable for current server id. If reestablishing with same server, ignore id collisions
+    # TODO: Handle case where client tries to reestablish with server than is not in reestablish mode
     def ipc_server_socket(self, client):
         client_id = None
         gui_is_alive = self.root.winfo_exists
@@ -704,9 +710,12 @@ class C4IconSwapper:
             with socket_lock:
                 reestablish = self.reestablish
             if reestablish and time.time() - self.reestablish_start > 5:
-                # TODO: Cleanup any clients who have not checked in who are in dict
+                # TODO: Cleanup any clients who have not checked in who are in dict,
+                #  check folders against instance ids, new thread for func?
                 self.server_broadcast_id_update()
                 with socket_lock:
+                    print('Reestablish Finished')
+                    print(self.client_dict)
                     self.reestablish = False
             try:
                 # Server-side Socket
@@ -725,11 +734,11 @@ class C4IconSwapper:
                             if reestablish:
                                 print(f'Reestablished Client: {msg}')
                                 if client_id in client_dict:
-                                    message = f'{client_id}~{client_dict[client_id]}\n'
+                                    message = f'OK:{self.instance_id}:{client_id}~{client_dict[client_id]}\n'
                                 else:
                                     with socket_lock:
                                         self.client_dict[client_id] = last_seen_time
-                                    message = f'OK:{client_id}~{last_seen_time}\n'
+                                    message = f'OK:{self.instance_id}:{client_id}~{last_seen_time}\n'
                                 with socket_lock:
                                     self.last_seen[client_id] = last_seen_time
                                     self.socket_dict[client_id] = client
@@ -803,6 +812,7 @@ class C4IconSwapper:
                     print('Selected self as server')
                     del compare_dict
                     self.reestablish = True
+                    self.client_dict.pop(self.instance_id)
                     self.ipc(takeover=True)
                 return
 
@@ -829,7 +839,7 @@ class C4IconSwapper:
             if new_connection:
                 print('__New Client Established__')
                 print(f'Client ID: {client_id}')
-                client.sendall(f'OK:{new_client_list}\n'.encode('utf-8'))
+                client.sendall(f'OK:{self.instance_id}:{new_client_list}\n'.encode('utf-8'))
             print('__Broadcast New Client List__')
             print(new_client_list)
             for cid, sock in current_sockets:
