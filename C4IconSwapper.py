@@ -820,6 +820,8 @@ class C4IconSwapper:
         with self.socket_lock:
             if self.reestablish and not force:
                 return
+            if not self.client_dict and not new_connection:
+                return
         if new_connection:
             client_id, client = new_connection[0], new_connection[1]
             with self.socket_lock:
