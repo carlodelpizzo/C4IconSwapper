@@ -185,6 +185,7 @@ class C4IconSwapper:
             os.mkdir(self.appdata_temp)
         if not os.path.isdir(self.global_temp):
             os.mkdir(self.global_temp)
+        # First layer of id collision avoidance
         while os.path.isdir(self.instance_temp):
             self.instance_id = str(random.randint(111111, 999999))
             self.instance_temp = pathjoin(self.global_temp, self.instance_id)
@@ -201,9 +202,9 @@ class C4IconSwapper:
         self.socket_dict = {}
         self.last_seen = {}
         self.curr_server_id = ''
-        self.server = None  # Used to determine behavior on app close
         self.reestablish = False
         self.reestablish_start = None
+        self.reestablish_ids = None
         self.socket_lock = threading.Lock()
         self.ipc()
 
@@ -381,7 +382,7 @@ class C4IconSwapper:
         self.end_program()
 
     def end_program(self):
-        if self.server and not self.client_dict:
+        if self.curr_server_id == self.instance_id and not self.client_dict:
             print('Global Delete')
             shutil.rmtree(self.global_temp)
         else:
@@ -625,81 +626,127 @@ class C4IconSwapper:
             for _ in range(5):
                 try:
                     print('Trying Takeover')
-                    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    server.bind(('127.0.0.1', port))
-                    print(f'Is Server: {self.instance_id}')
-                    self.curr_server_id = self.instance_id
-                    server.listen(5)
-                    self.server = server
-                    self.ipc_server(server)
+                    self.ipc_establish_server(port, threaded=False)
                     return
                 except OSError as e:
                     print(f'Takeover Failed: {e}')
                     time.sleep(0.01)
+            # If takeover fails, erased client_dict and connect as client
             self.client_dict = {}
+            self.ipc_establish_client(port)
+            return
         while True:
             try:
-                server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                server.bind(('127.0.0.1', port))
-                print(f'Is Server: {self.instance_id}')
-                self.curr_server_id = self.instance_id
-                server.listen(5)
-                self.server = server
-                threading.Thread(target=self.ipc_server, args=[server], daemon=True).start()
+                self.ipc_establish_server(port)
                 break
             except OSError as e:
                 print(f'IPC Error: {e}')
+                self.ipc_establish_client(port)
+                break
+
+    def ipc_establish_server(self, port, threaded=True):
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.bind(('127.0.0.1', port))
+        print(f'Is Server: {self.instance_id}')
+
+        # First server cleanup. Only first server should enter this loop without being in reestablish mode
+        if not self.reestablish:
+            # TODO: Add instance recovery methods
+            delete_items = set()
+            for item in os.listdir(self.global_temp):
+                if item == self.instance_id:
+                    continue
+                delete_items.add(pathjoin(self.global_temp, item))
+            if delete_items:
+                print('Doing temp directory cleanup')
+            for item in delete_items:
                 try:
-                    print(f'Is Client: {self.instance_id}')
-                    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    client.settimeout(2)
-                    client.connect(('127.0.0.1', port))
+                    if os.path.isdir(item):
+                        shutil.rmtree(item)
+                        print(f'Deleted: {item}')
+                        continue
+                    os.remove(item)
+                    print(f'Deleted: {item}')
+                except PermissionError:
+                    print(f'Failed to delete: {item}')
 
-                    client.sendall(f'ID:{self.instance_id}\n'.encode('utf-8'))
-                    response = client.recv(1024).decode('utf-8')
-                    if not response:
-                        raise OSError('Server disconnected; Sent Empty Message')
-                    print('From Server:', repr(response))
-                    for msg in response.strip().split('\n'):
-                        match msg.split(':'):
-                            case ['OK', server_id, client_data]:
-                                self.curr_server_id = server_id
-                                print(f'Current Server: {server_id}')
-                                client_list = client_data.split('|')
-                                self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
-                                print(self.client_dict)
-                                threading.Thread(target=self.ipc_client, args=[client], daemon=True).start()
-                                break
-                            case ['INSTANCE ID COLLISION']:
-                                self.instance_id = str(random.randint(111111, 999999))
-                                print('New id:', self.instance_id)
-                                continue
-                    break
-                except OSError as e:  # If server disconnects during first handshake
-                    print(e)
-                    print('IPC Initialization Failed')
-                    time.sleep(0.1)
+        self.curr_server_id = self.instance_id
+        server.listen(5)
+        if threaded:
+            threading.Thread(target=self.ipc_server_loop, args=[server], daemon=True).start()
+        else:
+            self.ipc_server_loop(server)
 
-    # TODO: when becoming server and not reestablish, check for stray folders and recovery files
-    def ipc_server(self, server):
+    def ipc_establish_client(self, port):
+        while True:
+            try:
+                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                print(f'Is Client: {self.instance_id}')
+                client.settimeout(2)
+                client.connect(('127.0.0.1', port))
+                client.sendall(f'ID:{self.instance_id}\n'.encode('utf-8'))
+
+                response = client.recv(1024).decode('utf-8')
+                if not response:
+                    raise OSError('Server disconnected; Sent Empty Message')
+                print('From Server:', repr(response))
+                for msg in response.strip().split('\n'):
+                    match msg.split(':'):
+                        case ['OK', server_id, client_data]:
+                            self.curr_server_id = server_id
+                            print(f'Became Client of Current Server: {server_id}')
+                            client_list = client_data.split('|')
+                            self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
+                            print(self.client_dict)
+                            threading.Thread(target=self.ipc_client_loop, args=[client], daemon=True).start()
+                            return
+                        case ['INSTANCE ID COLLISION']:
+                            self.instance_id = str(random.randint(111111, 999999))
+                            print('New id:', self.instance_id)
+                            break
+            except OSError as e:  # If server disconnects during first handshake
+                print(e)
+                print('IPC Initialization Failed')
+                time.sleep(0.1)
+
+    def ipc_server_loop(self, server):
         server.settimeout(1)
         gui_is_alive = self.root.winfo_exists
         if self.reestablish:
             self.reestablish_start = time.time()
+            self.reestablish_ids = set()
+
         while True:
             try:
                 client, _ = server.accept()
                 client.settimeout(2)
-                threading.Thread(target=self.ipc_server_socket, args=[client], daemon=True).start()
+                threading.Thread(target=self.ipc_server_client_loop, args=[client], daemon=True).start()
+
             except socket.timeout:
+                with self.socket_lock:
+                    reestablish = self.reestablish
+                # Done between 4 and 6 seconds because of timeout
+                if reestablish and time.time() - self.reestablish_start > 4:
+                    # TODO: Cleanup any clients who have not checked in who are in dict,
+                    #  check folders against instance ids, new thread for func?
+                    self.server_broadcast_id_update()
+                    print('Reestablish Finished')
+                    with self.socket_lock:
+                        print(self.client_dict)
+                        self.reestablish_ids = None
+                        self.reestablish_start = None
+                        self.reestablish = False
+
+                # Ghost server check
                 if not gui_is_alive():
                     server.close()
                     raise RuntimeError('👻')
+
             except Exception as e:
                 print(f'Server loop error: {e}')
 
     # TODO: Handle case where client tries to reestablish with server than is not in reestablish mode
-    def ipc_server_socket(self, client):
+    def ipc_server_client_loop(self, client):
         client_id = None
         gui_is_alive = self.root.winfo_exists
         socket_lock = self.socket_lock
@@ -707,18 +754,7 @@ class C4IconSwapper:
             if not gui_is_alive():
                 client.close()
                 raise RuntimeError('👻')
-            with socket_lock:
-                reestablish = self.reestablish
-            if reestablish and time.time() - self.reestablish_start > 5:
-                # TODO: Cleanup any clients who have not checked in who are in dict,
-                #  check folders against instance ids, new thread for func?
-                self.server_broadcast_id_update()
-                with socket_lock:
-                    print('Reestablish Finished')
-                    print(self.client_dict)
-                    self.reestablish = False
             try:
-                # Server-side Socket
                 data = client.recv(1024).decode('utf-8')
                 if not data:
                     raise OSError('Client disconnected; Sent Empty Message')
@@ -735,6 +771,8 @@ class C4IconSwapper:
                                 print(f'Reestablished Client: {msg}')
                                 if client_id in client_dict:
                                     message = f'OK:{self.instance_id}:{client_id}~{client_dict[client_id]}\n'
+                                    with socket_lock:
+                                        self.reestablish_ids.add(client_id)
                                 else:
                                     with socket_lock:
                                         self.client_dict[client_id] = last_seen_time
@@ -761,14 +799,13 @@ class C4IconSwapper:
                 if not client_id:
                     print(f'Failed to establish client id: {client}')
                     return
-                # TODO: check folder, delete or flag for recovery
                 print(f'Client {client_id} disconnected')
                 if client_id in os.listdir(self.global_temp):
+                    # TODO: Check client's folder and determine if worth flagging for recovery
                     if 'driver' not in os.listdir(client_folder := pathjoin(self.global_temp, client_id)):
                         shutil.rmtree(client_folder)
                         print(f'Deleted {client_id} folder')
                     else:
-                        # TODO: Flag for recovery?
                         pass
                 with socket_lock:
                     self.client_dict.pop(client_id)
@@ -778,7 +815,7 @@ class C4IconSwapper:
                 self.server_broadcast_id_update()
                 return
 
-    def ipc_client(self, client):
+    def ipc_client_loop(self, client):
         while True:
             try:
                 while True:
@@ -801,19 +838,19 @@ class C4IconSwapper:
                 print(e)
                 print('Current Server disconnected')
                 compare_dict = {k: float(v) for k, v in self.client_dict.items()}
-                if not min(self.client_dict, key=compare_dict.get) == self.instance_id:
-                    del compare_dict
-                    client.close()
-                    time.sleep(1)
-                    self.reestablish = True
-                    self.client_dict = {}
-                    self.ipc()
-                else:
+                self.reestablish = True
+                if min(self.client_dict, key=compare_dict.get) == self.instance_id:
                     print('Selected self as server')
                     del compare_dict
-                    self.reestablish = True
                     self.client_dict.pop(self.instance_id)
                     self.ipc(takeover=True)
+                    return
+                del compare_dict
+                client.close()
+                time.sleep(1)
+                print('Attempting reconnection as client')
+                self.client_dict = {}
+                self.ipc()
                 return
 
     def server_broadcast_id_update(self, new_connection=None, force=False):
