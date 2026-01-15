@@ -621,9 +621,9 @@ class C4IconSwapper:
             self.states_win = StatesWin(self)
 
     def ipc(self, takeover=False):
-        def establish_self_as_server(threaded=True):
+        def establish_self_as_server():
             server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            server.bind(('127.0.0.1', port))
+            server.bind(('127.0.0.1', port))  # This is where exception is raised
             print(f'Is Server: {self.instance_id}')
 
             # First server cleanup. Only first server should enter this loop without being in reestablish mode
@@ -649,10 +649,7 @@ class C4IconSwapper:
 
             self.curr_server_id = self.instance_id
             server.listen(5)
-            if threaded:
-                threading.Thread(target=self.ipc_server_loop, args=[server], daemon=True).start()
-            else:
-                self.ipc_server_loop(server)
+            threading.Thread(target=self.ipc_server_loop, args=[server], daemon=True).start()
 
         def establish_self_as_client():
             while True:
@@ -661,7 +658,8 @@ class C4IconSwapper:
                     print(f'Is Client: {self.instance_id}')
                     client.settimeout(2)
                     client.connect(('127.0.0.1', port))
-                    client.sendall(f'ID:{self.instance_id}\n'.encode('utf-8'))
+                    msg = f'ID:{self.instance_id}\n' if not self.reestablish else f'RE:{self.instance_id}\n'
+                    client.sendall(msg.encode('utf-8'))
 
                     response = client.recv(1024).decode('utf-8')
                     if not response:
@@ -672,6 +670,9 @@ class C4IconSwapper:
                             case ['OK', server_id, client_data]:
                                 self.curr_server_id = server_id
                                 print(f'Became Client of Current Server: {server_id}')
+                                if self.reestablish:
+                                    self.reestablish = False
+                                    print('Reestablishment Ended')
                                 client_list = client_data.split('|')
                                 self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
                                 print(self.client_dict)
@@ -692,7 +693,7 @@ class C4IconSwapper:
             for _ in range(5):
                 try:
                     print('Trying Takeover')
-                    establish_self_as_server(threaded=False)
+                    establish_self_as_server()
                     return
                 except OSError as e:
                     print(f'Takeover Failed: {e}')
@@ -772,14 +773,33 @@ class C4IconSwapper:
                 threading.Thread(target=self.ipc_server_client_loop, args=[client], daemon=True).start()
 
             except socket.timeout:
+                # Reestablish ending logic
                 with self.socket_lock:
                     reestablish = self.reestablish
-                # Done between 4 and 6 seconds because of timeout
+                # Reestablishment period can range between 4 and 5 seconds because of server timeout
                 if reestablish and time.time() - self.reestablish_start > 4:
-                    # TODO: Cleanup any clients who have not checked in who are in dict,
-                    #  check folders against instance ids, new thread for func?
                     print('Reestablishment Period Ended')
                     with self.socket_lock:
+                        safety_check = self.client_dict.keys() ^ self.reestablish_ids
+                        if safety_check:
+                            print('___Something went wrong___')
+                            print(self.client_dict.keys())
+                            print(self.reestablish_ids)
+                        # Remove clients who are in dict but failed to reestablish
+                        purge_set = set()
+                        for cid in self.client_dict.keys() - self.reestablish_ids:
+                            self.client_dict.pop(cid)
+                            if os.path.isdir(dead_client_path := pathjoin(self.global_temp, cid)):
+                                purge_set.add(dead_client_path)
+                        # TODO: New thread to hand IO for purging dead client folders
+                                # try:
+                                #     shutil.rmtree(dead_client_path)
+                                #     print(f'Deleted: {dead_client_path}')
+                                # except PermissionError:
+                                #     print(f'Failed to delete: {dead_client_path}')
+                        for cid in self.client_dict.copy():
+                            if not os.path.isdir(pathjoin(self.global_temp, cid)):
+                                self.client_dict.pop(cid)
                         print(self.client_dict if self.client_dict else 'No Clients')
                         self.reestablish_ids = None
                         self.reestablish_start = None
@@ -810,27 +830,42 @@ class C4IconSwapper:
                 last_seen_time = time.time()
                 for msg in data.strip().split('\n'):
                     match msg.split(':'):
+                        case ['RE', cid]:
+                            client_id = cid
+                            client.settimeout(0.5)
+                            print(f'Reestablished Client: {cid}')
+                            with socket_lock:
+                                client_dict = self.client_dict.copy()
+                            if client_id in client_dict:
+                                dict_time = client_dict[client_id]
+                                new_client = None
+                            else:
+                                print('Client not in dictionary tried to reconnected')
+                                dict_time = last_seen_time
+                                new_client = (client_id, client)
+                            with socket_lock:
+                                if reestablish := self.reestablish:
+                                    self.client_dict[client_id] = dict_time
+                                    self.last_seen[client_id] = last_seen_time
+                                    self.socket_dict[client_id] = client
+                                    if not new_client:
+                                        self.reestablish_ids.add(client_id)
+
+                            if reestablish:
+                                client.sendall(f'OK:{self.instance_id}:{client_id}~{dict_time}\n'.encode('utf-8'))
+                            else:
+                                if new_client:
+                                    self.server_broadcast_id_update(new_connection=new_client)
+                                else:
+                                    with self.socket_lock:
+                                        client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
+                                    client.sendall(f'OK:{self.instance_id}:{client_list}\n'.encode('utf-8'))
                         case ['ID', cid]:
                             client_id = cid
                             client.settimeout(0.5)
                             with socket_lock:
                                 client_dict = self.client_dict.copy()
                                 reestablish = self.reestablish
-                            if reestablish:
-                                print(f'Reestablished Client: {msg}')
-                                if client_id in client_dict:
-                                    message = f'OK:{self.instance_id}:{client_id}~{client_dict[client_id]}\n'
-                                    with socket_lock:
-                                        self.reestablish_ids.add(client_id)
-                                else:
-                                    with socket_lock:
-                                        self.client_dict[client_id] = last_seen_time
-                                    message = f'OK:{self.instance_id}:{client_id}~{last_seen_time}\n'
-                                with socket_lock:
-                                    self.last_seen[client_id] = last_seen_time
-                                    self.socket_dict[client_id] = client
-                                client.sendall(message.encode('utf-8'))
-                                continue
                             if client_id in client_dict:
                                 print('ID collision', client_id, 'in', client_dict)
                                 client.sendall('INSTANCE ID COLLISION\n'.encode('utf-8'))
