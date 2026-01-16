@@ -382,11 +382,12 @@ class C4IconSwapper:
         self.end_program()
 
     def end_program(self):
-        if self.curr_server_id == self.instance_id and not self.client_dict:
+        if not (is_server := self.curr_server_id == self.instance_id):
+            print('')
+        if is_server and not self.client_dict:
             print('Global Delete')
             shutil.rmtree(self.global_temp)
         else:
-            print('')
             print('Local Delete')
             print(self.client_dict)
             shutil.rmtree(self.instance_temp)
@@ -741,6 +742,8 @@ class C4IconSwapper:
 
                     time.sleep(1)
             except OSError as e:
+                if ack_count:
+                    print('')
                 print(e)
                 print('Current Server disconnected')
                 compare_dict = {k: float(v) for k, v in self.client_dict.items()}
@@ -760,6 +763,16 @@ class C4IconSwapper:
                 return
 
     def ipc_server_loop(self, server):
+        def purge_clients(client_paths):
+            for path in client_paths:
+                try:
+                    shutil.rmtree(path)
+                    print(f'Deleted: {path}')
+                except PermissionError:
+                    print(f'Failed to delete: {path}')
+                except OSError as er:
+                    print(f'OS Error on {path}: {er}')
+
         server.settimeout(1)
         gui_is_alive = self.root.winfo_exists
         if self.reestablish:
@@ -791,12 +804,9 @@ class C4IconSwapper:
                             self.client_dict.pop(cid)
                             if os.path.isdir(dead_client_path := pathjoin(self.global_temp, cid)):
                                 purge_set.add(dead_client_path)
-                        # TODO: New thread to hand IO for purging dead client folders
-                                # try:
-                                #     shutil.rmtree(dead_client_path)
-                                #     print(f'Deleted: {dead_client_path}')
-                                # except PermissionError:
-                                #     print(f'Failed to delete: {dead_client_path}')
+                        if purge_set:
+                            threading.Thread(target=purge_clients, args=[purge_set], daemon=True).start()
+                        del purge_set
                         for cid in self.client_dict.copy():
                             if not os.path.isdir(pathjoin(self.global_temp, cid)):
                                 self.client_dict.pop(cid)
@@ -814,11 +824,11 @@ class C4IconSwapper:
             except Exception as e:
                 print(f'Server loop error: {e}')
 
-    # TODO: Handle case where client tries to reestablish with server than is not in reestablish mode
     def ipc_server_client_loop(self, client):
         client_id = None
         gui_is_alive = self.root.winfo_exists
         socket_lock = self.socket_lock
+        grace = True
         while True:
             if not gui_is_alive():
                 client.close()
@@ -826,8 +836,13 @@ class C4IconSwapper:
             try:
                 data = client.recv(1024).decode('utf-8')
                 if not data:
+                    if grace:
+                        grace = False
+                        print('Client sent empty message; given grace')
+                        continue
                     raise OSError('Client disconnected; Sent Empty Message')
                 last_seen_time = time.time()
+                grace = True
                 for msg in data.strip().split('\n'):
                     match msg.split(':'):
                         case ['RE', cid]:
@@ -853,14 +868,17 @@ class C4IconSwapper:
 
                             if reestablish:
                                 client.sendall(f'OK:{self.instance_id}:{client_id}~{dict_time}\n'.encode('utf-8'))
-                            else:
-                                if new_client:
-                                    self.server_broadcast_id_update(new_connection=new_client)
-                                else:
-                                    with self.socket_lock:
-                                        client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
-                                    client.sendall(f'OK:{self.instance_id}:{client_list}\n'.encode('utf-8'))
-                        case ['ID', cid]:
+                                continue
+                            # If new client tries to "reestablish" while server not in reestablish mode
+                            if new_client:
+                                self.server_broadcast_id_update(new_connection=new_client)
+                                continue
+                            # If existing client tries to reestablish while server not in reestablish mode
+                            with self.socket_lock:
+                                client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
+                            client.sendall(f'OK:{self.instance_id}:{client_list}\n'.encode('utf-8'))
+
+                        case ['ID', cid]:  # Typical new client establishment
                             client_id = cid
                             client.settimeout(0.5)
                             with socket_lock:
@@ -872,10 +890,12 @@ class C4IconSwapper:
                                 continue
                             # New client added to dicts in broadcast call
                             self.server_broadcast_id_update(new_connection=(client_id, client))
-                        case ['HB', client_id]:
+
+                        case ['HB', client_id]:  # Heartbeat
                             with socket_lock:
                                 self.last_seen[client_id] = last_seen_time
                             client.sendall('ACK\n'.encode('utf-8'))
+
             except OSError as e:
                 if client_id and time.time() - self.last_seen[client_id] < 2:
                     continue
@@ -885,12 +905,14 @@ class C4IconSwapper:
                     return
                 print(f'Client {client_id} disconnected')
                 if client_id in os.listdir(self.global_temp):
-                    # TODO: Check client's folder and determine if worth flagging for recovery
-                    if 'driver' not in os.listdir(client_folder := pathjoin(self.global_temp, client_id)):
-                        shutil.rmtree(client_folder)
-                        print(f'Deleted {client_id} folder')
-                    else:
-                        pass
+                    has_driver = 'driver' in os.listdir(client_folder := pathjoin(self.global_temp, client_id))
+                    has_replacements = os.listdir(pathjoin(client_folder, 'Replacement Icons'))
+                    if has_driver or has_replacements:
+                        # TODO: Add instance recovery methods
+                        print('Flagged as worthy of recovery')
+                        print('TODO: Method for client folder recovery')
+                    shutil.rmtree(client_folder)
+                    print(f'Deleted {client_id} folder')
                 with socket_lock:
                     self.client_dict.pop(client_id)
                     self.socket_dict.pop(client_id)
