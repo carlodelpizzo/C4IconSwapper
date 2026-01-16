@@ -30,7 +30,7 @@ version = '1.3'
 
 label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
 re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9]')
-valid_img_types = ('.png', '.jpg', '.gif', '.jpeg')
+valid_img_types = {'.bmp', '.gif', '.jpeg', '.jpg', '.png', '.tif', '.tiff', '.webp'}
 conn_template = """
 <connection>
     <id>0</id>
@@ -58,6 +58,8 @@ conn_id_type = {'HDMI IN': (2000, '5'), 'COMPOSITE IN': (2000, '5'), 'VGA IN': (
 global_instance_id = None
 
 pathjoin = os.path.join
+
+max_image_pixels = Image.MAX_IMAGE_PIXELS
 
 
 # TODO: Completely overhaul everything related to multistate
@@ -1006,7 +1008,7 @@ class Icon:
     def __init__(self, path: str, img=None):
         if not os.path.isfile(path):
             raise FileNotFoundError('Failed to find path to image file')
-        if not path.endswith(valid_img_types):
+        if not os.path.splitext(path)[1].lower() in valid_img_types:
             raise TypeError('Invalid image type')
         self.path = path
         self.tk_icon_lg = None
@@ -1754,7 +1756,11 @@ class C4zPanel:
                     try:
                         with Image.open(item.path) as img:
                             actual_size = img.size[0]
-                    except UnidentifiedImageError:
+                    except Image.DecompressionBombError:
+                        print(f'Skipping potential decompression bomb: {item.path}')
+                        continue
+                    except (UnidentifiedImageError, OSError):
+                        print(f'Issue with item in get_icons: {item.path}')
                         continue
                     file_stem, file_ext = os.path.splitext(item.name)
                     img_info = re.search(r'^(?:(\d+)_)?(.+?)(?:_(\d+))?$', file_stem).groups()
@@ -2302,18 +2308,18 @@ class ReplacementPanel:
                     continue
                 for directory in list_all_sub_directories(path, include_root_dir=True):
                     for file in os.listdir(directory):
-                        if (img_path := pathjoin(directory, file)).endswith(valid_img_types):
-                            self.load_replacement(file_path=img_path)
+                        if os.path.splitext(file)[1].lower() in valid_img_types:
+                            self.load_replacement(file_path=pathjoin(directory, file))
             self.multi_threading = False
             return
         if not file_path:
             if bank_index is None:
                 if self.multi_threading:
                     return
-                for path in filedialog.askopenfilenames(filetypes=[('Image', '*.png *.jpg *.jpeg *.gif')]):
+                for path in filedialog.askopenfilenames(filetypes=[('Image', ' '.join(valid_img_types))]):
                     self.load_replacement(file_path=path)
                 return
-        elif not os.path.isfile(file_path) or not file_path.endswith(valid_img_types):
+        elif not os.path.isfile(file_path) or not os.path.splitext(file_path)[1].lower() in valid_img_types:
             return
 
         main = self.main
@@ -2325,70 +2331,77 @@ class ReplacementPanel:
                 pathobj = Path(file_path)
                 new_path = pathjoin(self.replacement_icons_dir, f'{pathobj.stem}{next(next_num)}{pathobj.suffix}')
 
-            with Image.open(file_path) as img:
-                output_img = img.resize((1024, 1024), Resampling.LANCZOS)
-                output_img.save(new_path)
-                new_size = os.path.getsize(new_path)
-                # Check if image already in replacement icons directory
-                for file in os.listdir(self.replacement_icons_dir):
-                    if os.path.getsize(cmp_path := pathjoin(self.replacement_icons_dir, file)) != new_size:
-                        continue
-                    if cmp_path == new_path or not filecmp.cmp(cmp_path, new_path):
-                        continue
-                    os.remove(new_path)
-                    if not self.img_bank or (len(self.img_bank) < main.img_bank_size and self.replacement_icon):
-                        if bank_index is None:
-                            return
-                        self.img_bank.append(self.replacement_icon)
-                        self.refresh_img_bank()
-                        self.replacement_icon = None
-                        self.replacement_img_label.config(image=main.blank)
-                        self.replacement_img_label.image = main.blank
-                        self.replace_button['state'] = DISABLED
-                        self.replace_all_button['state'] = DISABLED
-                        return
-                    elif self.replacement_icon and self.replacement_icon.path == cmp_path and bank_index is not None:
-                        rp_icon = self.replacement_icon
-                        max_bank_size = main.img_bank_size - 1
-                        cur_bank_size = len(self.img_bank) - 1
-                        bank_index = bank_index if cur_bank_size >= max_bank_size else cur_bank_size
-                        self.replacement_icon = self.img_bank[bank_index]
-                        self.img_bank[bank_index] = rp_icon
-                        self.replacement_img_label.configure(image=self.replacement_icon.tk_icon_lg)
-                        self.replacement_img_label.image = self.replacement_icon.tk_icon_lg
-                        self.refresh_img_bank()
-                        return
-                    elif bank_index is None:
-                        if existing_icon := next((icon for icon in self.img_bank if icon.path == cmp_path), None):
-                            rp_icon = self.replacement_icon if self.replacement_icon else None
-                            bank_index = self.img_bank.index(existing_icon)
-                            if rp_icon:
-                                self.replacement_icon = existing_icon
-                                self.img_bank[bank_index] = rp_icon
-                            else:
-                                self.replacement_icon = self.img_bank.pop(bank_index)
-                                self.img_bank_tk_labels[bank_index].configure(image=main.img_bank_blank)
-                                self.img_bank_tk_labels[bank_index].image = main.img_bank_blank
-                                if len(self.img_bank) <= main.img_bank_size:
-                                    self.prev_icon_button['state'] = DISABLED
-                                    self.next_icon_button['state'] = DISABLED
+            try:
+                Image.MAX_IMAGE_PIXELS = None
+                with (Image.open(file_path) as img):
+                    Image.MAX_IMAGE_PIXELS = max_image_pixels
+                    img.draft('RGB', (1024, 1024))
+                    img.thumbnail((1024, 1024), Resampling.LANCZOS)
+                    img.save(new_path)
+                    new_file_size = os.path.getsize(new_path)
+                    # Check if image already in replacement icons directory
+                    for file in os.listdir(self.replacement_icons_dir):
+                        if os.path.getsize(cmp_path := pathjoin(self.replacement_icons_dir, file)) != new_file_size:
+                            continue
+                        if cmp_path == new_path or not filecmp.cmp(cmp_path, new_path):
+                            continue
+                        os.remove(new_path)
+                        if not self.img_bank or (len(self.img_bank) < main.img_bank_size and self.replacement_icon):
+                            if bank_index is None:
+                                return
+                            self.img_bank.append(self.replacement_icon)
                             self.refresh_img_bank()
+                            self.replacement_icon = None
+                            self.replacement_img_label.config(image=main.blank)
+                            self.replacement_img_label.image = main.blank
+                            self.replace_button['state'] = DISABLED
+                            self.replace_all_button['state'] = DISABLED
+                            return
+                        elif (self.replacement_icon and
+                                self.replacement_icon.path == cmp_path and bank_index is not None):
+                            rp_icon = self.replacement_icon
+                            max_bank_size = main.img_bank_size - 1
+                            cur_bank_size = len(self.img_bank) - 1
+                            bank_index = bank_index if cur_bank_size >= max_bank_size else cur_bank_size
+                            self.replacement_icon = self.img_bank[bank_index]
+                            self.img_bank[bank_index] = rp_icon
                             self.replacement_img_label.configure(image=self.replacement_icon.tk_icon_lg)
                             self.replacement_img_label.image = self.replacement_icon.tk_icon_lg
+                            self.refresh_img_bank()
                             return
-                    if not len(self.img_bank) > 1:
+                        elif bank_index is None:
+                            if existing_icon := next((icon for icon in self.img_bank if icon.path == cmp_path), None):
+                                rp_icon = self.replacement_icon if self.replacement_icon else None
+                                bank_index = self.img_bank.index(existing_icon)
+                                if rp_icon:
+                                    self.replacement_icon = existing_icon
+                                    self.img_bank[bank_index] = rp_icon
+                                else:
+                                    self.replacement_icon = self.img_bank.pop(bank_index)
+                                    self.img_bank_tk_labels[bank_index].configure(image=main.img_bank_blank)
+                                    self.img_bank_tk_labels[bank_index].image = main.img_bank_blank
+                                    if len(self.img_bank) <= main.img_bank_size:
+                                        self.prev_icon_button['state'] = DISABLED
+                                        self.next_icon_button['state'] = DISABLED
+                                self.refresh_img_bank()
+                                self.replacement_img_label.configure(image=self.replacement_icon.tk_icon_lg)
+                                self.replacement_img_label.image = self.replacement_icon.tk_icon_lg
+                                return
+                        if not len(self.img_bank) > 1:
+                            return
+                        if not (existing_icon := next((icon for icon in self.img_bank if icon.path == cmp_path), None)):
+                            return
+                        existing_index = self.img_bank.index(existing_icon)
+                        if existing_index == bank_index or bank_index > len(self.img_bank) - 1:
+                            return
+                        swap_icon = self.img_bank[bank_index]
+                        self.img_bank[bank_index] = existing_icon
+                        self.img_bank[existing_index] = swap_icon
+                        self.refresh_img_bank()
                         return
-                    if not (existing_icon := next((icon for icon in self.img_bank if icon.path == cmp_path), None)):
-                        return
-                    existing_index = self.img_bank.index(existing_icon)
-                    if existing_index == bank_index or bank_index > len(self.img_bank) - 1:
-                        return
-                    swap_icon = self.img_bank[bank_index]
-                    self.img_bank[bank_index] = existing_icon
-                    self.img_bank[existing_index] = swap_icon
-                    self.refresh_img_bank()
-                    return
-                new_icon = Icon(new_path, img=output_img)
+                    new_icon = Icon(new_path, img=img)
+            finally:
+                Image.MAX_IMAGE_PIXELS = max_image_pixels
 
             if bank_index is not None:
                 self.add_to_img_bank(new_icon, bank_index)
@@ -2927,6 +2940,7 @@ class ExportPanel:
                 icon.bak = None
                 icon.bak_tk_icon = None
                 icon.refresh_tk_img()
+        shutil.rmtree(bak_folder)
 
         # Save As Dialog
         if not quick_export:
