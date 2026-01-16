@@ -63,7 +63,6 @@ max_image_pixels = Image.MAX_IMAGE_PIXELS
 
 
 # TODO: Completely overhaul everything related to multistate
-# TODO: Look into using frames for panel objects
 class C4IconSwapper:
     def __init__(self):
         def valid_instance_id(instance_ids: list):
@@ -1612,7 +1611,7 @@ class C4zPanel:
         self.show_extra_icons.trace_add('write', self.toggle_extra_icons)
         self.show_extra_icons_check = Checkbutton(main.root, text='show extra icons',
                                                   variable=self.show_extra_icons, takefocus=0)
-        self.show_extra_icons_check.place(x=self.x + 177, y=self.y + 176, anchor='nw')
+        self.show_extra_icons_check.place(x=177 + self.x, y=176 + self.y, anchor='nw')
         self.show_extra_icons_check.config(state='disabled')
 
     def toggle_extra_icons(self, *_):
