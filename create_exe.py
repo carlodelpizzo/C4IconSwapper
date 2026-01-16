@@ -3,21 +3,25 @@ import shutil
 import os
 from C4IconSwapper import version
 
-cur_dir = f'{os.getcwd()}/'
+cur_dir = os.getcwd()
+pathjoin = os.path.join
 
 
 def make_exe(python_file: str):
     def clean_up():
-        if os.path.isfile(cur_dir + python_file_name + '.spec'):
-            os.remove(cur_dir + python_file_name + '.spec')
-        if os.path.isdir(f'{cur_dir}dist/'):
-            shutil.rmtree(f'{cur_dir}dist/')
-        if os.path.isdir(f'{cur_dir}build/'):
-            shutil.rmtree(f'{cur_dir}build/')
-        if os.path.isdir(f'{cur_dir}__pycache__/'):
-            shutil.rmtree(f'{cur_dir}__pycache__/')
+        if os.path.isfile(pathjoin(cur_dir + python_file_name + '.spec')):
+            os.remove(pathjoin(cur_dir + python_file_name + '.spec'))
+        if os.path.isdir(pathjoin(cur_dir, 'dist')):
+            shutil.rmtree(pathjoin(cur_dir, 'dist'))
+        if os.path.isdir(pathjoin(cur_dir, 'build')):
+            shutil.rmtree(pathjoin(cur_dir, 'build'))
+        if os.path.isdir(pathjoin(cur_dir, '__pycache__')):
+            shutil.rmtree(pathjoin(cur_dir, '__pycache__'))
 
-    python_file_name = python_file.replace('.py', '')
+    if not python_file.endswith('.py'):
+        print('Invalid File')
+        return
+    python_file_name = python_file[:-3]
     # Remove old builds if any
     clean_up()
     # Include Assets
@@ -28,10 +32,11 @@ def make_exe(python_file: str):
     # Build Exe
     PyInstaller.__main__.run([python_file, '--onefile', '-w', '--icon=assets/icon.ico', *assets])
     # Move and Rename
-    if os.path.isfile(f'{cur_dir}dist/{python_file_name}.exe'):
+    if os.path.isfile(pathjoin(cur_dir, 'dist', f'{python_file_name}.exe')):
         if os.path.isfile(f'{cur_dir}C4IconSwapper.{version}.exe'):
             os.remove(f'{cur_dir}C4IconSwapper.{version}.exe')
-        shutil.copy(f'{cur_dir}dist/{python_file_name}.exe', f'{cur_dir}C4IconSwapper.{version}.exe')
+        shutil.move(pathjoin(cur_dir, 'dist', f'{python_file_name}.exe'),
+                    pathjoin(cur_dir, f'C4IconSwapper.{version}.exe'))
 
     # Remove build files
     clean_up()
@@ -42,7 +47,7 @@ execute = False
 
 if execute:
     overwrite_file = '_'
-    if os.path.isfile(f'{cur_dir}C4IconSwapper.{version}.exe'):
+    if os.path.isfile(pathjoin(cur_dir, f'C4IconSwapper.{version}.exe')):
         overwrite_file = input('Overwrite file? (y/n)... ')
     else:
         make_exe('C4IconSwapper.py')
