@@ -177,13 +177,14 @@ class C4IconSwapper:
         # Create temporary directory
         self.instance_id = str(random.randint(111111, 999999))
         self.cur_dir = os.getcwd()
-        self.appdata_temp = pathjoin(os.environ.get('APPDATA'), 'C4IconSwapper')
-        self.global_temp = pathjoin(self.appdata_temp, 'C4IconSwapperTemp')
+        self.appdata_folder = pathjoin(os.environ.get('APPDATA'), 'C4IconSwapper')
+        self.recovery_folder = pathjoin(self.appdata_folder, 'Recovery')
+        self.global_temp = pathjoin(self.appdata_folder, 'C4IconSwapperTemp')
         self.instance_temp = pathjoin(self.global_temp, self.instance_id)
         self.checked_in, self.recover_instance, checked_in_instances = False, '', []
 
-        if not os.path.isdir(self.appdata_temp):
-            os.mkdir(self.appdata_temp)
+        if not os.path.isdir(self.appdata_folder):
+            os.mkdir(self.appdata_folder)
         if not os.path.isdir(self.global_temp):
             os.mkdir(self.global_temp)
         # First layer of id collision avoidance
@@ -308,6 +309,9 @@ class C4IconSwapper:
 
         global global_instance_id
         global_instance_id = self.instance_id
+
+        # TODO: Create instance recovery GUI
+        RecoveryWin(self)
 
         # Main Loop
         self.root.config(menu=self.menu)
@@ -630,24 +634,27 @@ class C4IconSwapper:
 
             # First server cleanup. Only first server should enter this loop without being in reestablish mode
             if not self.reestablish:
-                # TODO: Add instance recovery methods
                 delete_items = set()
+                recover_items = set()
                 for item in os.listdir(self.global_temp):
-                    if item == self.instance_id:
+                    client_folder = pathjoin(self.global_temp, item)
+                    if not os.path.isdir(client_folder) or item == self.instance_id:
                         continue
-                    delete_items.add(pathjoin(self.global_temp, item))
+                    has_driver = 'driver' in os.listdir(client_folder)
+                    has_replacements = os.listdir(pathjoin(client_folder, 'Replacement Icons'))
+                    if has_driver or has_replacements:
+                        recover_items.add(client_folder)
+                        continue
+                    delete_items.add(client_folder)
+
                 if delete_items:
-                    print('Doing temp directory cleanup')
-                for item in delete_items:
-                    try:
-                        if os.path.isdir(item):
-                            shutil.rmtree(item)
-                            print(f'Deleted: {item}')
-                            continue
-                        os.remove(item)
-                        print(f'Deleted: {item}')
-                    except PermissionError:
-                        print(f'Failed to delete: {item}')
+                    print(f'Deleting clients: {delete_items}')
+                    threading.Thread(target=self.handle_dead_clients, kwargs={'delete': True},
+                                     args=[delete_items], daemon=True).start()
+                if recover_items:
+                    print(f'Moving client folders to recovery: {recover_items}')
+                    threading.Thread(target=self.handle_dead_clients, kwargs={'recover': True},
+                                     args=[recover_items], daemon=True).start()
 
             self.curr_server_id = self.instance_id
             server.listen(5)
@@ -764,16 +771,6 @@ class C4IconSwapper:
                 return
 
     def ipc_server_loop(self, server):
-        def purge_clients(client_paths):
-            for path in client_paths:
-                try:
-                    shutil.rmtree(path)
-                    print(f'Deleted: {path}')
-                except PermissionError:
-                    print(f'Failed to delete: {path}')
-                except OSError as er:
-                    print(f'OS Error on {path}: {er}')
-
         server.settimeout(1)
         gui_is_alive = self.root.winfo_exists
         if self.reestablish:
@@ -794,20 +791,34 @@ class C4IconSwapper:
                 if reestablish and time.time() - self.reestablish_start > 4:
                     print('Reestablishment Period Ended')
                     with self.socket_lock:
-                        safety_check = self.client_dict.keys() ^ self.reestablish_ids
-                        if safety_check:
-                            print('___Something went wrong___')
+                        if self.reestablish_ids - self.client_dict.keys():
+                            print('___Something Went Wrong___')
+                            print('Client found in reestablish_ids but not client_dict')
                             print(self.client_dict.keys())
                             print(self.reestablish_ids)
                         # Remove clients who are in dict but failed to reestablish
-                        purge_set = set()
+                        delete_items = set()
+                        recover_items = set()
                         for cid in self.client_dict.keys() - self.reestablish_ids:
                             self.client_dict.pop(cid)
-                            if os.path.isdir(dead_client_path := pathjoin(self.global_temp, cid)):
-                                purge_set.add(dead_client_path)
-                        if purge_set:
-                            threading.Thread(target=purge_clients, args=[purge_set], daemon=True).start()
-                        del purge_set
+                            if not os.path.isdir(client_path := pathjoin(self.global_temp, cid)):
+                                continue
+                            has_driver = 'driver' in os.listdir(client_path)
+                            has_replacements = os.listdir(pathjoin(client_path, 'Replacement Icons'))
+                            if has_driver or has_replacements:
+                                recover_items.add(pathjoin(self.global_temp, cid))
+                                continue
+                            delete_items.add(client_path)
+                        if delete_items:
+                            print(f'Deleting clients: {delete_items}')
+                            threading.Thread(target=self.handle_dead_clients, kwargs={'delete': True},
+                                             args=[delete_items], daemon=True).start()
+                        if recover_items:
+                            print(f'Moving client folders to recovery: {recover_items}')
+                            threading.Thread(target=self.handle_dead_clients, kwargs={'recover': True},
+                                             args=[recover_items], daemon=True).start()
+                        del delete_items
+                        del recover_items
                         for cid in self.client_dict.copy():
                             if not os.path.isdir(pathjoin(self.global_temp, cid)):
                                 self.client_dict.pop(cid)
@@ -841,7 +852,7 @@ class C4IconSwapper:
                         grace = False
                         print('Client sent empty message; given grace')
                         continue
-                    raise OSError('Client disconnected; Sent Empty Message')
+                    raise OSError('Client disconnected; sent empty message')
                 last_seen_time = time.time()
                 grace = True
                 for msg in data.strip().split('\n'):
@@ -889,7 +900,10 @@ class C4IconSwapper:
                                 print('ID collision', client_id, 'in', client_dict)
                                 client.sendall('INSTANCE ID COLLISION\n'.encode('utf-8'))
                                 continue
-                            # New client added to dicts in broadcast call
+                            with socket_lock:
+                                self.client_dict[client_id] = last_seen_time
+                                self.last_seen[client_id] = last_seen_time
+                                self.socket_dict[client_id] = client
                             self.server_broadcast_id_update(new_connection=(client_id, client))
 
                         case ['HB', client_id]:  # Heartbeat
@@ -901,19 +915,24 @@ class C4IconSwapper:
                 if client_id and time.time() - self.last_seen[client_id] < 2:
                     continue
                 print(e)
+                if grace:
+                    print('Client given grace')
+                    grace = False
+                    continue
                 if not client_id:
                     print(f'Failed to establish client id: {client}')
                     return
                 print(f'Client {client_id} disconnected')
+                # If client disconnects but leaves folder behind
                 if client_id in os.listdir(self.global_temp):
                     has_driver = 'driver' in os.listdir(client_folder := pathjoin(self.global_temp, client_id))
                     has_replacements = os.listdir(pathjoin(client_folder, 'Replacement Icons'))
                     if has_driver or has_replacements:
-                        # TODO: Add instance recovery methods
-                        print('Flagged as worthy of recovery')
-                        print('TODO: Method for client folder recovery')
-                    shutil.rmtree(client_folder)
-                    print(f'Deleted {client_id} folder')
+                        threading.Thread(target=self.handle_dead_clients, kwargs={'recover': True},
+                                         args=[{client_folder}], daemon=True).start()
+                    else:
+                        shutil.rmtree(client_folder)
+                        print(f'Deleted {client_id} folder')
                 with socket_lock:
                     self.client_dict.pop(client_id)
                     self.socket_dict.pop(client_id)
@@ -929,26 +948,19 @@ class C4IconSwapper:
             if not self.client_dict and not new_connection:
                 print('Broadcast canceled due to empty dictionary')
                 return
-        if new_connection:
-            client_id, client = new_connection[0], new_connection[1]
-            with self.socket_lock:
-                self.client_dict[client_id] = str(time.time())
-                self.socket_dict[client_id] = client
-        else:
-            client_id, client = None, None
         resend = True
         while resend:
             resend = False
             with self.socket_lock:
                 if new_connection:
-                    current_sockets = [(k, v) for k, v in self.socket_dict.items() if k != client_id]
+                    current_sockets = [(k, v) for k, v in self.socket_dict.items() if k != new_connection[0]]
                 else:
                     current_sockets = list(self.socket_dict.items())
                 new_client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
             if new_connection:
                 print('__New Client Established__')
-                print(f'Client ID: {client_id}')
-                client.sendall(f'OK:{self.instance_id}:{new_client_list}\n'.encode('utf-8'))
+                print(f'Client ID: {new_connection[0]}')
+                new_connection[1].sendall(f'OK:{self.instance_id}:{new_client_list}\n'.encode('utf-8'))
             print('__Broadcast New Client List__')
             print(new_client_list)
             for cid, sock in current_sockets:
@@ -964,6 +976,34 @@ class C4IconSwapper:
                         if not self.socket_dict:
                             return
                         resend = True
+
+    def handle_dead_clients(self, client_paths, recover=False, delete=False):
+        if recover:
+            if not os.path.isdir(self.recovery_folder):
+                os.mkdir(self.recovery_folder)
+            for path in client_paths:
+                next_num = get_next_num(start=len(os.listdir(self.recovery_folder)), yield_start=False)
+                try:
+                    shutil.move(path, pathjoin(self.recovery_folder, next(next_num)))
+                    print(f'Moved to recovery: {path}')
+                except PermissionError:
+                    print(f'Failed to move: {path}')
+                except OSError as er:
+                    print(f'OS Error with {path}: {er}')
+            return
+        if delete:
+            for path in client_paths:
+                try:
+                    if os.path.isdir(path):
+                        shutil.rmtree(path)
+                        print(f'Deleted: {path}')
+                        continue
+                    os.remove(path)
+                    print(f'Deleted: {path}')
+                except PermissionError:
+                    print(f'Failed to delete: {path}')
+                except OSError as er:
+                    print(f'OS Error with` {path}: {er}')
 
     # TODO: Make the undo feature in an actually decent way
     def undo(self, *_):
@@ -2993,6 +3033,20 @@ class ExportPanel:
             self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
 
 
+# TODO: Create instance recovery GUI
+class RecoveryWin:
+    def __init__(self, main: C4IconSwapper):
+        self.main = main
+
+        # Initialize window
+        self.window = Toplevel(main.root)
+        self.window.focus()
+        self.window.title('Project Recovery')
+        self.window.geometry('385x287')
+        self.window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
+        self.window.resizable(False, False)
+
+
 class C4IS:
     def __init__(self, main: C4IconSwapper):
         if not isinstance(main, C4IconSwapper):
@@ -3062,6 +3116,7 @@ def natural_key(string: str):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
 
 
+# Returns value as string
 def get_next_num(start=0, yield_start=True):
     if not yield_start:
         start += 1
