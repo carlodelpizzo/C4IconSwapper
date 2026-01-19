@@ -8,7 +8,7 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
         # Need to handle case of odd number of characters used in comments
         if len(tag_indexes) % 2:
             print('Error: Invalid xml file')
-            return
+            return []
 
     name, value, attributes, children, children_indexes, grandchildren, output = '', '', '', [], [], [], []
     child, child_attributes, child_value = '', '', ''
@@ -90,7 +90,7 @@ def get_xml_data(xml_path=None, xml_string=None, tag_indexes=None):
     return output
 
 
-# xml_data = ['name', 'value', 'attributes', [children]]; Initialize with path to xml file
+# xml_data = ['name', 'value', 'attributes', [children]]; Initialize with path to XML file
 class XMLObject:
     def __init__(self, xml_path=None, xml_data=None, parents=None):
         if xml_path:
