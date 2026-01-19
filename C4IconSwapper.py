@@ -20,8 +20,9 @@ from pathlib import Path
 
 from PIL import Image, ImageTk, UnidentifiedImageError
 from PIL.Image import Resampling
-from tkinter import filedialog, ttk, Toplevel, Checkbutton, IntVar, StringVar, Label, Menu, OptionMenu
-from tkinter import DISABLED, NORMAL, END, INSERT, Scrollbar, Text, Button, Entry, Frame
+from tkinter import filedialog, Toplevel, Checkbutton, IntVar, StringVar, Label, Menu, OptionMenu
+from tkinter import DISABLED, NORMAL, END, INSERT, Text, Button, Entry, Frame, Canvas
+from tkinter.ttk import Scrollbar, Separator
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
 from XMLObject import XMLObject, XMLTag
@@ -181,7 +182,6 @@ class C4IconSwapper:
         self.recovery_folder = pathjoin(self.appdata_folder, 'Recovery')
         self.global_temp = pathjoin(self.appdata_folder, 'C4IconSwapperTemp')
         self.instance_temp = pathjoin(self.global_temp, self.instance_id)
-        self.checked_in, self.recover_instance, checked_in_instances = False, '', []
 
         if not os.path.isdir(self.appdata_folder):
             os.mkdir(self.appdata_folder)
@@ -208,13 +208,11 @@ class C4IconSwapper:
         self.reestablish_start = None
         self.reestablish_ids = None
         self.socket_lock = threading.Lock()
+        self.default_port = 61352
         self.ipc()
 
         # Root window properties
-        if checked_in_instances:
-            self.root.title(f'C4 Icon Swapper ({self.instance_id})')
-        else:
-            self.root.title('C4 Icon Swapper')
+        self.root.title('C4 Icon Swapper')
         self.root.resizable(False, False)
 
         # Version Label
@@ -230,11 +228,10 @@ class C4IconSwapper:
         self.driver_creator_new_var = StringVar(value='C4IconSwapper')
         self.driver_ver_orig = StringVar()
         self.driver_version_var = StringVar()
-        self.driver_version_new_var = StringVar()
-        self.driver_version_new_var.set('1')
+        self.driver_version_new_var = StringVar(value='1')
         self.multi_state_driver, self.states_shown, self.ask_to_save = False, False, False
         self.counter, self.easter_counter = 0, 0
-        self.easter_recall_id = None
+        self.easter_call_after_id = None
         self.img_bank_size = 4
         self.connections = [Connection(self) for _ in range(18)]
         self.conn_ids = []
@@ -249,8 +246,8 @@ class C4IconSwapper:
         self.undo_history = deque(maxlen=10)
 
         # Panel Separators
-        self.separator0 = ttk.Separator(self.root, orient='vertical')
-        self.separator1 = ttk.Separator(self.root, orient='vertical')
+        self.separator0 = Separator(self.root, orient='vertical')
+        self.separator1 = Separator(self.root, orient='vertical')
         self.separator0.place(x=305, y=0, height=270)
         self.separator1.place(x=610, y=0, height=270)
 
@@ -310,8 +307,9 @@ class C4IconSwapper:
         global global_instance_id
         global_instance_id = self.instance_id
 
-        # TODO: Create instance recovery GUI
-        RecoveryWin(self)
+        if os.path.isdir(pathjoin(self.appdata_folder, 'Recovery')):
+            # noinspection PyTypeChecker
+            self.root.after(10, lambda: RecoveryWin(self))
 
         # Main Loop
         self.root.config(menu=self.menu)
@@ -443,7 +441,6 @@ class C4IconSwapper:
         if self.connections_win is None:
             return
         self.connections_win.window.destroy()
-        del self.connections_win
         self.connections_win = None
 
     def close_driver_info(self):
@@ -464,7 +461,6 @@ class C4IconSwapper:
                 int(self.driver_version_new_var.get()) <= int(self.driver_version_var.get())):
             self.driver_version_new_var.set(str(int(self.driver_version_var.get()) + 1))
         self.driver_info_win.window.destroy()
-        del self.driver_info_win
         self.driver_info_win = None
 
     def close_states(self):
@@ -472,7 +468,6 @@ class C4IconSwapper:
             return
         self.states_win.refresh()
         self.states_win.window.destroy()
-        del self.states_win
         self.states_win = None
 
     def validate_driver_ver(self, *_):
@@ -626,33 +621,47 @@ class C4IconSwapper:
         elif win_type == 'states':
             self.states_win = StatesWin(self)
 
-    def ipc(self, takeover=False):
+    # Inter-Process Communication (For running multiple instances simultaneously)
+    def ipc(self, takeover=False, port=None):
         def establish_self_as_server():
             server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             server.bind(('127.0.0.1', port))  # This is where exception is raised
             print(f'Is Server: {self.instance_id}')
 
+            # noinspection PyShadowingNames
+            for item in os.listdir(self.appdata_folder):
+                if not os.path.isfile(pathjoin(self.appdata_folder, item)):
+                    continue
+                if item_port := re.search(r'PORT~(\d{5})', item):
+                    if item_port.group(1) == str(port):
+                        continue
+                    os.remove(pathjoin(self.appdata_folder, item))
+            Path(pathjoin(self.appdata_folder, f'PORT~{port}')).touch()
+
             # First server cleanup. Only first server should enter this loop without being in reestablish mode
             if not self.reestablish:
                 delete_items = set()
                 recover_items = set()
+                # noinspection PyShadowingNames
                 for item in os.listdir(self.global_temp):
                     client_folder = pathjoin(self.global_temp, item)
                     if not os.path.isdir(client_folder) or item == self.instance_id:
                         continue
                     has_driver = 'driver' in os.listdir(client_folder)
-                    has_replacements = os.listdir(pathjoin(client_folder, 'Replacement Icons'))
+                    has_replacements = False
+                    if os.path.isdir(rep_imgs_path := pathjoin(client_folder, 'Replacement Icons')):
+                        has_replacements = os.listdir(rep_imgs_path)
                     if has_driver or has_replacements:
                         recover_items.add(client_folder)
                         continue
                     delete_items.add(client_folder)
 
                 if delete_items:
-                    print(f'Deleting clients: {delete_items}')
+                    print(f'Deleting Clients: {delete_items}')
                     threading.Thread(target=self.handle_dead_clients, kwargs={'delete': True},
                                      args=[delete_items], daemon=True).start()
                 if recover_items:
-                    print(f'Moving client folders to recovery: {recover_items}')
+                    print(f'Moving Client Folders to Recovery: {recover_items}')
                     threading.Thread(target=self.handle_dead_clients, kwargs={'recover': True},
                                      args=[recover_items], daemon=True).start()
 
@@ -661,18 +670,20 @@ class C4IconSwapper:
             threading.Thread(target=self.ipc_server_loop, args=[server], daemon=True).start()
 
         def establish_self_as_client():
+            nonlocal port
+            ipc_failures = 0
             while True:
                 try:
                     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     print(f'Is Client: {self.instance_id}')
-                    client.settimeout(2)
+                    client.settimeout(0.05)
                     client.connect(('127.0.0.1', port))
                     msg = f'ID:{self.instance_id}\n' if not self.reestablish else f'RE:{self.instance_id}\n'
                     client.sendall(msg.encode('utf-8'))
 
                     response = client.recv(1024).decode('utf-8')
                     if not response:
-                        raise OSError('Server disconnected; Sent Empty Message')
+                        raise OSError('Server Disconnected; Sent Empty Message')
                     print('From Server:', repr(response))
                     for msg in response.strip().split('\n'):
                         match msg.split(':'):
@@ -686,18 +697,36 @@ class C4IconSwapper:
                                 self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
                                 print(self.client_dict)
                                 threading.Thread(target=self.ipc_client_loop, args=[client], daemon=True).start()
-                                return
+                                return True
                             case ['INSTANCE ID COLLISION']:
                                 self.instance_id = str(random.randint(111111, 999999))
                                 print('New id:', self.instance_id)
                                 break
-                except OSError as er:  # If server disconnects during first handshake
+                except OSError as er:
+                    ipc_failures += 1
                     print(er)
                     print('IPC Initialization Failed')
-                    time.sleep(0.1)
+                    if ipc_failures > 3:
+                        # IPC port range (49200-65500)
+                        port = 49200 if port >= 65500 else port + 1
+                        print(f'Trying New Port: {port}')
+                        return False
 
-        # TODO: Do port search
-        port = 61352
+        if port is None:
+            # Check for alternate port file
+            for item in os.listdir(self.appdata_folder):
+                if not os.path.isfile(pathjoin(self.appdata_folder, item)):
+                    continue
+                if curr_port := re.search(r'PORT~(\d{5})', item):
+                    port = int(curr_port.group(1))
+                    if port == self.default_port:
+                        print(f'Using Default Port: {port}')
+                        break
+                    print(f'Using Port: {port}')
+                    break
+            if port is None:
+                port = self.default_port
+                print(f'Using Default Port: {port}')
         if takeover:
             for _ in range(5):
                 try:
@@ -717,8 +746,8 @@ class C4IconSwapper:
                 break
             except OSError as e:
                 print(f'IPC Error: {e}')
-                establish_self_as_client()
-                break
+                if establish_self_as_client():
+                    break
 
     def ipc_client_loop(self, client):
         ack_count = 0
@@ -737,7 +766,7 @@ class C4IconSwapper:
                                     ack_count = 0
                                 client_list = client_data.split('|')
                                 self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
-                                print('__New client list__')
+                                print('__New Client List__')
                                 print(self.client_dict)
                             case ['ACK']:
                                 ack_count += 1
@@ -753,7 +782,7 @@ class C4IconSwapper:
                 if ack_count:
                     print('')
                 print(e)
-                print('Current Server disconnected')
+                print('Current Server Disconnected')
                 compare_dict = {k: float(v) for k, v in self.client_dict.items()}
                 self.reestablish = True
                 if min(self.client_dict, key=compare_dict.get) == self.instance_id:
@@ -765,7 +794,7 @@ class C4IconSwapper:
                 del compare_dict
                 client.close()
                 time.sleep(1)
-                print('Attempting reconnection as client')
+                print('Attempting Reconnection as Client')
                 self.client_dict = {}
                 self.ipc()
                 return
@@ -804,17 +833,19 @@ class C4IconSwapper:
                             if not os.path.isdir(client_path := pathjoin(self.global_temp, cid)):
                                 continue
                             has_driver = 'driver' in os.listdir(client_path)
-                            has_replacements = os.listdir(pathjoin(client_path, 'Replacement Icons'))
+                            has_replacements = False
+                            if os.path.isdir(rep_imgs_path := pathjoin(client_path, 'Replacement Icons')):
+                                has_replacements = os.listdir(rep_imgs_path)
                             if has_driver or has_replacements:
                                 recover_items.add(pathjoin(self.global_temp, cid))
                                 continue
                             delete_items.add(client_path)
                         if delete_items:
-                            print(f'Deleting clients: {delete_items}')
+                            print(f'Deleting Clients: {delete_items}')
                             threading.Thread(target=self.handle_dead_clients, kwargs={'delete': True},
                                              args=[delete_items], daemon=True).start()
                         if recover_items:
-                            print(f'Moving client folders to recovery: {recover_items}')
+                            print(f'Moving Client Folders to Recovery: {recover_items}')
                             threading.Thread(target=self.handle_dead_clients, kwargs={'recover': True},
                                              args=[recover_items], daemon=True).start()
                         del delete_items
@@ -834,7 +865,7 @@ class C4IconSwapper:
                     raise RuntimeError('👻')
 
             except Exception as e:
-                print(f'Server loop error: {e}')
+                print(f'Server Loop Error: {e}')
 
     def ipc_server_client_loop(self, client):
         client_id = None
@@ -985,9 +1016,9 @@ class C4IconSwapper:
                 next_num = get_next_num(start=len(os.listdir(self.recovery_folder)), yield_start=False)
                 try:
                     shutil.move(path, pathjoin(self.recovery_folder, next(next_num)))
-                    print(f'Moved to recovery: {path}')
+                    print(f'Moved to Recovery: {path}')
                 except PermissionError:
-                    print(f'Failed to move: {path}')
+                    print(f'Failed to Move: {path}')
                 except OSError as er:
                     print(f'OS Error with {path}: {er}')
             return
@@ -1001,7 +1032,7 @@ class C4IconSwapper:
                     os.remove(path)
                     print(f'Deleted: {path}')
                 except PermissionError:
-                    print(f'Failed to delete: {path}')
+                    print(f'Failed to Delete: {path}')
                 except OSError as er:
                     print(f'OS Error with` {path}: {er}')
 
@@ -1030,8 +1061,8 @@ class C4IconSwapper:
         if self.easter_counter < 0:
             self.easter_counter = 0
             return
-        if self.easter_recall_id:
-            self.root.after_cancel(self.easter_recall_id)
+        if self.easter_call_after_id:
+            self.root.after_cancel(self.easter_call_after_id)
         if self.easter_counter > 10:
             self.easter_counter = 0
             text, rely = ('\u262D', 1.027) if self.version_label.cget('text') == '\U0001F339' else ('\U0001F339', 1.02)
@@ -1040,7 +1071,7 @@ class C4IconSwapper:
         else:
             self.easter_counter += 1 if increment else -1
             # noinspection PyTypeChecker
-            self.easter_recall_id = self.root.after(500, lambda: self.easter(increment=False))
+            self.easter_call_after_id = self.root.after(500, lambda: self.easter(increment=False))
 
 
 class Icon:
@@ -3033,18 +3064,109 @@ class ExportPanel:
             self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
 
 
-# TODO: Create instance recovery GUI
+# TODO: Finish implementing project recovery
 class RecoveryWin:
     def __init__(self, main: C4IconSwapper):
+        if not os.path.isdir(recovery_path := pathjoin(main.appdata_folder, 'Recovery')):
+            return
+        self.window = window = Toplevel(main.root)
         self.main = main
+        window.grab_set()
+        window.focus()
+        window.transient(main.root)
+        window.title('Project Recovery')
+        window.geometry('355x287')
+        window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
+        window.resizable(False, False)
+        window.protocol('WM_DELETE_WINDOW', self.close_dialog)
 
-        # Initialize window
-        self.window = Toplevel(main.root)
-        self.window.focus()
-        self.window.title('Project Recovery')
-        self.window.geometry('385x287')
-        self.window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
-        self.window.resizable(False, False)
+        self.recoverable_projects = [rec_obj for item in os.listdir(recovery_path)
+                                     if (rec_obj := RecoveryObject(pathjoin(recovery_path, item)))]
+
+        title_label = Label(window, text='Select Projects to Recover', font=(label_font, 14))
+        title_label.place(relx=0.5, y=5, anchor='n')
+
+        canvas = Canvas(window)
+        scrollable_frame = Frame(canvas)
+        if len(self.recoverable_projects) > 8:
+            scrollbar = Scrollbar(window, command=canvas.yview)
+            scrollable_frame.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+            canvas.bind('<MouseWheel>', lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units'))
+            canvas.configure(yscrollcommand=scrollbar.set)
+            scrollbar.place(relx=1, x=-5, y=35, relheight=1, height=-50, anchor='ne')
+        canvas.create_window((0, 0), window=scrollable_frame, anchor='nw')
+        canvas.place(x=10, y=35, relheight=1, height=-80, anchor='nw')
+
+        self.checkboxes = [Checkbutton(
+            scrollable_frame, text=f'{project.name} | '
+                                   f'{project.num_images} {"image" if project.num_images == 1 else "images"} | '
+                                   f'{project.mtime}', variable=project.recover)
+                           for project in self.recoverable_projects]
+        for check in self.checkboxes:
+            check.pack(anchor='w')
+            if len(self.recoverable_projects) > 8:
+                check.bind('<MouseWheel>', lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units'))
+
+        recover_button = Button(window, text='Recover', width=10, command=self.do_recovery)
+        recover_button.place(relx=0.5, x=-4, rely=1, y=-3, anchor='se')
+
+        delete_button = Button(window, text='Delete All', width=10, command=self.close_dialog)
+        delete_button.place(relx=0.5, x=4, rely=1, y=-3, anchor='sw')
+
+    def close_dialog(self):
+        def exit_close_dialog():
+            close_dialog.destroy()
+            self.window.deiconify()
+            self.window.focus()
+
+        def do_delete():
+            # TODO: rmtree recovery folder
+            close_dialog.destroy()
+            self.window.destroy()
+            self.main.root.deiconify()
+            self.main.root.focus()
+
+        close_dialog = Toplevel(self.window)
+        close_dialog.title('Are you sure?')
+        close_dialog.geometry('239x70')
+        close_dialog.geometry(f'+{self.window.winfo_rootx()}+{self.window.winfo_rooty()}')
+        close_dialog.protocol('WM_DELETE_WINDOW', exit_close_dialog)
+        close_dialog.grab_set()
+        close_dialog.focus()
+        close_dialog.transient(self.window)
+        close_dialog.resizable(False, False)
+
+        label = Label(close_dialog, text='Delete all recovered projects?', font=(label_font, 10, 'bold'))
+        label.place(relx=0.5, y=3, anchor='n')
+
+        yes_button = Button(close_dialog, text='Yes', width='10', command=do_delete)
+        yes_button.place(relx=0.5, x=-4, rely=1, y=-8, anchor='se')
+
+        no_button = Button(close_dialog, text='No', width='10', command=exit_close_dialog)
+        no_button.place(relx=0.5, x=4, rely=1, y=-8, anchor='sw')
+
+    # noinspection PyMethodMayBeStatic
+    def do_recovery(self):
+        print('TODO: Finish implementing project recovery')
+
+
+class RecoveryObject:
+    def __init__(self, instance_path: str):
+        if not os.path.isdir(instance_path):
+            return
+        self.name = 'No Driver' if 'driver' not in os.listdir(instance_path) else 'MsgNotFound'
+        self.num_images = 0
+        self.mtime = datetime.fromtimestamp(os.path.getmtime(instance_path)).strftime("%m/%d %H:%M:%S")
+        self.recover = IntVar()
+
+        for item in os.listdir(instance_path):
+            if item == 'driver':
+                if os.path.isfile(xml_path := pathjoin(instance_path, 'driver', 'driver.xml')):
+                    driver_xml = XMLObject(xml_path)
+                    if name := driver_xml.get_tag('name').value():
+                        self.name = name
+            elif item == 'Replacement Icons':
+                self.num_images = len(os.listdir(pathjoin(instance_path, 'Replacement Icons')))
 
 
 class C4IS:
