@@ -1,5 +1,4 @@
 import contextlib
-import copy
 import filecmp
 import itertools
 import os
@@ -243,7 +242,7 @@ class C4IconSwapper:
         self.images_dir = pathjoin(www_path, 'images')
         self.orig_file_dir, self.orig_file_path, self.restore_entry_string = '', '', ''
         self.driver_selected, self.schedule_entry_restore = False, False
-        self.undo_history = deque(maxlen=10)
+        self.undo_history = deque(maxlen=100)
 
         # Panel Separators
         self.separator0 = Separator(self.root, orient='vertical')
@@ -1036,7 +1035,7 @@ class C4IconSwapper:
                 except OSError as er:
                     print(f'OS Error with` {path}: {er}')
 
-    # TODO: Make the undo feature in an actually decent way
+    # TODO: Double check if export affects icons
     def undo(self, *_):
         if not self.undo_history:
             self.edit.entryconfig(self.undo_pos, state=DISABLED)
@@ -1044,7 +1043,11 @@ class C4IconSwapper:
         current_icon = self.c4z_panel.current_icon
         ask_to_save = self.ask_to_save
         self.ask_to_save = False
-        self.load_c4is(self.undo_history.pop())
+        undo_dict = self.undo_history.pop()
+        for icon in self.c4z_panel.icons:
+            undo_icon = undo_dict[icon]
+            icon.replacement_icon = undo_icon['replacement_icon']
+            icon.restore_bak = undo_icon['restore_bak']
         self.c4z_panel.current_icon = current_icon
         self.c4z_panel.update_icon()
 
@@ -1053,8 +1056,8 @@ class C4IconSwapper:
         self.ask_to_save = ask_to_save
 
     def update_undo_history(self):
-        # EXTREMELY memory inefficient! 😎
-        self.undo_history.append(copy.deepcopy(C4IS(self)))
+        self.undo_history.append({icon: {'replacement_icon': icon.replacement_icon,
+                                         'restore_bak': icon.restore_bak} for icon in self.c4z_panel.icons})
         self.edit.entryconfig(self.undo_pos, state=NORMAL)
 
     def easter(self, *_, increment=True):
@@ -1650,10 +1653,11 @@ class C4zPanel:
 
         # Buttons
         self.open_file_button = Button(main.root, text='Open', width=10, command=self.load_c4z, takefocus=0)
-        self.restore_button = Button(main.root, text='Restore\nOriginal Icon', command=self.restore_icon, takefocus=0)
+        self.restore_button = Button(main.root, text='Restore\nOriginal Icon', command=self.restore, takefocus=0)
         self.restore_button['state'] = DISABLED
 
-        self.restore_all_button = Button(main.root, text='Restore All', command=self.restore_all, takefocus=0)
+        self.restore_all_button = Button(
+            main.root, text='Restore All', command=lambda: self.restore(do_all=True), takefocus=0)
         self.restore_all_button['state'] = DISABLED
 
         self.prev_icon_button = Button(
@@ -2063,6 +2067,7 @@ class C4zPanel:
             main.export_panel.driver_name_entry.insert(0, 'New Driver')
 
         main.driver_selected = True
+        main.undo_history.clear()
         self.current_icon = 0
         self.update_icon()
 
@@ -2154,30 +2159,28 @@ class C4zPanel:
 
         main.ask_to_save = False
 
-    def restore_icon(self):
+    def restore(self, do_all=False):
         self.main.update_undo_history()
-        self.icons[self.current_icon].set_restore()
-        self.update_icon()
-        self.main.ask_to_save = True
-
-    def restore_all(self):
-        self.main.update_undo_history()
-        show_extra = self.show_extra_icons.get()
-        for icon in self.icons:
-            if show_extra or not icon.extra:
-                icon.set_restore()
+        if do_all:
+            show_extra = self.show_extra_icons.get()
+            for icon in self.icons:
+                if not icon.extra or show_extra:
+                    icon.set_restore()
+        else:
+            self.icons[self.current_icon].set_restore()
         self.update_icon()
         self.main.ask_to_save = True
 
     def unrestore(self, *_, do_all=False):
-        if not do_all:
+        self.main.update_undo_history()
+        if do_all:
+            for icon in self.icons:
+                if not icon.replacement_icon and (icon.restore_bak and icon.bak):
+                    icon.restore_bak = False
+        else:
             self.icons[self.current_icon].restore_bak = False
-            self.update_icon()
-            return
-        for icon in self.icons:
-            if not icon.replacement_icon and (icon.restore_bak and icon.bak):
-                icon.restore_bak = False
         self.update_icon()
+        self.main.ask_to_save = True
 
     def inc_icon(self, inc=1, validate=True):
         if not self.main.driver_selected or not inc:
