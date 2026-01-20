@@ -15,6 +15,7 @@ import traceback
 import warnings
 from collections import Counter, deque, defaultdict
 from datetime import datetime
+from multiprocessing import Process
 from pathlib import Path
 
 from PIL import Image, ImageTk, UnidentifiedImageError
@@ -64,7 +65,7 @@ max_image_pixels = Image.MAX_IMAGE_PIXELS
 
 # TODO: Completely overhaul everything related to multistate
 class C4IconSwapper:
-    def __init__(self):
+    def __init__(self, recover_path=''):
         def valid_instance_id(instance_ids: list):
             valid_id = str(random.randint(111111, 999999))
             if f'{valid_id}\n' in instance_ids:
@@ -306,7 +307,9 @@ class C4IconSwapper:
         global global_instance_id
         global_instance_id = self.instance_id
 
-        if os.path.isdir(pathjoin(self.appdata_folder, 'Recovery')):
+        if recover_path:
+            self.do_recovery(recover_path)
+        elif os.path.isdir(pathjoin(self.appdata_folder, 'Recovery')):
             # noinspection PyTypeChecker
             self.root.after(10, lambda: RecoveryWin(self))
 
@@ -383,6 +386,7 @@ class C4IconSwapper:
             return
         self.end_program()
 
+    # TODO: Check for and delete empty recovery directory
     def end_program(self):
         if not (is_server := self.curr_server_id == self.instance_id):
             print('')
@@ -607,6 +611,19 @@ class C4IconSwapper:
         self.replacement_panel.next_icon_button['state'] = save_state.replacement_panel['next']
 
         self.ask_to_save = False
+
+    def do_recovery(self, recover_path: str):
+        if os.path.isdir((driver_folder := pathjoin(recover_path, 'driver'))):
+            zip_path = f'{driver_folder}.zip'
+            shutil.make_archive(driver_folder, 'zip', driver_folder)
+            shutil.move(zip_path, recovery_c4z_path := pathjoin(self.instance_temp, 'recovery.c4z'))
+            self.c4z_panel.load_c4z(file_path=recovery_c4z_path)
+            os.remove(recovery_c4z_path)
+        if os.path.isdir(recovery_icons_path := pathjoin(recover_path, 'Replacement Icons')):
+            for item in os.listdir(recovery_icons_path):
+                self.replacement_panel.load_replacement(file_path=pathjoin(recovery_icons_path, item))
+        self.ask_to_save = True
+        shutil.rmtree(recover_path)
 
     def open_edit_win(self, window, win_type: str):
         if window:
@@ -1799,7 +1816,7 @@ class C4zPanel:
         else:
             self.main.edit.entryconfig(self.main.unrestore_all_pos, state=DISABLED)
 
-    def load_c4z(self, given_path=None):
+    def load_c4z(self, file_path=None):
         def get_icons(root_directory):
             if not root_directory:
                 return []
@@ -2010,15 +2027,12 @@ class C4zPanel:
                 shutil.move(driver_path, temp_bak)
 
         # File select dialog
-        if given_path is None:
-            filename = filedialog.askopenfilename(filetypes=[('Control4 Drivers', '*.c4z *.zip')])
-            # If no file selected
-            if not filename:
+        if file_path is None:
+            file_path = filedialog.askopenfilename(filetypes=[('Control4 Drivers', '*.c4z *.zip')])
+            if not file_path:  # If no file selected
                 if os.path.isdir(temp_bak):
                     shutil.move(temp_bak, driver_path)
                 return
-        else:
-            filename = given_path
 
         # Delete existing driver
         main.driver_selected = False
@@ -2026,7 +2040,7 @@ class C4zPanel:
             shutil.rmtree(driver_folder)
 
         # Unpack selected driver
-        shutil.unpack_archive(filename, driver_folder, 'zip')
+        shutil.unpack_archive(file_path, driver_folder, 'zip')
 
         # Read XML
         curr_xml = main.driver_xml  # store current XML in case of abort
@@ -2059,10 +2073,10 @@ class C4zPanel:
         # Update entry with driver file path
         self.file_entry_field['state'] = NORMAL
         self.file_entry_field.delete(0, 'end')
-        self.file_entry_field.insert(0, filename)
+        self.file_entry_field.insert(0, file_path)
         self.file_entry_field['state'] = 'readonly'
 
-        orig_file_path = Path(filename)
+        orig_file_path = Path(file_path)
         main.orig_file_dir = orig_file_path.parent
         if (orig_driver_name := orig_file_path.stem) not in ('generic', 'multi generic'):
             main.export_panel.driver_name_entry.delete(0, 'end')
@@ -2290,7 +2304,7 @@ class C4zPanel:
             target=self.main.replacement_panel.load_replacement, kwargs={'file_path': paths}, daemon=True).start()
         if c4z_path := next((path for path in paths if path.endswith('.c4z') and os.path.isfile(path)), None):
             # noinspection PyUnboundLocalVariable
-            self.load_c4z(given_path=c4z_path)
+            self.load_c4z(file_path=c4z_path)
 
     def right_click_menu(self, event):
         context_menu = Menu(self.main.root, tearoff=0)
@@ -3073,6 +3087,7 @@ class RecoveryWin:
             return
         self.window = window = Toplevel(main.root)
         self.main = main
+        self.recovery_path = recovery_path
         window.grab_set()
         window.focus()
         window.transient(main.root)
@@ -3123,6 +3138,7 @@ class RecoveryWin:
 
         def do_delete():
             # TODO: rmtree recovery folder
+            # shutil.rmtree(self.recovery_path)
             close_dialog.destroy()
             self.window.destroy()
             self.main.root.deiconify()
@@ -3147,9 +3163,59 @@ class RecoveryWin:
         no_button = Button(close_dialog, text='No', width='10', command=exit_close_dialog)
         no_button.place(relx=0.5, x=4, rely=1, y=-8, anchor='sw')
 
-    # noinspection PyMethodMayBeStatic
+    def warning_dialog(self):
+        def exit_warning_dialog():
+            warning_dialog.destroy()
+            self.window.deiconify()
+            self.window.focus()
+
+        def do_delete():
+            warning_dialog.destroy()
+            self.window.deiconify()
+            self.window.focus()
+
+        warning_dialog = Toplevel(self.window)
+        warning_dialog.title('Warning')
+        warning_dialog.geometry('260x85')
+        warning_dialog.geometry(f'+{self.window.winfo_rootx()}+{self.window.winfo_rooty()}')
+        warning_dialog.protocol('WM_DELETE_WINDOW', exit_warning_dialog)
+        warning_dialog.grab_set()
+        warning_dialog.focus()
+        warning_dialog.transient(self.window)
+        warning_dialog.resizable(False, False)
+
+        label = Label(warning_dialog, text='All unselected projects will be deleted.\nAre you sure?',
+                      font=(label_font, 10, 'bold'))
+        label.place(relx=0.5, y=3, anchor='n')
+
+        yes_button = Button(warning_dialog, text='Yes', width='10', command=do_delete)
+        yes_button.place(relx=0.5, x=-4, rely=1, y=-8, anchor='se')
+
+        no_button = Button(warning_dialog, text='No', width='10', command=exit_warning_dialog)
+        no_button.place(relx=0.5, x=4, rely=1, y=-8, anchor='sw')
+
+        return warning_dialog
+
     def do_recovery(self):
-        print('TODO: Finish implementing project recovery')
+        selected = [rec_obj for rec_obj in self.recoverable_projects if rec_obj.recover.get()]
+        if not selected:
+            return
+        if len(selected) != len(self.recoverable_projects):
+            self.window.wait_window(self.warning_dialog())
+        own_project = ''
+        for recovery_obj in [rec_obj for rec_obj in self.recoverable_projects if rec_obj not in selected]:
+            shutil.rmtree(recovery_obj.path)
+        for recovery_obj in selected:
+            if not own_project and not self.main.driver_selected:
+                own_project = recovery_obj.path
+                continue
+            Process(target=C4IconSwapper, kwargs={'recover_path': recovery_obj.path}).start()
+        if not own_project:
+            return
+        self.main.do_recovery(own_project)
+        self.window.destroy()
+        self.main.root.deiconify()
+        self.main.root.focus()
 
 
 class RecoveryObject:
@@ -3157,6 +3223,7 @@ class RecoveryObject:
         if not os.path.isdir(instance_path):
             return
         self.name = 'No Driver' if 'driver' not in os.listdir(instance_path) else 'MsgNotFound'
+        self.path = instance_path
         self.num_images = 0
         self.mtime = datetime.fromtimestamp(os.path.getmtime(instance_path)).strftime("%m/%d %H:%M:%S")
         self.recover = IntVar()
