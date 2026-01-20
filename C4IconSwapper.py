@@ -1040,7 +1040,6 @@ class C4IconSwapper:
         if not self.undo_history:
             self.edit.entryconfig(self.undo_pos, state=DISABLED)
             return
-        current_icon = self.c4z_panel.current_icon
         ask_to_save = self.ask_to_save
         self.ask_to_save = False
         undo_dict = self.undo_history.pop()
@@ -1048,7 +1047,7 @@ class C4IconSwapper:
             undo_icon = undo_dict[icon]
             icon.replacement_icon = undo_icon['replacement_icon']
             icon.restore_bak = undo_icon['restore_bak']
-        self.c4z_panel.current_icon = current_icon
+        self.c4z_panel.current_icon = undo_dict['current_icon']
         self.c4z_panel.update_icon()
 
         if not self.undo_history:
@@ -1058,6 +1057,7 @@ class C4IconSwapper:
     def update_undo_history(self):
         self.undo_history.append({icon: {'replacement_icon': icon.replacement_icon,
                                          'restore_bak': icon.restore_bak} for icon in self.c4z_panel.icons})
+        self.undo_history[-1]['current_icon'] = self.c4z_panel.current_icon
         self.edit.entryconfig(self.undo_pos, state=NORMAL)
 
     def easter(self, *_, increment=True):
@@ -1152,7 +1152,12 @@ class C4Icon(Icon):
     def replace(self, icon: Icon):
         self.replacement_icon = icon
 
-    def refresh_tk_img(self):
+    def refresh_tk_img(self, bak=False):
+        if bak and self.bak:
+            icon = max(self.icons, key=lambda sub_icon: sub_icon.size[0] if sub_icon.bak_path else None)
+            with Image.open(icon.bak_path) as img:
+                self.bak_tk_icon = ImageTk.PhotoImage(img.resize((128, 128), Resampling.LANCZOS))
+            return
         with Image.open(self.path) as img:
             self.tk_icon_lg = ImageTk.PhotoImage(img.resize((128, 128), Resampling.LANCZOS))
 
@@ -2941,6 +2946,10 @@ class ExportPanel:
         # Set restore point for XML object
         driver_xml.set_restore_point()
 
+        # Backup driver files
+        driver_bak_folder = pathjoin(main.instance_temp, 'driver_bak')
+        shutil.copytree(pathjoin(main.instance_temp, 'driver'), driver_bak_folder)
+
         # Update connection names
         for conn in main.connections:
             conn.tag.get_tag('connectionname').set_value(conn.name_entry_var.get())
@@ -2994,8 +3003,6 @@ class ExportPanel:
                         shutil.copy(sub_icon.path, sub_icon.bak_path)
                     out_icon = rp_icon.resize(sub_icon.size, Resampling.LANCZOS)
                     out_icon.save(sub_icon.path)
-                icon.replacement_icon = None
-                icon.refresh_tk_img()
             elif icon.restore_bak and icon.bak:
                 for sub_icon in icon.icons:
                     if not sub_icon.bak_path:
@@ -3008,11 +3015,6 @@ class ExportPanel:
                         os.remove(temp_bak_path)
                     else:
                         shutil.move(sub_icon.bak_path, sub_icon.path)
-                        sub_icon.bak_path = None
-                icon.restore_bak = False
-                icon.bak = None
-                icon.bak_tk_icon = None
-                icon.refresh_tk_img()
         shutil.rmtree(bak_folder)
 
         # Save As Dialog
@@ -3035,15 +3037,13 @@ class ExportPanel:
                 os.remove(existing_file)
             self.export_file(driver_name)
 
-        # Restore original XML and Lua
+        # Restore original files
         main.driver_version_var.set(main.driver_version_new_var.get())
         if self.inc_driver_version.get():
             main.driver_version_new_var.set(str(int(main.driver_version_new_var.get()) + 1))
         driver_xml.restore()
-        lua_path = pathjoin(main.instance_temp, 'driver', 'driver.lua')
-        if os.path.isfile(lua_bak_path := f'{lua_path}.bak'):
-            os.replace(lua_bak_path, lua_path)
-        os.replace(f'{xml_path}.bak', pathjoin(main.instance_temp, 'driver', 'driver.xml'))
+        shutil.rmtree(pathjoin(main.instance_temp, 'driver'))
+        shutil.move(driver_bak_folder, pathjoin(main.instance_temp, 'driver'))
 
     def validate_driver_name(self, *_):
         driver_name_cmp = re_valid_chars.sub('', driver_name := self.driver_name_var.get())
