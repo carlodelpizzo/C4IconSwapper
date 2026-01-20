@@ -1035,7 +1035,6 @@ class C4IconSwapper:
                 except OSError as er:
                     print(f'OS Error with` {path}: {er}')
 
-    # TODO: Double check if export affects icons
     def undo(self, *_):
         if not self.undo_history:
             self.edit.entryconfig(self.undo_pos, state=DISABLED)
