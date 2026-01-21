@@ -264,14 +264,14 @@ class C4IconSwapper:
         self.states_win = None
         self.connections_win = None
         self.root.bind('<Control-s>', self.save_project)
-        self.root.bind('<Control-o>', self.load_project)
+        self.root.bind('<Control-o>', self.load_c4is)
         self.root.bind('<Control-z>', self.undo)
-        self.root.bind('<Control-w>', self.on_program_exit)
+        self.root.bind('<Control-w>', self.end_program)
 
         # Menu
         self.menu = Menu(self.root)
         self.file = Menu(self.menu, tearoff=0)
-        self.file.add_command(label='Open Project', command=self.load_project)
+        self.file.add_command(label='Open Project', command=self.load_c4is)
         self.file.add_command(label='Save Project', command=self.save_project)
         self.file.add_separator()
         self.file.add_command(label='Open C4z', command=self.c4z_panel.load_c4z)
@@ -315,7 +315,7 @@ class C4IconSwapper:
 
         # Main Loop
         self.root.config(menu=self.menu)
-        self.root.protocol('WM_DELETE_WINDOW', self.on_program_exit)
+        self.root.protocol('WM_DELETE_WINDOW', self.end_program)
         self.root.focus_force()
         self.root.mainloop()
 
@@ -380,73 +380,25 @@ class C4IconSwapper:
         # noinspection PyTypeChecker
         self.root.after(150, self.blink_driver_name_entry)
 
-    def on_program_exit(self, *_):
-        if self.ask_to_save:
-            self.ask_to_save_dialog(root_destroy=True)
+    def open_edit_win(self, window, win_type: str):
+        if window:
+            window.window.deiconify()
+            window.window.focus()
             return
-        self.end_program()
+        if win_type == 'conn':
+            self.connections_win = ConnectionsWin(self)
+        elif win_type == 'driver':
+            self.driver_info_win = DriverInfoWin(self)
+        elif win_type == 'states':
+            self.states_win = StatesWin(self)
 
-    # TODO: Check for and delete empty recovery directory
-    def end_program(self):
-        if not (is_server := self.curr_server_id == self.instance_id):
-            print('')
-        if is_server and not self.client_dict:
-            print('Global Delete')
-            shutil.rmtree(self.global_temp)
-        else:
-            print('Local Delete')
-            print(self.client_dict)
-            shutil.rmtree(self.instance_temp)
-
-        self.root.destroy()
-
-    def ask_to_save_dialog(self, on_exit=True, root_destroy=False):
-        def cancel_dialog():
-            self.ask_to_save = True
-            save_dialog.destroy()
-
-        def exit_save_dialog():
-            save_dialog.destroy()
-            if root_destroy:
-                self.end_program()
-
-        def do_project_save():
-            self.save_project()
-            exit_save_dialog()
-
-        save_dialog = Toplevel(self.root)
-        save_dialog.title('Save current project?')
-        save_dialog.geometry('239x70')
-        if on_exit:
-            win_x = self.root.winfo_rootx() + self.root.winfo_width() - 250
-            save_dialog.geometry(f'+{win_x}+{self.root.winfo_rooty()}')
-        else:
-            save_dialog.geometry(f'+{self.root.winfo_rootx()}+{self.root.winfo_rooty()}')
-        save_dialog.protocol('WM_DELETE_WINDOW', cancel_dialog)
-        save_dialog.grab_set()
-        save_dialog.focus()
-        save_dialog.transient(self.root)
-        save_dialog.resizable(False, False)
-
-        confirm_label = Label(save_dialog, text='Would you like to save the current project?')
-        confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
-
-        yes_button = Button(save_dialog, text='Yes', width='10', command=do_project_save)
-        yes_button.grid(row=2, column=0, sticky='e', padx=5)
-
-        no_button = Button(save_dialog, text='No', width='10', command=exit_save_dialog)
-        no_button.grid(row=2, column=1, sticky='w', padx=5)
-
-        self.ask_to_save = False
-        return save_dialog
-
-    def close_connections(self):
+    def close_connections_win(self):
         if self.connections_win is None:
             return
         self.connections_win.window.destroy()
         self.connections_win = None
 
-    def close_driver_info(self):
+    def close_driver_info_win(self):
         if self.driver_info_win is None:
             return
         if not self.driver_version_new_var.get():
@@ -466,33 +418,12 @@ class C4IconSwapper:
         self.driver_info_win.window.destroy()
         self.driver_info_win = None
 
-    def close_states(self):
+    def close_states_win(self):
         if self.states_win is None:
             return
         self.states_win.refresh()
         self.states_win.window.destroy()
         self.states_win = None
-
-    def validate_driver_ver(self, *_):
-        version_compare = re.sub(r'\D', '', version_str := self.driver_version_new_var.get()).lstrip('0')
-
-        if self.driver_info_win and (str_diff := len(version_str) - len(version_compare)):
-            cursor_pos = self.driver_info_win.driver_ver_new_entry.index(INSERT)
-            self.driver_info_win.driver_ver_new_entry.icursor(cursor_pos - str_diff)
-            self.driver_version_new_var.set(version_compare)
-
-        self.ask_to_save = True
-
-    def validate_man_and_creator(self, string_var=None, entry=None):
-        if not string_var or not entry:
-            return
-        name_compare = re_valid_chars.sub('', name := string_var.get())
-        if self.driver_info_win and (str_diff := len(name) - len(name_compare)):
-            cursor_pos = entry.index(INSERT)
-            entry.icursor(cursor_pos - str_diff)
-            string_var.set(name_compare)
-
-        self.ask_to_save = True
 
     def save_project(self, *_):
         out_file = filedialog.asksaveasfile(initialfile=f'{self.export_panel.driver_name_var.get()}.c4is',
@@ -508,11 +439,9 @@ class C4IconSwapper:
             pickle.dump(C4IS(self), output)
         self.ask_to_save = False
 
-    def load_project(self, *_):
-        if filename := filedialog.askopenfilename(filetypes=[('C4IconSwapper Project', '*.c4is')]):
-            self.load_c4is(filename)
-
-    def load_c4is(self, file):
+    def load_c4is(self, *_):
+        if not (file := filedialog.askopenfilename(filetypes=[('C4IconSwapper Project', '*.c4is')])):
+            return
         while self.replacement_panel.multi_threading:
             pass
         save_state = file
@@ -613,29 +542,19 @@ class C4IconSwapper:
         self.ask_to_save = False
 
     def do_recovery(self, recover_path: str):
+        has_driver = False
         if os.path.isdir((driver_folder := pathjoin(recover_path, 'driver'))):
             zip_path = f'{driver_folder}.zip'
             shutil.make_archive(driver_folder, 'zip', driver_folder)
             shutil.move(zip_path, recovery_c4z_path := pathjoin(self.instance_temp, 'recovery.c4z'))
             self.c4z_panel.load_c4z(file_path=recovery_c4z_path)
             os.remove(recovery_c4z_path)
+            has_driver = True
         if os.path.isdir(recovery_icons_path := pathjoin(recover_path, 'Replacement Icons')):
             for item in os.listdir(recovery_icons_path):
                 self.replacement_panel.load_replacement(file_path=pathjoin(recovery_icons_path, item))
-        self.ask_to_save = True
         shutil.rmtree(recover_path)
-
-    def open_edit_win(self, window, win_type: str):
-        if window:
-            window.window.deiconify()
-            window.window.focus()
-            return
-        if win_type == 'conn':
-            self.connections_win = ConnectionsWin(self)
-        elif win_type == 'driver':
-            self.driver_info_win = DriverInfoWin(self)
-        elif win_type == 'states':
-            self.states_win = StatesWin(self)
+        self.ask_to_save = has_driver
 
     # Inter-Process Communication (For running multiple instances simultaneously)
     def ipc(self, takeover=False, port=None):
@@ -1076,6 +995,69 @@ class C4IconSwapper:
         self.undo_history[-1]['current_icon'] = self.c4z_panel.current_icon
         self.edit.entryconfig(self.undo_pos, state=NORMAL)
 
+    def ask_to_save_dialog(self, result_var, on_exit=True):
+        def cancel_dialog():
+            result_var.set('cancel')
+            self.ask_to_save = ask_to_save
+            save_dialog.destroy()
+
+        def do_not_save():
+            result_var.set('dont')
+            save_dialog.destroy()
+
+        def do_project_save():
+            result_var.set('do')
+            self.save_project()
+            save_dialog.destroy()
+
+        ask_to_save = self.ask_to_save
+        save_dialog = Toplevel(self.root)
+        save_dialog.title('Save current project?')
+        save_dialog.geometry('239x70')
+        if on_exit:
+            win_x = self.root.winfo_rootx() + self.root.winfo_width() - 250
+            save_dialog.geometry(f'+{win_x}+{self.root.winfo_rooty()}')
+        else:
+            save_dialog.geometry(f'+{self.root.winfo_rootx()}+{self.root.winfo_rooty()}')
+        save_dialog.protocol('WM_DELETE_WINDOW', cancel_dialog)
+        save_dialog.grab_set()
+        save_dialog.focus()
+        save_dialog.transient(self.root)
+        save_dialog.resizable(False, False)
+
+        confirm_label = Label(save_dialog, text='Would you like to save the current project?')
+        confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
+
+        yes_button = Button(save_dialog, text='Yes', width='10', command=do_project_save)
+        yes_button.grid(row=2, column=0, sticky='e', padx=5)
+
+        no_button = Button(save_dialog, text='No', width='10', command=do_not_save)
+        no_button.grid(row=2, column=1, sticky='w', padx=5)
+
+        self.ask_to_save = False
+        return save_dialog
+
+    def end_program(self, *_):
+        if self.ask_to_save:
+            save_dialog_result = StringVar()
+            self.ask_to_save_dialog(save_dialog_result)
+            self.root.wait_variable(save_dialog_result)
+            if save_dialog_result.get() not in ('do', 'dont'):
+                return
+        if os.path.isdir(recovery_path := pathjoin(self.appdata_folder, 'Recovery')) and not os.listdir(recovery_path):
+            shutil.rmtree(recovery_path)
+        if not (is_server := self.curr_server_id == self.instance_id):
+            print('')
+        if is_server and not self.client_dict:
+            print('Global Delete')
+            shutil.rmtree(self.global_temp)
+        else:
+            print('Local Delete')
+            print(self.client_dict)
+            shutil.rmtree(self.instance_temp)
+
+        self.root.destroy()
+
     def easter(self, *_, increment=True):
         if self.easter_counter < 0:
             self.easter_counter = 0
@@ -1185,7 +1167,7 @@ class ConnectionsWin:
         # Initialize window
         self.window = Toplevel(self.main.root)
         self.window.focus()
-        self.window.protocol('WM_DELETE_WINDOW', self.main.close_connections)
+        self.window.protocol('WM_DELETE_WINDOW', self.main.close_connections_win)
         self.window.title('Edit Driver Connections')
         self.window.geometry('975x250')
         x_spacing, y_spacing = 330, 40
@@ -1377,7 +1359,7 @@ class DriverInfoWin:
         # Initialize window
         self.window = Toplevel(main.root)
         self.window.focus()
-        self.window.protocol('WM_DELETE_WINDOW', main.close_driver_info)
+        self.window.protocol('WM_DELETE_WINDOW', main.close_driver_info_win)
         self.window.title('Edit Driver Info')
         self.window.geometry('255x240')
         self.window.geometry(f'+{main.root.winfo_rootx() + main.export_panel.x}+{main.root.winfo_rooty()}')
@@ -1414,7 +1396,7 @@ class DriverInfoWin:
         self.driver_man_new_entry = Entry(self.window, width=entry_width,
                                           textvariable=main.driver_manufac_new_var)
         main.driver_manufac_new_var.trace_add('write',
-                                              lambda name, index, mode: main.validate_man_and_creator(
+                                              lambda name, index, mode: self.validate_man_and_creator(
                                                   entry=self.driver_man_new_entry))
 
         driver_creator_entry = Entry(self.window, width=entry_width, textvariable=main.driver_creator_var)
@@ -1422,7 +1404,7 @@ class DriverInfoWin:
         self.driver_creator_new_entry = Entry(self.window, width=entry_width,
                                               textvariable=main.driver_creator_new_var)
         main.driver_creator_new_var.trace_add('write',
-                                              lambda name, index, mode: main.validate_man_and_creator(
+                                              lambda name, index, mode: self.validate_man_and_creator(
                                                   string_var=main.driver_creator_new_var,
                                                   entry=self.driver_creator_new_entry))
 
@@ -1431,7 +1413,7 @@ class DriverInfoWin:
         self.driver_ver_new_entry = Entry(self.window, width=entry_width,
                                           textvariable=main.driver_version_new_var)
         self.driver_ver_new_entry.bind('<FocusOut>', main.export_panel.update_driver_version)
-        main.driver_version_new_var.trace_add('write', main.validate_driver_ver)
+        main.driver_version_new_var.trace_add('write', self.validate_driver_ver)
         driver_ver_orig_entry = Entry(self.window, width=6, textvariable=main.driver_ver_orig)
         driver_ver_orig_entry['state'] = DISABLED
         instance_id_label.place(x=127, y=220, anchor='n')
@@ -1450,6 +1432,27 @@ class DriverInfoWin:
         self.driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
         driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
 
+    def validate_man_and_creator(self, string_var=None, entry=None):
+        if not string_var or not entry:
+            return
+        name_compare = re_valid_chars.sub('', name := string_var.get())
+        if str_diff := len(name) - len(name_compare):
+            cursor_pos = entry.index(INSERT)
+            entry.icursor(cursor_pos - str_diff)
+            string_var.set(name_compare)
+
+        self.main.ask_to_save = True
+
+    def validate_driver_ver(self, *_):
+        version_compare = re.sub(r'\D', '', ver_str := self.main.driver_version_new_var.get()).lstrip('0')
+
+        if str_diff := len(ver_str) - len(version_compare):
+            cursor_pos = self.driver_ver_new_entry.index(INSERT)
+            self.driver_ver_new_entry.icursor(cursor_pos - str_diff)
+            self.main.driver_version_new_var.set(version_compare)
+
+        self.main.ask_to_save = True
+
 
 class StatesWin:
     def __init__(self, main: C4IconSwapper):
@@ -1458,7 +1461,7 @@ class StatesWin:
         # Initialize window
         self.window = Toplevel(main.root)
         self.window.focus()
-        self.window.protocol('WM_DELETE_WINDOW', main.close_states)
+        self.window.protocol('WM_DELETE_WINDOW', main.close_states_win)
         self.window.title('Edit Driver States')
         self.window.geometry('385x287')
         self.window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
@@ -1732,7 +1735,11 @@ class C4zPanel:
     def load_gen_driver(self, multi=False):
         main = self.main
         if main.ask_to_save:
-            main.root.wait_window(main.ask_to_save_dialog(on_exit=False))
+            save_dialog_result = StringVar()
+            main.ask_to_save_dialog(save_dialog_result, on_exit=False)
+            main.root.wait_variable(save_dialog_result)
+            if save_dialog_result.get() not in ('do', 'dont'):
+                return
 
         with Image.open(asset_path('assets/loading_img.png')) as img:
             icon = ImageTk.PhotoImage(img)
@@ -1817,6 +1824,55 @@ class C4zPanel:
             self.main.edit.entryconfig(self.main.unrestore_all_pos, state=DISABLED)
 
     def load_c4z(self, file_path=None):
+        if (main := self.main).ask_to_save:
+            save_dialog_result = StringVar()
+            main.ask_to_save_dialog(save_dialog_result, on_exit=False)
+            main.root.wait_variable(save_dialog_result)
+            if save_dialog_result.get() not in ('do', 'dont'):
+                return
+
+        if self.file_entry_field.get() == 'Invalid driver selected...':
+            self.file_entry_field['state'] = NORMAL
+            self.file_entry_field.delete(0, 'end')
+            if main.restore_entry_string:
+                self.file_entry_field.insert(0, main.restore_entry_string)
+            else:
+                self.file_entry_field.insert(0, 'Select .c4z file...')
+            self.file_entry_field['state'] = 'readonly'
+            main.restore_entry_string = ''
+            main.time_var = 0
+            main.schedule_entry_restore = False
+
+        # Backup existing driver data
+        temp_bak = pathjoin(main.instance_temp, 'temp_driver_backup')
+        driver_path = pathjoin(main.instance_temp, 'driver')
+        icons_bak = None
+        if self.icons:
+            icons_bak = self.icons
+            if os.path.isdir(driver_path):
+                shutil.move(driver_path, temp_bak)
+
+        # File select dialog
+        if file_path is None:
+            file_path = filedialog.askopenfilename(filetypes=[('Control4 Drivers', '*.c4z *.zip')])
+            if not file_path:  # If no file selected
+                if os.path.isdir(temp_bak):
+                    shutil.move(temp_bak, driver_path)
+                return
+
+        # Delete existing driver
+        main.driver_selected = False
+        if os.path.isdir(driver_folder := pathjoin(main.instance_temp, 'driver')):
+            shutil.rmtree(driver_folder)
+
+        # Unpack selected driver
+        shutil.unpack_archive(file_path, driver_folder, 'zip')
+
+        # Read XML
+        curr_xml = main.driver_xml  # store current XML in case of abort
+        main.driver_xml = XMLObject(pathjoin(main.instance_temp, 'driver', 'driver.xml'))
+
+        # Get icons
         def get_icons(root_directory):
             if not root_directory:
                 return []
@@ -2002,51 +2058,6 @@ class C4zPanel:
 
             return icon_groups
 
-        if (main := self.main).ask_to_save:
-            main.root.wait_window(main.ask_to_save_dialog(on_exit=False))
-
-        if self.file_entry_field.get() == 'Invalid driver selected...':
-            self.file_entry_field['state'] = NORMAL
-            self.file_entry_field.delete(0, 'end')
-            if main.restore_entry_string:
-                self.file_entry_field.insert(0, main.restore_entry_string)
-            else:
-                self.file_entry_field.insert(0, 'Select .c4z file...')
-            self.file_entry_field['state'] = 'readonly'
-            main.restore_entry_string = ''
-            main.time_var = 0
-            main.schedule_entry_restore = False
-
-        # Backup existing driver data
-        temp_bak = pathjoin(main.instance_temp, 'temp_driver_backup')
-        driver_path = pathjoin(main.instance_temp, 'driver')
-        icons_bak = None
-        if self.icons:
-            icons_bak = self.icons
-            if os.path.isdir(driver_path):
-                shutil.move(driver_path, temp_bak)
-
-        # File select dialog
-        if file_path is None:
-            file_path = filedialog.askopenfilename(filetypes=[('Control4 Drivers', '*.c4z *.zip')])
-            if not file_path:  # If no file selected
-                if os.path.isdir(temp_bak):
-                    shutil.move(temp_bak, driver_path)
-                return
-
-        # Delete existing driver
-        main.driver_selected = False
-        if os.path.isdir(driver_folder := pathjoin(main.instance_temp, 'driver')):
-            shutil.rmtree(driver_folder)
-
-        # Unpack selected driver
-        shutil.unpack_archive(file_path, driver_folder, 'zip')
-
-        # Read XML
-        curr_xml = main.driver_xml  # store current XML in case of abort
-        main.driver_xml = XMLObject(pathjoin(main.instance_temp, 'driver', 'driver.xml'))
-
-        # Get icons
         self.icons = get_icons((main.icon_dir, main.images_dir))
 
         # Update entry fields and restore driver if necessary
@@ -2129,7 +2140,7 @@ class C4zPanel:
         if main.multi_state_driver:
             main.edit.entryconfig(main.states_pos, state=NORMAL)
         elif main.states_win:
-            main.close_states()
+            main.close_states_win()
         main.state_dupes = []
 
         # Update driver prev/next buttons
@@ -3030,7 +3041,7 @@ class ExportPanel:
                         shutil.move(sub_icon.bak_path, sub_icon.path)
         shutil.rmtree(bak_folder)
 
-        # Save As Dialog
+        # Save As Dialog and export file
         if not quick_export:
             out_file = filedialog.asksaveasfile(initialfile=f'{driver_name}.c4z',
                                                 filetypes=[('Control4 Drivers', '*.c4z')])
@@ -3080,7 +3091,6 @@ class ExportPanel:
             self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
 
 
-# TODO: Finish implementing project recovery
 class RecoveryWin:
     def __init__(self, main: C4IconSwapper):
         if not os.path.isdir(recovery_path := pathjoin(main.appdata_folder, 'Recovery')):
@@ -3088,6 +3098,7 @@ class RecoveryWin:
         self.window = window = Toplevel(main.root)
         self.main = main
         self.recovery_path = recovery_path
+        self.abort_recovery = False
         window.grab_set()
         window.focus()
         window.transient(main.root)
@@ -3137,8 +3148,7 @@ class RecoveryWin:
             self.window.focus()
 
         def do_delete():
-            # TODO: rmtree recovery folder
-            # shutil.rmtree(self.recovery_path)
+            shutil.rmtree(self.recovery_path)
             close_dialog.destroy()
             self.window.destroy()
             self.main.root.deiconify()
@@ -3164,21 +3174,24 @@ class RecoveryWin:
         no_button.place(relx=0.5, x=4, rely=1, y=-8, anchor='sw')
 
     def warning_dialog(self):
-        def exit_warning_dialog():
+        def close_dialog():
             warning_dialog.destroy()
             self.window.deiconify()
             self.window.focus()
 
-        def do_delete():
-            warning_dialog.destroy()
-            self.window.deiconify()
-            self.window.focus()
+        def abort_recovery():
+            self.abort_recovery = True
+            close_dialog()
+
+        def do_recovery():
+            self.abort_recovery = False
+            close_dialog()
 
         warning_dialog = Toplevel(self.window)
         warning_dialog.title('Warning')
         warning_dialog.geometry('260x85')
         warning_dialog.geometry(f'+{self.window.winfo_rootx()}+{self.window.winfo_rooty()}')
-        warning_dialog.protocol('WM_DELETE_WINDOW', exit_warning_dialog)
+        warning_dialog.protocol('WM_DELETE_WINDOW', abort_recovery)
         warning_dialog.grab_set()
         warning_dialog.focus()
         warning_dialog.transient(self.window)
@@ -3188,10 +3201,10 @@ class RecoveryWin:
                       font=(label_font, 10, 'bold'))
         label.place(relx=0.5, y=3, anchor='n')
 
-        yes_button = Button(warning_dialog, text='Yes', width='10', command=do_delete)
+        yes_button = Button(warning_dialog, text='Yes', width='10', command=do_recovery)
         yes_button.place(relx=0.5, x=-4, rely=1, y=-8, anchor='se')
 
-        no_button = Button(warning_dialog, text='No', width='10', command=exit_warning_dialog)
+        no_button = Button(warning_dialog, text='No', width='10', command=abort_recovery)
         no_button.place(relx=0.5, x=4, rely=1, y=-8, anchor='sw')
 
         return warning_dialog
@@ -3200,19 +3213,24 @@ class RecoveryWin:
         selected = [rec_obj for rec_obj in self.recoverable_projects if rec_obj.recover.get()]
         if not selected:
             return
+        # Warn that unselected projects will be deleted
         if len(selected) != len(self.recoverable_projects):
             self.window.wait_window(self.warning_dialog())
+            if self.abort_recovery:
+                self.abort_recovery = False
+                return
         own_project = ''
+        # Delete projects which were not selected
         for recovery_obj in [rec_obj for rec_obj in self.recoverable_projects if rec_obj not in selected]:
             shutil.rmtree(recovery_obj.path)
+        # Open first project in self and start new programs to open any remaining projects
         for recovery_obj in selected:
             if not own_project and not self.main.driver_selected:
                 own_project = recovery_obj.path
                 continue
             Process(target=C4IconSwapper, kwargs={'recover_path': recovery_obj.path}).start()
-        if not own_project:
-            return
-        self.main.do_recovery(own_project)
+        if own_project:
+            self.main.do_recovery(own_project)
         self.window.destroy()
         self.main.root.deiconify()
         self.main.root.focus()
