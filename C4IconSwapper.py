@@ -556,21 +556,29 @@ class C4IconSwapper:
         shutil.rmtree(recover_path)
         self.ask_to_save = has_driver
 
-    # Inter-Process Communication (For running multiple instances simultaneously)
+    # Inter-Process Communication (For running multiple instances simultaneously); Port range: (49200-65500)
     def ipc(self, takeover=False, port=None):
+        def next_port_number(port_files_dict):
+            for key in port_files_dict:
+                yield key
+
         def establish_self_as_server():
             server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             server.bind(('127.0.0.1', port))  # This is where exception is raised
             print(f'Is Server: {self.instance_id}')
 
-            # noinspection PyShadowingNames
-            for item in os.listdir(self.appdata_folder):
-                if not os.path.isfile(pathjoin(self.appdata_folder, item)):
-                    continue
-                if item_port := re.search(r'PORT~(\d{5})', item):
-                    if item_port.group(1) == str(port):
-                        continue
-                    os.remove(pathjoin(self.appdata_folder, item))
+            # Delete unused port files
+            port_files.pop(port, None)
+            for _, file_path in port_files.items():
+                Path(file_path).unlink(missing_ok=True)
+            for file_path in invalid_port_files:
+                Path(file_path).unlink(missing_ok=True)
+
+            # TODO: Handle case where two apps start simultaneously and successfully establish themselves
+            #  as servers on different ports. Also handle any clients which may have connected.
+            #  May use server port file heartbeat, and have clients check the port file during every reconnect.
+
+            # Create/update current port file
             Path(pathjoin(self.appdata_folder, f'PORT~{port}')).touch()
 
             # First server cleanup. Only first server should enter this loop without being in reestablish mode
@@ -606,7 +614,12 @@ class C4IconSwapper:
 
         def establish_self_as_client():
             nonlocal port
+            nonlocal port_files
+            nonlocal invalid_port_files
+            nonlocal invalid_ports
+
             ipc_failures = 0
+            grace = True
             while True:
                 try:
                     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -634,34 +647,53 @@ class C4IconSwapper:
                                 threading.Thread(target=self.ipc_client_loop, args=[client], daemon=True).start()
                                 return True
                             case ['INSTANCE ID COLLISION']:
+                                grace = True
                                 self.instance_id = str(random.randint(111111, 999999))
                                 print('New id:', self.instance_id)
                                 break
+                            case _:
+                                if grace:
+                                    grace = False
+                                    print(f'Server sent invalid response; given grace: {msg}')
+                                    continue
+                                raise OSError(f'Server sent invalid response: {msg}')
                 except OSError as er:
                     ipc_failures += 1
                     print(er)
                     print('IPC Initialization Failed')
                     if ipc_failures > 3:
-                        # IPC port range (49200-65500)
-                        port = 49200 if port >= 65500 else port + 1
+                        if port_files:
+                            invalid_port_files.add(port_files.pop(port))
+                            invalid_ports.add(port)
+                            port = next(next_port, None)
+                            if port:
+                                print(f'Trying New Port: {port}')
+                                return False
+                        else:
+                            invalid_ports.add(port)
+                        while port in invalid_ports:
+                            port = random.randint(49200, 65500)
                         print(f'Trying New Port: {port}')
                         return False
 
+        port_files = {}
+        invalid_port_files = set()
+        invalid_ports = set()
         if port is None:
-            # Check for alternate port file
+            # Check for port file
             for item in os.listdir(self.appdata_folder):
-                if not os.path.isfile(pathjoin(self.appdata_folder, item)):
+                if not os.path.isfile(port_file_path := pathjoin(self.appdata_folder, item)):
                     continue
-                if curr_port := re.search(r'PORT~(\d{5})', item):
-                    port = int(curr_port.group(1))
-                    if port == self.default_port:
-                        print(f'Using Default Port: {port}')
-                        break
-                    print(f'Using Port: {port}')
-                    break
-            if port is None:
+                if re_result := re.search(r'PORT~(\d{5})', item):
+                    port_files[int(re_result.group(1))] = port_file_path
+            if not port_files:
                 port = self.default_port
                 print(f'Using Default Port: {port}')
+            else:
+                next_port = next_port_number(port_files)
+                port = self.default_port if self.default_port in port_files else next(next_port)
+                print(f'Using Default Port: {port}' if port == self.default_port else f'Using Port: {port}')
+
         if takeover:
             for _ in range(5):
                 try:
@@ -671,7 +703,7 @@ class C4IconSwapper:
                 except OSError as e:
                     print(f'Takeover Failed: {e}')
                     time.sleep(0.01)
-            # If takeover fails, erased client_dict and connect as client
+            # If takeover fails, erase client_dict and connect as client
             self.client_dict = {}
             establish_self_as_client()
             return
@@ -728,7 +760,7 @@ class C4IconSwapper:
                     return
                 del compare_dict
                 client.close()
-                time.sleep(1)
+                time.sleep(random.uniform(0.75, 1.25))
                 print('Attempting Reconnection as Client')
                 self.client_dict = {}
                 self.ipc()
@@ -1046,15 +1078,15 @@ class C4IconSwapper:
                 return
         if os.path.isdir(recovery_path := pathjoin(self.appdata_folder, 'Recovery')) and not os.listdir(recovery_path):
             shutil.rmtree(recovery_path)
+            print('Deleted empty Recovery folder')
         if not (is_server := self.curr_server_id == self.instance_id):
             print('')
         if is_server and not self.client_dict:
-            print('Global Delete')
             shutil.rmtree(self.global_temp)
+            print('Global Delete')
         else:
-            print('Local Delete')
-            print(self.client_dict)
             shutil.rmtree(self.instance_temp)
+            print('Local Delete')
 
         self.root.destroy()
 
@@ -3091,6 +3123,7 @@ class ExportPanel:
             self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
 
 
+# TODO: Handle cases of empty Recovery folder, and single project in Recovery folder
 class RecoveryWin:
     def __init__(self, main: C4IconSwapper):
         if not os.path.isdir(recovery_path := pathjoin(main.appdata_folder, 'Recovery')):
