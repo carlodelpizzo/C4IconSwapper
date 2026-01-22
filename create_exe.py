@@ -7,6 +7,7 @@ cur_dir = os.getcwd()
 pathjoin = os.path.join
 
 
+# TODO: Look at switching to Nuitka
 def make_exe(python_file: str):
     def clean_up():
         if os.path.isfile(pathjoin(cur_dir + python_file_name + '.spec')):
