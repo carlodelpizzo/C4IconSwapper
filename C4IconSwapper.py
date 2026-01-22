@@ -1,4 +1,5 @@
 import contextlib
+import ctypes
 import filecmp
 import itertools
 import os
@@ -66,12 +67,6 @@ max_image_pixels = Image.MAX_IMAGE_PIXELS
 # TODO: Completely overhaul everything related to multistate
 class C4IconSwapper:
     def __init__(self, recover_path=''):
-        def valid_instance_id(instance_ids: list):
-            valid_id = str(random.randint(111111, 999999))
-            if f'{valid_id}\n' in instance_ids:
-                valid_id = valid_instance_id(instance_ids)
-            return valid_id
-
         def exception_window(*args, message_txt=None):
             root = Toplevel(self.root)
             root.title('Exception')
@@ -175,8 +170,14 @@ class C4IconSwapper:
             print('***************************************************')
             return
 
+        self.running_as_exe = getattr(sys, 'frozen', False)
+        self.debug_console = None
+        if self.running_as_exe:
+            self.toggle_debug_console(initialize=True)
+
         # Create temporary directory
         self.instance_id = str(random.randint(111111, 999999))
+        print(f'Set Instance ID: {self.instance_id}')
         self.cur_dir = os.getcwd()
         self.appdata_folder = pathjoin(os.environ.get('APPDATA'), 'C4IconSwapper')
         self.recovery_folder = pathjoin(self.appdata_folder, 'Recovery')
@@ -268,7 +269,7 @@ class C4IconSwapper:
         self.root.bind('<Control-z>', self.undo)
         self.root.bind('<Control-w>', self.end_program)
 
-        # Menu
+        # Menus
         self.menu = Menu(self.root)
         self.file = Menu(self.menu, tearoff=0)
         self.file.add_command(label='Open Project', command=self.load_c4is)
@@ -297,6 +298,8 @@ class C4IconSwapper:
         self.edit.entryconfig(self.unrestore_pos, state=DISABLED)
         self.undo_pos = 7
         self.edit.entryconfig(self.undo_pos, state=DISABLED)
+
+        self.debug_menu = None
 
         self.menu.add_cascade(label='File', menu=self.file)
         self.menu.add_cascade(label='Edit', menu=self.edit)
@@ -649,7 +652,8 @@ class C4IconSwapper:
                             case ['INSTANCE ID COLLISION']:
                                 grace = True
                                 self.instance_id = str(random.randint(111111, 999999))
-                                print('New id:', self.instance_id)
+                                print('From Server: INSTANCE ID COLLISION')
+                                print(f'New Instance ID: {self.instance_id}')
                                 break
                             case _:
                                 if grace:
@@ -1097,6 +1101,10 @@ class C4IconSwapper:
         if self.easter_call_after_id:
             self.root.after_cancel(self.easter_call_after_id)
         if self.easter_counter > 10:
+            if self.running_as_exe and not self.debug_menu:
+                self.debug_menu = Menu(self.menu, tearoff=0)
+                self.debug_menu.add_command(label='Show/Hide Console', command=self.toggle_debug_console)
+                self.menu.add_cascade(label='Debug', menu=self.debug_menu)
             self.easter_counter = 0
             text, rely = ('\u262D', 1.027) if self.version_label.cget('text') == '\U0001F339' else ('\U0001F339', 1.02)
             self.version_label.config(text=text, font=(label_font, 30))
@@ -1105,6 +1113,28 @@ class C4IconSwapper:
             self.easter_counter += 1 if increment else -1
             # noinspection PyTypeChecker
             self.easter_call_after_id = self.root.after(500, lambda: self.easter(increment=False))
+
+    # noinspection PyUnresolvedReferences
+    def toggle_debug_console(self, initialize=False):
+        kernel32 = ctypes.windll.kernel32
+        user32 = ctypes.windll.user32
+        if initialize:
+            kernel32.AllocConsole()
+            self.debug_console = kernel32.GetConsoleWindow()
+            sys.stdout = open('CONOUT$', 'w')
+            sys.stderr = open('CONOUT$', 'w')
+
+            # Disable X to prevent app crash
+            hmenu = user32.GetSystemMenu(self.debug_console, False)
+            user32.EnableMenuItem(hmenu, 0xF060, 0x01)  # 0xF060 = X button, 0x01 = Greyed out
+            user32.ShowWindow(self.debug_console, 0)  # Immediately hide console
+            return
+
+        # Toggle visibility if it already exists
+        if user32.IsWindowVisible(self.debug_console):
+            user32.ShowWindow(self.debug_console, 0)  # Hide
+        else:
+            user32.ShowWindow(self.debug_console, 5)  # Show
 
 
 class Icon:
@@ -3123,15 +3153,23 @@ class ExportPanel:
             self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
 
 
-# TODO: Handle cases of empty Recovery folder, and single project in Recovery folder
 class RecoveryWin:
     def __init__(self, main: C4IconSwapper):
         if not os.path.isdir(recovery_path := pathjoin(main.appdata_folder, 'Recovery')):
             return
+        # Delete any non-directories in Recovery folder (Just in case)
+        for item in os.listdir(recovery_path):
+            if os.path.isdir(item_path := pathjoin(recovery_path, item)):
+                continue
+            os.remove(item_path)
+            print(f'Deleted invalid item from Recovery folder {item}')
+        if not (num_of_rec_folders := len(os.listdir(recovery_path))):
+            shutil.rmtree(recovery_path)
+            print('Deleted empty Recovery folder')
+            return
         self.window = window = Toplevel(main.root)
         self.main = main
         self.recovery_path = recovery_path
-        self.abort_recovery = False
         window.grab_set()
         window.focus()
         window.transient(main.root)
@@ -3149,7 +3187,7 @@ class RecoveryWin:
 
         canvas = Canvas(window)
         scrollable_frame = Frame(canvas)
-        if len(self.recoverable_projects) > 8:
+        if do_scroll := num_of_rec_folders > 8:
             scrollbar = Scrollbar(window, command=canvas.yview)
             scrollable_frame.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
             canvas.bind('<MouseWheel>', lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units'))
@@ -3163,15 +3201,18 @@ class RecoveryWin:
                                    f'{project.num_images} {"image" if project.num_images == 1 else "images"} | '
                                    f'{project.mtime}', variable=project.recover)
                            for project in self.recoverable_projects]
+        if num_of_rec_folders == 1:
+            self.recoverable_projects[-1].recover.set(1)
         for check in self.checkboxes:
             check.pack(anchor='w')
-            if len(self.recoverable_projects) > 8:
+            if do_scroll:
                 check.bind('<MouseWheel>', lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units'))
 
         recover_button = Button(window, text='Recover', width=10, command=self.do_recovery)
         recover_button.place(relx=0.5, x=-4, rely=1, y=-3, anchor='se')
 
-        delete_button = Button(window, text='Delete All', width=10, command=self.close_dialog)
+        delete_button = Button(window, text='Delete' if num_of_rec_folders == 1 else 'Delete All',
+                               width=10, command=self.close_dialog)
         delete_button.place(relx=0.5, x=4, rely=1, y=-3, anchor='sw')
 
     def close_dialog(self):
@@ -3197,7 +3238,8 @@ class RecoveryWin:
         close_dialog.transient(self.window)
         close_dialog.resizable(False, False)
 
-        label = Label(close_dialog, text='Delete all recovered projects?', font=(label_font, 10, 'bold'))
+        label = Label(close_dialog, text='Delete recovered project?' if len(self.recoverable_projects) == 1 else
+                        'Delete all recovered projects?', font=(label_font, 10, 'bold'))
         label.place(relx=0.5, y=3, anchor='n')
 
         yes_button = Button(close_dialog, text='Yes', width='10', command=do_delete)
@@ -3206,18 +3248,18 @@ class RecoveryWin:
         no_button = Button(close_dialog, text='No', width='10', command=exit_close_dialog)
         no_button.place(relx=0.5, x=4, rely=1, y=-8, anchor='sw')
 
-    def warning_dialog(self):
+    def warning_dialog(self, dialog_response_var):
         def close_dialog():
             warning_dialog.destroy()
             self.window.deiconify()
             self.window.focus()
 
         def abort_recovery():
-            self.abort_recovery = True
+            dialog_response_var.set(1)
             close_dialog()
 
         def do_recovery():
-            self.abort_recovery = False
+            dialog_response_var.set(0)
             close_dialog()
 
         warning_dialog = Toplevel(self.window)
@@ -3248,21 +3290,26 @@ class RecoveryWin:
             return
         # Warn that unselected projects will be deleted
         if len(selected) != len(self.recoverable_projects):
-            self.window.wait_window(self.warning_dialog())
-            if self.abort_recovery:
-                self.abort_recovery = False
+            abort_recovery = IntVar()
+            self.warning_dialog(abort_recovery)
+            self.window.wait_variable(abort_recovery)
+            if abort_recovery.get():
                 return
         own_project = ''
         # Delete projects which were not selected
         for recovery_obj in [rec_obj for rec_obj in self.recoverable_projects if rec_obj not in selected]:
             shutil.rmtree(recovery_obj.path)
-        # Open first project in self and start new programs to open any remaining projects
+        # Flag first project to open in self and start new programs to open any remaining projects
         for recovery_obj in selected:
             if not own_project and not self.main.driver_selected:
                 own_project = recovery_obj.path
                 continue
+            print('Launching new application to open recovered project')
+            # TODO: Handle processes sharing console prints
             Process(target=C4IconSwapper, kwargs={'recover_path': recovery_obj.path}).start()
+        # Open recovery project
         if own_project:
+            print('Opening recovered project')
             self.main.do_recovery(own_project)
         self.window.destroy()
         self.main.root.deiconify()
