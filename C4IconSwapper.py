@@ -204,7 +204,7 @@ class C4IconSwapper:
         self.client_dict = {}
         self.socket_dict = {}
         self.last_seen = {}
-        self.curr_server_id = ''
+        self.is_server = False
         self.reestablish = False
         self.reestablish_start = None
         self.reestablish_ids = None
@@ -565,10 +565,12 @@ class C4IconSwapper:
             for key in port_files_dict:
                 yield key
 
+        # noinspection PyShadowingNames
         def establish_self_as_server():
             server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             server.bind(('127.0.0.1', port))  # This is where exception is raised
             print(f'Is Server: {self.instance_id}')
+            self.is_server = True
 
             # Delete unused port files
             port_files.pop(port, None)
@@ -581,14 +583,16 @@ class C4IconSwapper:
             #  as servers on different ports. Also handle any clients which may have connected.
             #  May use server port file heartbeat, and have clients check the port file during every reconnect.
 
-            # Create/update current port file
-            Path(pathjoin(self.appdata_folder, f'PORT~{port}')).touch()
+            # Start heartbeat thread (Create/update current port file)
+            threading.Thread(target=self.ipc_server_heartbeat, args=[port], daemon=True).start()
+
+            # Check for other servers' port files after a delay
+            threading.Thread(target=self.ipc_server_conflict_check, args=[port], daemon=True).start()
 
             # First server cleanup. Only first server should enter this loop without being in reestablish mode
             if not self.reestablish:
                 delete_items = set()
                 recover_items = set()
-                # noinspection PyShadowingNames
                 for item in os.listdir(self.global_temp):
                     client_folder = pathjoin(self.global_temp, item)
                     if not os.path.isdir(client_folder) or item == self.instance_id:
@@ -611,7 +615,6 @@ class C4IconSwapper:
                     threading.Thread(target=self.handle_dead_clients, kwargs={'recover': True},
                                      args=[recover_items], daemon=True).start()
 
-            self.curr_server_id = self.instance_id
             server.listen(5)
             threading.Thread(target=self.ipc_server_loop, args=[server], daemon=True).start()
 
@@ -777,7 +780,7 @@ class C4IconSwapper:
             self.reestablish_start = time.time()
             self.reestablish_ids = set()
 
-        while True:
+        while self.is_server:
             try:
                 client, _ = server.accept()
                 client.settimeout(2)
@@ -837,6 +840,39 @@ class C4IconSwapper:
 
             except Exception as e:
                 print(f'Server Loop Error: {e}')
+
+    def ipc_server_heartbeat(self, port: int, first_time=True):
+        port_file = pathjoin(self.appdata_folder, f'PORT~{port}')
+        sleep_time = 1.23 if first_time else 7.77
+        while self.is_server:
+            Path(port_file).touch()
+            time.sleep(sleep_time)
+            if not self.root.winfo_exists():  # Ghost thread check
+                raise RuntimeError('👻')
+            if first_time:
+                first_time = False
+                sleep_time = 7.77
+
+    def ipc_server_conflict_check(self, port: int):
+        print('Starting server conflict check...')
+        time.sleep(4.20)
+        port_files = set()
+        for item in os.listdir(self.appdata_folder):
+            if not os.path.isfile(pathjoin(self.appdata_folder, item)):
+                continue
+            if re_result := re.search(r'PORT~(\d{5})', item):
+                if (port_file_value := int(re_result.group(1))) == port:
+                    continue
+                port_files.add(port_file_value)
+        if port_files:
+            print('Detected possible server conflict')
+            # Sort ports by which is closest to default port (smaller port number wins tie)
+            sorted_ports = sorted(port_files, key=lambda p: (abs(p - self.default_port), p))
+            if sorted_ports[0] != port:
+                # TODO: handle server conflict resolution
+                pass
+            return
+        print('No conflict found :)')
 
     def ipc_server_client_loop(self, client):
         client_id = None
@@ -1083,9 +1119,9 @@ class C4IconSwapper:
         if os.path.isdir(recovery_path := pathjoin(self.appdata_folder, 'Recovery')) and not os.listdir(recovery_path):
             shutil.rmtree(recovery_path)
             print('Deleted empty Recovery folder')
-        if not (is_server := self.curr_server_id == self.instance_id):
+        if not self.is_server:
             print('')
-        if is_server and not self.client_dict:
+        if self.is_server and not self.client_dict:
             shutil.rmtree(self.global_temp)
             print('Global Delete')
         else:
@@ -1129,8 +1165,10 @@ class C4IconSwapper:
             user32.EnableMenuItem(hmenu, 0xF060, 0x01)  # 0xF060 = X button, 0x01 = Greyed out
             user32.ShowWindow(self.debug_console, 0)  # Immediately hide console
             return
+        elif not self.debug_console:
+            return
 
-        # Toggle visibility if it already exists
+        # Toggle console visibility
         if user32.IsWindowVisible(self.debug_console):
             user32.ShowWindow(self.debug_console, 0)  # Hide
         else:
