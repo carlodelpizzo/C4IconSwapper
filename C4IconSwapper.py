@@ -16,7 +16,6 @@ import traceback
 import warnings
 from collections import Counter, deque, defaultdict
 from datetime import datetime
-from multiprocessing import Process
 from pathlib import Path
 
 from PIL import Image, ImageTk, UnidentifiedImageError
@@ -65,7 +64,7 @@ max_image_pixels = Image.MAX_IMAGE_PIXELS
 
 
 # Inter-Process Communication (For running multiple instances simultaneously); Port range: (49200-65500)
-# I'm not sure about separating the IPC functions into their own class, but I think it makes it more readable
+# I'm not very happy with separating the IPC functions into their own class, but I think it makes it more readable
 # noinspection PyUnresolvedReferences
 # noinspection PyAttributeOutsideInit
 class IPC:
@@ -342,7 +341,7 @@ class IPC:
                 sleep_time = 7.77
 
     def ipc_server_conflict_check(self, port: int):
-        print('Starting server conflict check...')
+        print('Doing server conflict check in 4.20 seconds...')
         time.sleep(4.20)
         port_files = {
             int(re_result.group(1))
@@ -368,14 +367,17 @@ class IPC:
                             except OSError as e:
                                 print(f'Broadcast Error with {cid}: {e}')
                     self.is_server = False
+                    self.finished_server_init = True
                 time.sleep(1.1)  # Ensure server loop exits
                 Path(pathjoin(self.appdata_folder, f'PORT~{port}')).unlink(missing_ok=True)
                 print(f'Attempting to connect as client on port: {new_port}')
                 self.ipc(port=new_port)
                 return
             print('Found server conflict; Selected self as valid server')
+            self.finished_server_init = True
             return
         print('No conflict found :)')
+        self.finished_server_init = True
         time.sleep(2)
         self.global_temp_cleanup()
 
@@ -687,7 +689,9 @@ class C4IconSwapper(IPC):
 
         self.running_as_exe = getattr(sys, 'frozen', False)
         self.debug_console = None
-        if self.running_as_exe:
+        if len(sys.argv) > 1:
+            recover_path = sys.argv[1]
+        if self.running_as_exe or recover_path:
             self.toggle_debug_console(initialize=True)
 
         # Create temporary directory
@@ -716,10 +720,12 @@ class C4IconSwapper(IPC):
         self.root.geometry('915x287')
         self.root.bind('<KeyRelease>', self.key_release)
 
+        # TODO: Handle first time launch recovery more gracefully
         self.client_dict = {}
         self.socket_dict = {}
         self.last_seen = {}
         self.is_server = False
+        self.finished_server_init = False
         self.reestablish = False
         self.reestablish_start = None
         self.reestablish_ids = None
@@ -1152,7 +1158,7 @@ class C4IconSwapper(IPC):
             print('Deleted empty Recovery folder')
         if not self.is_server:
             print('')
-        if self.is_server and not self.client_dict:
+        if self.is_server and not self.client_dict and self.finished_server_init:
             shutil.rmtree(self.global_temp)
             print('Global Delete')
         else:
@@ -1168,7 +1174,7 @@ class C4IconSwapper(IPC):
         if self.easter_call_after_id:
             self.root.after_cancel(self.easter_call_after_id)
         if self.easter_counter > 10:
-            if self.running_as_exe and not self.debug_menu:
+            if self.debug_console and not self.debug_menu:
                 self.debug_menu = Menu(self.menu, tearoff=0)
                 self.debug_menu.add_command(label='Show/Hide Console', command=self.toggle_debug_console)
                 self.menu.add_cascade(label='Debug', menu=self.debug_menu)
@@ -1186,6 +1192,7 @@ class C4IconSwapper(IPC):
         kernel32 = ctypes.windll.kernel32
         user32 = ctypes.windll.user32
         if initialize:
+            print('Initializing Debug Console')
             kernel32.AllocConsole()
             self.debug_console = kernel32.GetConsoleWindow()
             sys.stdout = open('CONOUT$', 'w')
@@ -3373,9 +3380,20 @@ class RecoveryWin:
             if not own_project and not self.main.driver_selected:
                 own_project = recovery_obj.path
                 continue
+
+            if self.main.running_as_exe:
+                args = [sys.executable, recovery_obj.path]
+            else:
+                # Path to exe, path to python script, recovery path variable
+                args = [sys.executable, os.path.abspath(sys.argv[0]), recovery_obj.path]
+
+            # Start debug console hidden
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = 0
             print('Launching new application to open recovered project')
-            # TODO: Handle processes sharing console prints
-            Process(target=C4IconSwapper, kwargs={'recover_path': recovery_obj.path}).start()
+            subprocess.Popen(args, startupinfo=startupinfo, creationflags=subprocess.CREATE_NEW_CONSOLE, close_fds=True)
+
         # Open recovery project
         if own_project:
             print('Opening recovered project')
@@ -3474,7 +3492,7 @@ def natural_key(string: str):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
 
 
-# Returns value as string
+# Yields value as string
 def get_next_num(start=0, yield_start=True):
     if not yield_start:
         start += 1
