@@ -93,8 +93,9 @@ class IPC:
             # Start heartbeat thread (Create/update current port file)
             threading.Thread(target=self.ipc_server_heartbeat, args=[port], daemon=True).start()
 
-            # Check for other servers' port files after a delay
-            threading.Thread(target=self.ipc_server_conflict_check, args=[port], daemon=True).start()
+            if not self.reestablish:  # Only do on launch
+                # Check for other servers' port files after a delay
+                threading.Thread(target=self.ipc_server_conflict_check, args=[port], daemon=True).start()
 
             server.listen(7)
             threading.Thread(target=self.ipc_server_loop, args=[server], daemon=True).start()
