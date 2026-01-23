@@ -64,8 +64,522 @@ pathjoin = os.path.join
 max_image_pixels = Image.MAX_IMAGE_PIXELS
 
 
+# Inter-Process Communication (For running multiple instances simultaneously); Port range: (49200-65500)
+# I'm not sure about separating the IPC functions into their own class, but I think it makes it more readable
+# noinspection PyUnresolvedReferences
+# noinspection PyAttributeOutsideInit
+class IPC:
+    def ipc(self, takeover=False, port=None):
+        def next_port_number(port_files_dict):
+            for key in port_files_dict:
+                yield key
+
+        # noinspection PyShadowingNames
+        def establish_self_as_server():
+            server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server.bind(('127.0.0.1', port))  # This is where exception is raised
+            print(f'Is Server: {self.instance_id}')
+            self.is_server = True
+
+            # Delete unused port files
+            port_files.pop(port, None)
+            for _, file_path in port_files.items():
+                print(f'Trying to delete: {file_path}')
+                Path(file_path).unlink(missing_ok=True)
+            for file_path in invalid_port_files:
+                print(f'Trying to delete: {file_path}')
+                Path(file_path).unlink(missing_ok=True)
+
+            # Start heartbeat thread (Create/update current port file)
+            threading.Thread(target=self.ipc_server_heartbeat, args=[port], daemon=True).start()
+
+            # Check for other servers' port files after a delay
+            threading.Thread(target=self.ipc_server_conflict_check, args=[port], daemon=True).start()
+
+            server.listen(7)
+            threading.Thread(target=self.ipc_server_loop, args=[server], daemon=True).start()
+
+        def establish_self_as_client():
+            nonlocal port
+            nonlocal port_files
+            nonlocal invalid_port_files
+            nonlocal invalid_ports
+
+            ipc_failures = 0
+            grace = True
+            while True:
+                try:
+                    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    print(f'Is Client: {self.instance_id}')
+                    client.settimeout(0.05)
+                    client.connect(('127.0.0.1', port))
+                    msg = f'ID:{self.instance_id}\n' if not self.reestablish else f'RE:{self.instance_id}\n'
+                    client.sendall(msg.encode('utf-8'))
+
+                    response = client.recv(1024).decode('utf-8')
+                    if not response:
+                        raise OSError('Server Disconnected; Sent Empty Message')
+                    print('From Server:', repr(response))
+                    for msg in response.strip().split('\n'):
+                        match msg.split(':'):
+                            case ['OK', server_id, client_data]:
+                                self.curr_server_id = server_id
+                                print(f'Became Client of Current Server: {server_id}')
+                                if self.reestablish:
+                                    self.reestablish = False
+                                    print('Reestablishment Ended')
+                                client_list = client_data.split('|')
+                                self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
+                                print(self.client_dict)
+                                threading.Thread(target=self.ipc_client_loop, args=[client], daemon=True).start()
+                                return True
+                            case ['INSTANCE ID COLLISION']:
+                                grace = True
+                                self.instance_id = str(random.randint(111111, 999999))
+                                print('From Server: INSTANCE ID COLLISION')
+                                print(f'New Instance ID: {self.instance_id}')
+                                break
+                            case _:
+                                if grace:
+                                    grace = False
+                                    print(f'Server sent invalid response; given grace: {msg}')
+                                    continue
+                                raise OSError(f'Server sent invalid response: {msg}')
+                except OSError as er:
+                    ipc_failures += 1
+                    print(er)
+                    print('IPC Initialization Failed')
+                    if ipc_failures > 3:
+                        if port_files:
+                            invalid_port_files.add(port_files.pop(port))
+                            invalid_ports.add(port)
+                            port = next(next_port, None)
+                            if port:
+                                print(f'Trying New Port: {port}')
+                                return False
+                        else:
+                            invalid_ports.add(port)
+                        while port in invalid_ports:
+                            port = random.randint(49200, 65500)
+                        print(f'Trying New Port: {port}')
+                        return False
+
+        port_files = {
+            int(re_result.group(1)): port_file_path
+            for item in os.listdir(self.appdata_folder)
+            if os.path.isfile(port_file_path := pathjoin(self.appdata_folder, item))
+            if (re_result := re.search(r'PORT~(\d{5})', item))
+        }
+        invalid_port_files = set()
+        invalid_ports = set()
+        if port is None:
+            if not port_files:
+                port = self.default_port
+                print(f'Using Default Port: {port}')
+            else:
+                next_port = next_port_number(sorted(port_files, key=lambda p: (abs(p - self.default_port), p)))
+                port = self.default_port if self.default_port in port_files else next(next_port)
+                print(f'Using Default Port: {port}' if port == self.default_port else f'Using Port: {port}')
+
+        if takeover:
+            for _ in range(5):
+                try:
+                    print('Trying Takeover')
+                    establish_self_as_server()
+                    return
+                except OSError as e:
+                    print(f'Takeover Failed: {e}')
+                    time.sleep(0.01)
+            # If takeover fails, erase client_dict and connect as client
+            self.client_dict = {}
+            establish_self_as_client()
+            return
+        while True:
+            try:
+                establish_self_as_server()
+                break
+            except OSError as e:
+                print(f'IPC Error: {e}')
+                if establish_self_as_client():
+                    break
+
+    def ipc_client_loop(self, client):
+        ack_count = 0
+        while True:
+            try:
+                while True:
+                    client.sendall(f'HB:{self.instance_id}\n'.encode('utf-8'))  # Heartbeat
+                    data = client.recv(1024).decode('utf-8')
+                    if not data:
+                        raise OSError('Server disconnected; Sent Empty Message')
+                    for msg in data.strip().split('\n'):
+                        match msg.split(':'):
+                            case ['UPDATE', client_data]:
+                                if ack_count:
+                                    print('')
+                                    ack_count = 0
+                                client_list = client_data.split('|')
+                                self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
+                                print('__New Client List__')
+                                print(self.client_dict)
+                            case ['ACK']:
+                                ack_count += 1
+                                print(f'\rACK ({ack_count})', end='', flush=True)
+                            case ['MIGRATE', new_port]:
+                                if ack_count:
+                                    print('')
+                                print(f'Server instructed migration to port: {new_port}')
+                                self.ipc(port=int(new_port))
+                                return
+                            case _:
+                                if ack_count:
+                                    print('')
+                                    ack_count = 0
+                                print(msg)
+
+                    time.sleep(1)
+            except OSError as e:
+                if ack_count:
+                    print('')
+                print(e)
+                print('Current Server Disconnected')
+                compare_dict = {k: float(v) for k, v in self.client_dict.items()}
+                self.reestablish = True
+                if min(self.client_dict, key=compare_dict.get) == self.instance_id:
+                    print('Selected self as server')
+                    del compare_dict
+                    self.client_dict.pop(self.instance_id)
+                    self.ipc(takeover=True)
+                    return
+                del compare_dict
+                client.close()
+                time.sleep(random.uniform(0.75, 1.25))
+                print('Attempting Reconnection as Client')
+                self.client_dict = {}
+                self.ipc()
+                return
+
+    def ipc_server_loop(self, server):
+        self.global_temp: str
+        server.settimeout(1)
+        gui_is_alive = self.root.winfo_exists
+        if self.reestablish:
+            self.reestablish_start = time.time()
+            self.reestablish_ids = set()
+
+        while self.is_server:
+            try:
+                client, _ = server.accept()
+                client.settimeout(2)
+                threading.Thread(target=self.ipc_server_client_loop, args=[client], daemon=True).start()
+
+            except socket.timeout:
+                # Reestablish ending logic
+                with self.socket_lock:
+                    reestablish = self.reestablish
+                # Reestablishment period can range between 4 and 5 seconds because of server timeout
+                if reestablish and time.time() - self.reestablish_start > 4:
+                    print('Reestablishment Period Ended')
+                    with self.socket_lock:
+                        if self.reestablish_ids - self.client_dict.keys():
+                            print('___Something Went Wrong___')
+                            print('Client found in reestablish_ids but not client_dict')
+                            print(self.client_dict.keys())
+                            print(self.reestablish_ids)
+                        # Remove clients who are in dict but failed to reestablish
+                        delete_items = set()
+                        recover_items = set()
+                        for cid in self.client_dict.keys() - self.reestablish_ids:
+                            self.client_dict.pop(cid)
+                            if not os.path.isdir(client_path := pathjoin(self.global_temp, cid)):
+                                continue
+                            has_driver = 'driver' in os.listdir(client_path)
+                            has_replacements = False
+                            if os.path.isdir(rep_imgs_path := pathjoin(client_path, 'Replacement Icons')):
+                                has_replacements = os.listdir(rep_imgs_path)
+                            if has_driver or has_replacements:
+                                recover_items.add(pathjoin(self.global_temp, cid))
+                                continue
+                            delete_items.add(client_path)
+                        if delete_items:
+                            print(f'Deleting Clients: {delete_items}')
+                            threading.Thread(target=self.handle_dead_clients, kwargs={'delete': True},
+                                             args=[delete_items], daemon=True).start()
+                        if recover_items:
+                            print(f'Moving Client Folders to Recovery: {recover_items}')
+                            threading.Thread(target=self.handle_dead_clients, kwargs={'recover': True},
+                                             args=[recover_items], daemon=True).start()
+                        del delete_items
+                        del recover_items
+                        for cid in self.client_dict.copy():
+                            if not os.path.isdir(pathjoin(self.global_temp, cid)):
+                                self.client_dict.pop(cid)
+                        print(self.client_dict if self.client_dict else 'No Clients')
+                        self.reestablish_ids = None
+                        self.reestablish_start = None
+                        self.reestablish = False
+                    self.server_broadcast_id_update()
+
+                # Ghost server check
+                if not gui_is_alive():
+                    server.close()
+                    raise RuntimeError('👻')
+
+            except Exception as e:
+                print(f'Server Loop Error: {e}')
+
+    def ipc_server_heartbeat(self, port: int, first_time=True):
+        port_file = pathjoin(self.appdata_folder, f'PORT~{port}')
+        sleep_time = 1.23 if first_time else 7.77
+        while self.is_server:
+            Path(port_file).touch()
+            time.sleep(sleep_time)
+            if not self.root.winfo_exists():  # Ghost thread check
+                raise RuntimeError('👻')
+            if first_time:
+                first_time = False
+                sleep_time = 7.77
+
+    def ipc_server_conflict_check(self, port: int):
+        print('Starting server conflict check...')
+        time.sleep(4.20)
+        port_files = {
+            int(re_result.group(1))
+            for item in os.listdir(self.appdata_folder)
+            if os.path.isfile(pathjoin(self.appdata_folder, item))
+            if (re_result := re.search(r'PORT~(\d{5})', item))
+            if int(re_result.group(1)) != port
+        }
+
+        if port_files:
+            print('Detected possible server conflict')
+            # Sort ports by which is closest to default port (smaller port number wins tie)
+            sorted_ports = sorted(port_files, key=lambda p: (abs(p - self.default_port), p))
+            if (new_port := sorted_ports[0]) != port:
+                print(f'Found server conflict')
+                with self.socket_lock:
+                    if self.socket_dict:
+                        print('Instructing clients to migrate')
+                        for cid, sock in self.socket_dict.items():
+                            try:
+                                sock.sendall(f'MIGRATE:{new_port}\n'.encode('utf-8'))
+                                sock.shutdown(socket.SHUT_WR)
+                            except OSError as e:
+                                print(f'Broadcast Error with {cid}: {e}')
+                    self.is_server = False
+                time.sleep(1.1)  # Ensure server loop exits
+                Path(pathjoin(self.appdata_folder, f'PORT~{port}')).unlink(missing_ok=True)
+                print(f'Attempting to connect as client on port: {new_port}')
+                self.ipc(port=new_port)
+                return
+            print('Found server conflict; Selected self as valid server')
+            return
+        print('No conflict found :)')
+        time.sleep(2)
+        self.global_temp_cleanup()
+
+    def ipc_server_client_loop(self, client):
+        self.global_temp: str
+        client_id = None
+        gui_is_alive = self.root.winfo_exists
+        socket_lock = self.socket_lock
+        grace = True
+        while True:
+            if not gui_is_alive():
+                client.close()
+                raise RuntimeError('👻')
+            try:
+                data = client.recv(1024).decode('utf-8')
+                if not data:
+                    if grace:
+                        grace = False
+                        print('Client sent empty message; given grace')
+                        continue
+                    raise OSError('Client disconnected; sent empty message')
+                last_seen_time = time.time()
+                grace = True
+                for msg in data.strip().split('\n'):
+                    match msg.split(':'):
+                        case ['RE', cid]:
+                            client_id = cid
+                            client.settimeout(0.5)
+                            print(f'Reestablished Client: {cid}')
+                            with socket_lock:
+                                client_dict = self.client_dict.copy()
+                            if client_id in client_dict:
+                                dict_time = client_dict[client_id]
+                                new_client = None
+                            else:
+                                print('Client not in dictionary tried to reconnected')
+                                dict_time = last_seen_time
+                                new_client = (client_id, client)
+                            with socket_lock:
+                                if reestablish := self.reestablish:
+                                    self.client_dict[client_id] = dict_time
+                                    self.last_seen[client_id] = last_seen_time
+                                    self.socket_dict[client_id] = client
+                                    if not new_client:
+                                        self.reestablish_ids.add(client_id)
+
+                            if reestablish:
+                                client.sendall(f'OK:{self.instance_id}:{client_id}~{dict_time}\n'.encode('utf-8'))
+                                continue
+                            # If new client tries to "reestablish" while server not in reestablish mode
+                            if new_client:
+                                self.server_broadcast_id_update(new_connection=new_client)
+                                continue
+                            # If existing client tries to reestablish while server not in reestablish mode
+                            with self.socket_lock:
+                                client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
+                            client.sendall(f'OK:{self.instance_id}:{client_list}\n'.encode('utf-8'))
+
+                        case ['ID', cid]:  # Typical new client establishment
+                            client_id = cid
+                            client.settimeout(0.5)
+                            with socket_lock:
+                                client_dict = self.client_dict.copy()
+                                reestablish = self.reestablish
+                            if client_id in client_dict:
+                                print('ID collision', client_id, 'in', client_dict)
+                                client.sendall('INSTANCE ID COLLISION\n'.encode('utf-8'))
+                                continue
+                            with socket_lock:
+                                self.client_dict[client_id] = last_seen_time
+                                self.last_seen[client_id] = last_seen_time
+                                self.socket_dict[client_id] = client
+                            self.server_broadcast_id_update(new_connection=(client_id, client))
+
+                        case ['HB', client_id]:  # Heartbeat
+                            with socket_lock:
+                                self.last_seen[client_id] = last_seen_time
+                            client.sendall('ACK\n'.encode('utf-8'))
+
+            except OSError as e:
+                if not self.is_server:
+                    return
+                if client_id and time.time() - self.last_seen[client_id] < 2:
+                    continue
+                print(e)
+                if grace:
+                    print('Client given grace')
+                    grace = False
+                    continue
+                if not client_id:
+                    print(f'Failed to establish client id: {client}')
+                    return
+                print(f'Client {client_id} disconnected')
+                # If client disconnects but leaves folder behind
+                if client_id in os.listdir(self.global_temp):
+                    has_driver = 'driver' in os.listdir(client_folder := pathjoin(self.global_temp, client_id))
+                    has_replacements = os.listdir(pathjoin(client_folder, 'Replacement Icons'))
+                    if has_driver or has_replacements:
+                        threading.Thread(target=self.handle_dead_clients, kwargs={'recover': True},
+                                         args=[{client_folder}], daemon=True).start()
+                    else:
+                        shutil.rmtree(client_folder)
+                        print(f'Deleted {client_id} folder')
+                with socket_lock:
+                    self.client_dict.pop(client_id)
+                    self.socket_dict.pop(client_id)
+                    self.last_seen.pop(client_id)
+                self.server_broadcast_id_update()
+                return
+
+    def server_broadcast_id_update(self, new_connection=None, force=False):
+        with self.socket_lock:
+            if self.reestablish and not force:
+                print('Broadcast canceled due to reestablishment mode')
+                return
+            if not self.client_dict and not new_connection:
+                print('Broadcast canceled due to empty dictionary')
+                return
+        resend = True
+        while resend:
+            resend = False
+            with self.socket_lock:
+                if new_connection:
+                    current_sockets = [(k, v) for k, v in self.socket_dict.items() if k != new_connection[0]]
+                else:
+                    current_sockets = list(self.socket_dict.items())
+                new_client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
+            if new_connection:
+                print('__New Client Established__')
+                print(f'Client ID: {new_connection[0]}')
+                new_connection[1].sendall(f'OK:{self.instance_id}:{new_client_list}\n'.encode('utf-8'))
+            print('__Broadcast New Client List__')
+            print(new_client_list)
+            for cid, sock in current_sockets:
+                try:
+                    sock.sendall(f'UPDATE:{new_client_list}\n'.encode('utf-8'))
+                except OSError as e:
+                    print(f'Broadcast Error with {cid}: {e}')
+                    with self.socket_lock:
+                        self.client_dict.pop(cid)
+                        self.socket_dict.pop(cid)
+                        if not self.socket_dict:
+                            return
+                        resend = True
+
+    def handle_dead_clients(self, client_paths, recover=False, delete=False):
+        if recover:
+            if not os.path.isdir(self.recovery_folder):
+                os.mkdir(self.recovery_folder)
+            for path in client_paths:
+                next_num = get_next_num(start=len(os.listdir(self.recovery_folder)), yield_start=False)
+                try:
+                    shutil.move(path, pathjoin(self.recovery_folder, next(next_num)))
+                    print(f'Moved to Recovery: {path}')
+                except PermissionError:
+                    print(f'Failed to Move: {path}')
+                except OSError as er:
+                    print(f'OS Error with {path}: {er}')
+            return
+        if delete:
+            for path in client_paths:
+                try:
+                    if os.path.isdir(path):
+                        shutil.rmtree(path)
+                        print(f'Deleted: {path}')
+                        continue
+                    os.remove(path)
+                    print(f'Deleted: {path}')
+                except PermissionError:
+                    print(f'Failed to Delete: {path}')
+                except OSError as er:
+                    print(f'OS Error with` {path}: {er}')
+
+    def global_temp_cleanup(self):
+        print('Starting global temp folder cleanup')
+        delete_items = set()
+        recover_items = set()
+        for item in os.listdir(self.global_temp):
+            client_folder = pathjoin(self.global_temp, item)
+            if not os.path.isdir(client_folder) or item == self.instance_id or item in self.client_dict:
+                continue
+            has_driver = 'driver' in os.listdir(client_folder)
+            has_replacements = False
+            if os.path.isdir(rep_imgs_path := pathjoin(client_folder, 'Replacement Icons')):
+                has_replacements = os.listdir(rep_imgs_path)
+            if has_driver or has_replacements:
+                recover_items.add(client_folder)
+                continue
+            delete_items.add(client_folder)
+
+        if delete_items:
+            print(f'Deleting Clients: {delete_items}')
+            threading.Thread(target=self.handle_dead_clients, kwargs={'delete': True},
+                             args=[delete_items], daemon=True).start()
+        if recover_items:
+            print(f'Moving Client Folders to Recovery: {recover_items}')
+            threading.Thread(target=self.handle_dead_clients, kwargs={'recover': True},
+                             args=[recover_items], daemon=True).start()
+
+        if not delete_items and not recover_items:
+            print('Nothing to clean up')
+
+
 # TODO: Completely overhaul everything related to multistate
-class C4IconSwapper:
+class C4IconSwapper(IPC):
     def __init__(self, recover_path=''):
         def exception_window(*args, message_txt=None):
             root = Toplevel(self.root)
@@ -558,490 +1072,6 @@ class C4IconSwapper:
                 self.replacement_panel.load_replacement(file_path=pathjoin(recovery_icons_path, item))
         shutil.rmtree(recover_path)
         self.ask_to_save = has_driver
-
-    # Inter-Process Communication (For running multiple instances simultaneously); Port range: (49200-65500)
-    def ipc(self, takeover=False, port=None):
-        def next_port_number(port_files_dict):
-            for key in port_files_dict:
-                yield key
-
-        # noinspection PyShadowingNames
-        def establish_self_as_server():
-            server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            server.bind(('127.0.0.1', port))  # This is where exception is raised
-            print(f'Is Server: {self.instance_id}')
-            self.is_server = True
-
-            # Delete unused port files
-            port_files.pop(port, None)
-            for _, file_path in port_files.items():
-                Path(file_path).unlink(missing_ok=True)
-            for file_path in invalid_port_files:
-                Path(file_path).unlink(missing_ok=True)
-
-            # TODO: Handle case where two apps start simultaneously and successfully establish themselves
-            #  as servers on different ports. Also handle any clients which may have connected.
-            #  May use server port file heartbeat, and have clients check the port file during every reconnect.
-
-            # Start heartbeat thread (Create/update current port file)
-            threading.Thread(target=self.ipc_server_heartbeat, args=[port], daemon=True).start()
-
-            # Check for other servers' port files after a delay
-            threading.Thread(target=self.ipc_server_conflict_check, args=[port], daemon=True).start()
-
-            # First server cleanup. Only first server should enter this loop without being in reestablish mode
-            if not self.reestablish:
-                delete_items = set()
-                recover_items = set()
-                for item in os.listdir(self.global_temp):
-                    client_folder = pathjoin(self.global_temp, item)
-                    if not os.path.isdir(client_folder) or item == self.instance_id:
-                        continue
-                    has_driver = 'driver' in os.listdir(client_folder)
-                    has_replacements = False
-                    if os.path.isdir(rep_imgs_path := pathjoin(client_folder, 'Replacement Icons')):
-                        has_replacements = os.listdir(rep_imgs_path)
-                    if has_driver or has_replacements:
-                        recover_items.add(client_folder)
-                        continue
-                    delete_items.add(client_folder)
-
-                if delete_items:
-                    print(f'Deleting Clients: {delete_items}')
-                    threading.Thread(target=self.handle_dead_clients, kwargs={'delete': True},
-                                     args=[delete_items], daemon=True).start()
-                if recover_items:
-                    print(f'Moving Client Folders to Recovery: {recover_items}')
-                    threading.Thread(target=self.handle_dead_clients, kwargs={'recover': True},
-                                     args=[recover_items], daemon=True).start()
-
-            server.listen(5)
-            threading.Thread(target=self.ipc_server_loop, args=[server], daemon=True).start()
-
-        def establish_self_as_client():
-            nonlocal port
-            nonlocal port_files
-            nonlocal invalid_port_files
-            nonlocal invalid_ports
-
-            ipc_failures = 0
-            grace = True
-            while True:
-                try:
-                    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    print(f'Is Client: {self.instance_id}')
-                    client.settimeout(0.05)
-                    client.connect(('127.0.0.1', port))
-                    msg = f'ID:{self.instance_id}\n' if not self.reestablish else f'RE:{self.instance_id}\n'
-                    client.sendall(msg.encode('utf-8'))
-
-                    response = client.recv(1024).decode('utf-8')
-                    if not response:
-                        raise OSError('Server Disconnected; Sent Empty Message')
-                    print('From Server:', repr(response))
-                    for msg in response.strip().split('\n'):
-                        match msg.split(':'):
-                            case ['OK', server_id, client_data]:
-                                self.curr_server_id = server_id
-                                print(f'Became Client of Current Server: {server_id}')
-                                if self.reestablish:
-                                    self.reestablish = False
-                                    print('Reestablishment Ended')
-                                client_list = client_data.split('|')
-                                self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
-                                print(self.client_dict)
-                                threading.Thread(target=self.ipc_client_loop, args=[client], daemon=True).start()
-                                return True
-                            case ['INSTANCE ID COLLISION']:
-                                grace = True
-                                self.instance_id = str(random.randint(111111, 999999))
-                                print('From Server: INSTANCE ID COLLISION')
-                                print(f'New Instance ID: {self.instance_id}')
-                                break
-                            case _:
-                                if grace:
-                                    grace = False
-                                    print(f'Server sent invalid response; given grace: {msg}')
-                                    continue
-                                raise OSError(f'Server sent invalid response: {msg}')
-                except OSError as er:
-                    ipc_failures += 1
-                    print(er)
-                    print('IPC Initialization Failed')
-                    if ipc_failures > 3:
-                        if port_files:
-                            invalid_port_files.add(port_files.pop(port))
-                            invalid_ports.add(port)
-                            port = next(next_port, None)
-                            if port:
-                                print(f'Trying New Port: {port}')
-                                return False
-                        else:
-                            invalid_ports.add(port)
-                        while port in invalid_ports:
-                            port = random.randint(49200, 65500)
-                        print(f'Trying New Port: {port}')
-                        return False
-
-        port_files = {}
-        invalid_port_files = set()
-        invalid_ports = set()
-        if port is None:
-            # Check for port file
-            for item in os.listdir(self.appdata_folder):
-                if not os.path.isfile(port_file_path := pathjoin(self.appdata_folder, item)):
-                    continue
-                if re_result := re.search(r'PORT~(\d{5})', item):
-                    port_files[int(re_result.group(1))] = port_file_path
-            if not port_files:
-                port = self.default_port
-                print(f'Using Default Port: {port}')
-            else:
-                next_port = next_port_number(port_files)
-                port = self.default_port if self.default_port in port_files else next(next_port)
-                print(f'Using Default Port: {port}' if port == self.default_port else f'Using Port: {port}')
-
-        if takeover:
-            for _ in range(5):
-                try:
-                    print('Trying Takeover')
-                    establish_self_as_server()
-                    return
-                except OSError as e:
-                    print(f'Takeover Failed: {e}')
-                    time.sleep(0.01)
-            # If takeover fails, erase client_dict and connect as client
-            self.client_dict = {}
-            establish_self_as_client()
-            return
-        while True:
-            try:
-                establish_self_as_server()
-                break
-            except OSError as e:
-                print(f'IPC Error: {e}')
-                if establish_self_as_client():
-                    break
-
-    def ipc_client_loop(self, client):
-        ack_count = 0
-        while True:
-            try:
-                while True:
-                    client.sendall(f'HB:{self.instance_id}\n'.encode('utf-8'))  # Heartbeat
-                    data = client.recv(1024).decode('utf-8')
-                    if not data:
-                        raise OSError('Server disconnected; Sent Empty Message')
-                    for msg in data.strip().split('\n'):
-                        match msg.split(':'):
-                            case ['UPDATE', client_data]:
-                                if ack_count:
-                                    print('')
-                                    ack_count = 0
-                                client_list = client_data.split('|')
-                                self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
-                                print('__New Client List__')
-                                print(self.client_dict)
-                            case ['ACK']:
-                                ack_count += 1
-                                print(f'\rACK ({ack_count})', end='', flush=True)
-                            case _:
-                                if ack_count:
-                                    print('')
-                                    ack_count = 0
-                                print(msg)
-
-                    time.sleep(1)
-            except OSError as e:
-                if ack_count:
-                    print('')
-                print(e)
-                print('Current Server Disconnected')
-                compare_dict = {k: float(v) for k, v in self.client_dict.items()}
-                self.reestablish = True
-                if min(self.client_dict, key=compare_dict.get) == self.instance_id:
-                    print('Selected self as server')
-                    del compare_dict
-                    self.client_dict.pop(self.instance_id)
-                    self.ipc(takeover=True)
-                    return
-                del compare_dict
-                client.close()
-                time.sleep(random.uniform(0.75, 1.25))
-                print('Attempting Reconnection as Client')
-                self.client_dict = {}
-                self.ipc()
-                return
-
-    def ipc_server_loop(self, server):
-        server.settimeout(1)
-        gui_is_alive = self.root.winfo_exists
-        if self.reestablish:
-            self.reestablish_start = time.time()
-            self.reestablish_ids = set()
-
-        while self.is_server:
-            try:
-                client, _ = server.accept()
-                client.settimeout(2)
-                threading.Thread(target=self.ipc_server_client_loop, args=[client], daemon=True).start()
-
-            except socket.timeout:
-                # Reestablish ending logic
-                with self.socket_lock:
-                    reestablish = self.reestablish
-                # Reestablishment period can range between 4 and 5 seconds because of server timeout
-                if reestablish and time.time() - self.reestablish_start > 4:
-                    print('Reestablishment Period Ended')
-                    with self.socket_lock:
-                        if self.reestablish_ids - self.client_dict.keys():
-                            print('___Something Went Wrong___')
-                            print('Client found in reestablish_ids but not client_dict')
-                            print(self.client_dict.keys())
-                            print(self.reestablish_ids)
-                        # Remove clients who are in dict but failed to reestablish
-                        delete_items = set()
-                        recover_items = set()
-                        for cid in self.client_dict.keys() - self.reestablish_ids:
-                            self.client_dict.pop(cid)
-                            if not os.path.isdir(client_path := pathjoin(self.global_temp, cid)):
-                                continue
-                            has_driver = 'driver' in os.listdir(client_path)
-                            has_replacements = False
-                            if os.path.isdir(rep_imgs_path := pathjoin(client_path, 'Replacement Icons')):
-                                has_replacements = os.listdir(rep_imgs_path)
-                            if has_driver or has_replacements:
-                                recover_items.add(pathjoin(self.global_temp, cid))
-                                continue
-                            delete_items.add(client_path)
-                        if delete_items:
-                            print(f'Deleting Clients: {delete_items}')
-                            threading.Thread(target=self.handle_dead_clients, kwargs={'delete': True},
-                                             args=[delete_items], daemon=True).start()
-                        if recover_items:
-                            print(f'Moving Client Folders to Recovery: {recover_items}')
-                            threading.Thread(target=self.handle_dead_clients, kwargs={'recover': True},
-                                             args=[recover_items], daemon=True).start()
-                        del delete_items
-                        del recover_items
-                        for cid in self.client_dict.copy():
-                            if not os.path.isdir(pathjoin(self.global_temp, cid)):
-                                self.client_dict.pop(cid)
-                        print(self.client_dict if self.client_dict else 'No Clients')
-                        self.reestablish_ids = None
-                        self.reestablish_start = None
-                        self.reestablish = False
-                    self.server_broadcast_id_update()
-
-                # Ghost server check
-                if not gui_is_alive():
-                    server.close()
-                    raise RuntimeError('👻')
-
-            except Exception as e:
-                print(f'Server Loop Error: {e}')
-
-    def ipc_server_heartbeat(self, port: int, first_time=True):
-        port_file = pathjoin(self.appdata_folder, f'PORT~{port}')
-        sleep_time = 1.23 if first_time else 7.77
-        while self.is_server:
-            Path(port_file).touch()
-            time.sleep(sleep_time)
-            if not self.root.winfo_exists():  # Ghost thread check
-                raise RuntimeError('👻')
-            if first_time:
-                first_time = False
-                sleep_time = 7.77
-
-    def ipc_server_conflict_check(self, port: int):
-        print('Starting server conflict check...')
-        time.sleep(4.20)
-        port_files = set()
-        for item in os.listdir(self.appdata_folder):
-            if not os.path.isfile(pathjoin(self.appdata_folder, item)):
-                continue
-            if re_result := re.search(r'PORT~(\d{5})', item):
-                if (port_file_value := int(re_result.group(1))) == port:
-                    continue
-                port_files.add(port_file_value)
-        if port_files:
-            print('Detected possible server conflict')
-            # Sort ports by which is closest to default port (smaller port number wins tie)
-            sorted_ports = sorted(port_files, key=lambda p: (abs(p - self.default_port), p))
-            if sorted_ports[0] != port:
-                # TODO: handle server conflict resolution
-                pass
-            return
-        print('No conflict found :)')
-
-    def ipc_server_client_loop(self, client):
-        client_id = None
-        gui_is_alive = self.root.winfo_exists
-        socket_lock = self.socket_lock
-        grace = True
-        while True:
-            if not gui_is_alive():
-                client.close()
-                raise RuntimeError('👻')
-            try:
-                data = client.recv(1024).decode('utf-8')
-                if not data:
-                    if grace:
-                        grace = False
-                        print('Client sent empty message; given grace')
-                        continue
-                    raise OSError('Client disconnected; sent empty message')
-                last_seen_time = time.time()
-                grace = True
-                for msg in data.strip().split('\n'):
-                    match msg.split(':'):
-                        case ['RE', cid]:
-                            client_id = cid
-                            client.settimeout(0.5)
-                            print(f'Reestablished Client: {cid}')
-                            with socket_lock:
-                                client_dict = self.client_dict.copy()
-                            if client_id in client_dict:
-                                dict_time = client_dict[client_id]
-                                new_client = None
-                            else:
-                                print('Client not in dictionary tried to reconnected')
-                                dict_time = last_seen_time
-                                new_client = (client_id, client)
-                            with socket_lock:
-                                if reestablish := self.reestablish:
-                                    self.client_dict[client_id] = dict_time
-                                    self.last_seen[client_id] = last_seen_time
-                                    self.socket_dict[client_id] = client
-                                    if not new_client:
-                                        self.reestablish_ids.add(client_id)
-
-                            if reestablish:
-                                client.sendall(f'OK:{self.instance_id}:{client_id}~{dict_time}\n'.encode('utf-8'))
-                                continue
-                            # If new client tries to "reestablish" while server not in reestablish mode
-                            if new_client:
-                                self.server_broadcast_id_update(new_connection=new_client)
-                                continue
-                            # If existing client tries to reestablish while server not in reestablish mode
-                            with self.socket_lock:
-                                client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
-                            client.sendall(f'OK:{self.instance_id}:{client_list}\n'.encode('utf-8'))
-
-                        case ['ID', cid]:  # Typical new client establishment
-                            client_id = cid
-                            client.settimeout(0.5)
-                            with socket_lock:
-                                client_dict = self.client_dict.copy()
-                                reestablish = self.reestablish
-                            if client_id in client_dict:
-                                print('ID collision', client_id, 'in', client_dict)
-                                client.sendall('INSTANCE ID COLLISION\n'.encode('utf-8'))
-                                continue
-                            with socket_lock:
-                                self.client_dict[client_id] = last_seen_time
-                                self.last_seen[client_id] = last_seen_time
-                                self.socket_dict[client_id] = client
-                            self.server_broadcast_id_update(new_connection=(client_id, client))
-
-                        case ['HB', client_id]:  # Heartbeat
-                            with socket_lock:
-                                self.last_seen[client_id] = last_seen_time
-                            client.sendall('ACK\n'.encode('utf-8'))
-
-            except OSError as e:
-                if client_id and time.time() - self.last_seen[client_id] < 2:
-                    continue
-                print(e)
-                if grace:
-                    print('Client given grace')
-                    grace = False
-                    continue
-                if not client_id:
-                    print(f'Failed to establish client id: {client}')
-                    return
-                print(f'Client {client_id} disconnected')
-                # If client disconnects but leaves folder behind
-                if client_id in os.listdir(self.global_temp):
-                    has_driver = 'driver' in os.listdir(client_folder := pathjoin(self.global_temp, client_id))
-                    has_replacements = os.listdir(pathjoin(client_folder, 'Replacement Icons'))
-                    if has_driver or has_replacements:
-                        threading.Thread(target=self.handle_dead_clients, kwargs={'recover': True},
-                                         args=[{client_folder}], daemon=True).start()
-                    else:
-                        shutil.rmtree(client_folder)
-                        print(f'Deleted {client_id} folder')
-                with socket_lock:
-                    self.client_dict.pop(client_id)
-                    self.socket_dict.pop(client_id)
-                    self.last_seen.pop(client_id)
-                self.server_broadcast_id_update()
-                return
-
-    def server_broadcast_id_update(self, new_connection=None, force=False):
-        with self.socket_lock:
-            if self.reestablish and not force:
-                print('Broadcast canceled due to reestablishment mode')
-                return
-            if not self.client_dict and not new_connection:
-                print('Broadcast canceled due to empty dictionary')
-                return
-        resend = True
-        while resend:
-            resend = False
-            with self.socket_lock:
-                if new_connection:
-                    current_sockets = [(k, v) for k, v in self.socket_dict.items() if k != new_connection[0]]
-                else:
-                    current_sockets = list(self.socket_dict.items())
-                new_client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
-            if new_connection:
-                print('__New Client Established__')
-                print(f'Client ID: {new_connection[0]}')
-                new_connection[1].sendall(f'OK:{self.instance_id}:{new_client_list}\n'.encode('utf-8'))
-            print('__Broadcast New Client List__')
-            print(new_client_list)
-            for cid, sock in current_sockets:
-                try:
-                    sock.settimeout(1.125)
-                    sock.sendall(f'UPDATE:{new_client_list}\n'.encode('utf-8'))
-                    sock.settimeout(0.5)
-                except OSError as e:
-                    print(f'Broadcast Error with {cid}: {e}')
-                    with self.socket_lock:
-                        self.client_dict.pop(cid)
-                        self.socket_dict.pop(cid)
-                        if not self.socket_dict:
-                            return
-                        resend = True
-
-    def handle_dead_clients(self, client_paths, recover=False, delete=False):
-        if recover:
-            if not os.path.isdir(self.recovery_folder):
-                os.mkdir(self.recovery_folder)
-            for path in client_paths:
-                next_num = get_next_num(start=len(os.listdir(self.recovery_folder)), yield_start=False)
-                try:
-                    shutil.move(path, pathjoin(self.recovery_folder, next(next_num)))
-                    print(f'Moved to Recovery: {path}')
-                except PermissionError:
-                    print(f'Failed to Move: {path}')
-                except OSError as er:
-                    print(f'OS Error with {path}: {er}')
-            return
-        if delete:
-            for path in client_paths:
-                try:
-                    if os.path.isdir(path):
-                        shutil.rmtree(path)
-                        print(f'Deleted: {path}')
-                        continue
-                    os.remove(path)
-                    print(f'Deleted: {path}')
-                except PermissionError:
-                    print(f'Failed to Delete: {path}')
-                except OSError as er:
-                    print(f'OS Error with` {path}: {er}')
 
     def undo(self, *_):
         if not self.undo_history:
