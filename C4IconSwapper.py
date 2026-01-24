@@ -68,7 +68,7 @@ max_image_pixels = Image.MAX_IMAGE_PIXELS
 # noinspection PyUnresolvedReferences
 # noinspection PyAttributeOutsideInit
 class IPC:
-    def ipc(self, takeover=False, port=None):
+    def ipc(self, takeover=False, port=None, first_time=False):
         def next_port_number(port_files_dict):
             for key in port_files_dict:
                 yield key
@@ -92,7 +92,7 @@ class IPC:
             # Start heartbeat thread (Create/update current port file)
             threading.Thread(target=self.ipc_server_heartbeat, args=[port], daemon=True).start()
 
-            if not self.reestablish:  # Only do on launch
+            if first_time:
                 if do_conflict_check:  # Check for other servers' port files after a delay
                     threading.Thread(target=self.ipc_server_conflict_check, args=[port], daemon=True).start()
                 else:
@@ -179,11 +179,12 @@ class IPC:
             do_conflict_check = True
 
         # First layer of id collision avoidance
-        while os.path.isdir(self.instance_temp):
-            self.instance_id = str(random.randint(111111, 999999))
-            print(f'Changed Instance ID: {self.instance_id}')
-            self.instance_temp = pathjoin(self.global_temp, self.instance_id)
-        os.mkdir(self.instance_temp)
+        if first_time:
+            while os.path.isdir(self.instance_temp):
+                self.instance_id = str(random.randint(111111, 999999))
+                print(f'Changed Instance ID: {self.instance_id}')
+                self.instance_temp = pathjoin(self.global_temp, self.instance_id)
+            os.mkdir(self.instance_temp)
 
         invalid_port_files = set()
         invalid_ports = set()
@@ -270,7 +271,7 @@ class IPC:
                 client.close()
                 time.sleep(random.uniform(0.75, 1.25))
                 print('Attempting Reconnection as Client')
-                self.client_dict = {}
+                self.client_dict.pop(self.instance_id)
                 self.ipc()
                 return
 
@@ -280,7 +281,7 @@ class IPC:
         gui_is_alive = self.root.winfo_exists
         if self.reestablish:
             self.reestablish_start = time.time()
-            self.reestablish_ids = set()
+            self.reestablish_ids.clear()
 
         while self.is_server:
             try:
@@ -299,8 +300,8 @@ class IPC:
                         if self.reestablish_ids - self.client_dict.keys():
                             print('___Something Went Wrong___')
                             print('Client found in reestablish_ids but not client_dict')
-                            print(self.client_dict.keys())
-                            print(self.reestablish_ids)
+                            print(f'client_dict: {self.client_dict.keys()}')
+                            print(f'reestablish_ids: {self.reestablish_ids}')
                         # Remove clients who are in dict but failed to reestablish
                         delete_items = set()
                         recover_items = set()
@@ -330,7 +331,7 @@ class IPC:
                             if not os.path.isdir(pathjoin(self.global_temp, cid)):
                                 self.client_dict.pop(cid)
                         print(self.client_dict if self.client_dict else 'No Clients')
-                        self.reestablish_ids = None
+                        self.reestablish_ids.clear()
                         self.reestablish_start = None
                         self.reestablish = False
                     self.server_broadcast_id_update()
@@ -421,16 +422,17 @@ class IPC:
                         case ['RE', cid]:
                             client_id = cid
                             client.settimeout(0.5)
-                            print(f'Reestablished Client: {cid}')
+                            print(f'Reestablishing Client: {cid}')
                             with socket_lock:
                                 client_dict = self.client_dict.copy()
                             if client_id in client_dict:
                                 dict_time = client_dict[client_id]
                                 new_client = None
                             else:
-                                print('Client not in dictionary tried to reconnected')
+                                print(f'Client not in dictionary tried to reconnect: {client_id}')
                                 dict_time = last_seen_time
                                 new_client = (client_id, client)
+
                             with socket_lock:
                                 if reestablish := self.reestablish:
                                     self.client_dict[client_id] = dict_time
@@ -461,6 +463,7 @@ class IPC:
                                 print('ID collision', client_id, 'in', client_dict)
                                 client.sendall('INSTANCE ID COLLISION\n'.encode('utf-8'))
                                 continue
+
                             with socket_lock:
                                 self.client_dict[client_id] = last_seen_time
                                 self.last_seen[client_id] = last_seen_time
@@ -500,6 +503,7 @@ class IPC:
                     self.client_dict.pop(client_id)
                     self.socket_dict.pop(client_id)
                     self.last_seen.pop(client_id)
+                    self.reestablish_ids.discard(client_id)
                 self.server_broadcast_id_update()
                 return
 
@@ -543,7 +547,7 @@ class IPC:
             if not os.path.isdir(self.recovery_folder):
                 os.mkdir(self.recovery_folder)
             for path in client_paths:
-                next_num = get_next_num(start=len(os.listdir(self.recovery_folder)), yield_start=False)
+                next_num = get_next_num_str(start=len(os.listdir(self.recovery_folder)), yield_start=False)
                 try:
                     shutil.move(path, pathjoin(self.recovery_folder, next(next_num)))
                     print(f'Moved to Recovery: {path}')
@@ -728,7 +732,6 @@ class C4IconSwapper(IPC):
         self.root.geometry('915x287')
         self.root.bind('<KeyRelease>', self.key_release)
 
-        # TODO: Handle first time launch recovery more gracefully
         self.client_dict = {}
         self.socket_dict = {}
         self.last_seen = {}
@@ -736,10 +739,10 @@ class C4IconSwapper(IPC):
         self.finished_server_init = False
         self.reestablish = False
         self.reestablish_start = None
-        self.reestablish_ids = None
+        self.reestablish_ids = set()
         self.socket_lock = threading.Lock()
         self.default_port = 61352
-        self.ipc()
+        self.ipc(first_time=True)
 
         # Root window properties
         self.root.title('C4 Icon Swapper')
@@ -1059,7 +1062,7 @@ class C4IconSwapper(IPC):
         self.replacement_panel.img_bank = []
         for img_bank_label in self.replacement_panel.img_bank_tk_labels:
             img_bank_label.configure(image=self.img_bank_blank)
-        next_num = get_next_num()
+        next_num = get_next_num_str()
         for img in save_state.img_bank:
             img_path = pathjoin(replacement_dir, f'img_bank{next(next_num)}.png')
             img.save(img_path)
@@ -1306,6 +1309,178 @@ class C4Icon(Icon):
             self.tk_icon_lg = ImageTk.PhotoImage(img.resize((128, 128), Resampling.LANCZOS))
 
 
+class SubIconWin:
+    def __init__(self, main: C4IconSwapper):
+        self.main = main
+        self.curr_c4_icon = main.c4z_panel.icons[main.c4z_panel.current_icon]
+        self.icons = self.curr_c4_icon.icons
+        self.num_of_icons = len(self.icons)
+        self.curr_index = 0
+
+        # Initialize window
+        self.window = window = Toplevel(main.root)
+        self.window.focus()
+        self.window.protocol('WM_DELETE_WINDOW', lambda: main.c4z_panel.toggle_sub_icon_win(close=True))
+        self.window.title('Sub Icons')
+        self.window.geometry('225x255')
+        self.window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
+        self.window.resizable(False, False)
+
+        # Labels
+        self.sub_icon_label = Label(window, image=main.blank)
+        self.sub_icon_label.image = main.blank
+        self.sub_icon_label.place(relx=0.5, y=10, anchor='n')
+        self.sub_icon_label.bind('<Button-3>', self.right_click_menu)
+
+        self.name_label = Label(window, text='icon name', font=(label_font, 10, 'bold'))
+        self.name_label.place(relx=0.5, y=180, anchor='n')
+
+        self.size_label = Label(window, text='0x0', font=(label_font, 10))
+        self.size_label.place(relx=0.5, y=164, anchor='n')
+
+        self.num_label = Label(window, text='0 of 0', font=(label_font, 10))
+        self.num_label.place(relx=0.5, y=146, anchor='n')
+
+        # Buttons
+        self.prev_button = Button(window, text='Prev', command=lambda: self.inc_icon(inc=-1), width=5, takefocus=0)
+        self.prev_button.place(relx=0.5, x=-4, y=222, anchor='e')
+        self.next_button = Button(window, text='Next', command=self.inc_icon, width=5, takefocus=0)
+        self.next_button.place(relx=0.5, x=4, y=222, anchor='w')
+
+        self.update_icon()
+
+    def update_icon(self):
+        if self.curr_c4_icon is not self.main.c4z_panel.icons[self.main.c4z_panel.current_icon]:
+            self.curr_c4_icon = self.main.c4z_panel.icons[self.main.c4z_panel.current_icon]
+            self.icons = self.curr_c4_icon.icons
+            self.num_of_icons = len(self.icons)
+            self.curr_index = self.num_of_icons - 1 if self.curr_index >= self.num_of_icons else self.curr_index
+        curr_sub_icon = self.icons[self.curr_index]
+        with Image.open(curr_sub_icon.path) as img:
+            icon_image = ImageTk.PhotoImage(img.resize((128, 128), Resampling.LANCZOS))
+            self.sub_icon_label.configure(image=icon_image)
+            self.sub_icon_label.image = icon_image
+        self.num_label.config(text=f'{self.curr_index + 1} of {self.num_of_icons}')
+        self.size_label.config(text=f'{curr_sub_icon.size[0]}x{curr_sub_icon.size[1]}')
+        self.name_label.config(text=curr_sub_icon.full_name)
+
+    def inc_icon(self, inc=1):
+        self.curr_index = (self.curr_index + inc) % self.num_of_icons
+        self.update_icon()
+
+    def right_click_menu(self, event):
+        context_menu = Menu(self.main.root, tearoff=0)
+        context_menu.add_command(label='Show icon in folder', command=self.open_icon_folder)
+        context_menu.tk_popup(event.x_root, event.y_root)
+        context_menu.grab_release()
+
+    def open_icon_folder(self, *_):
+        path = os.path.normpath(self.icons[self.curr_index].path)  # normalize just to be safe
+        subprocess.Popen(f'explorer /select,"{path}"')
+
+
+class DriverInfoWin:
+    def __init__(self, main: C4IconSwapper):
+        self.main = main
+
+        # Initialize window
+        self.window = Toplevel(main.root)
+        self.window.focus()
+        self.window.protocol('WM_DELETE_WINDOW', main.close_driver_info_win)
+        self.window.title('Edit Driver Info')
+        self.window.geometry('255x240')
+        self.window.geometry(f'+{main.root.winfo_rootx() + main.export_panel.x}+{main.root.winfo_rooty()}')
+        self.window.resizable(False, False)
+
+        # Validate driver version
+        if (main.export_panel.inc_driver_version.get() and
+                main.driver_version_var.get() and main.driver_version_new_var.get() and
+                int(main.driver_version_new_var.get()) <= int(main.driver_version_var.get())):
+            main.driver_version_new_var.set(str(int(main.driver_version_var.get()) + 1))
+
+        # Labels
+        instance_id_label = Label(self.window, text=f'program instance id: {main.instance_id}')
+
+        man_y = 20
+        man_arrow = Label(self.window, text='\u2192', font=('', 15))
+
+        creator_y = man_y + 55
+        creator_arrow = Label(self.window, text='\u2192', font=('', 15))
+
+        version_y = creator_y + 55
+        version_arrow = Label(self.window, text='\u2192', font=('', 15))
+
+        font_size = 10
+        driver_ver_orig_label = Label(self.window, text='Original Version:', font=(label_font, 8))
+        driver_man_label = Label(self.window, text='Driver Manufacturer', font=(label_font, font_size))
+        driver_creator_label = Label(self.window, text='Driver Creator', font=(label_font, font_size))
+        driver_ver_label = Label(self.window, text='Driver Version', font=(label_font, font_size))
+
+        # Entry
+        entry_width = 17
+        driver_man_entry = Entry(self.window, width=entry_width, textvariable=main.driver_manufac_var)
+        driver_man_entry['state'] = DISABLED
+        self.driver_man_new_entry = Entry(self.window, width=entry_width,
+                                          textvariable=main.driver_manufac_new_var)
+        main.driver_manufac_new_var.trace_add('write',
+                                              lambda name, index, mode: self.validate_man_and_creator(
+                                                  entry=self.driver_man_new_entry))
+
+        driver_creator_entry = Entry(self.window, width=entry_width, textvariable=main.driver_creator_var)
+        driver_creator_entry['state'] = DISABLED
+        self.driver_creator_new_entry = Entry(self.window, width=entry_width,
+                                              textvariable=main.driver_creator_new_var)
+        main.driver_creator_new_var.trace_add('write',
+                                              lambda name, index, mode: self.validate_man_and_creator(
+                                                  string_var=main.driver_creator_new_var,
+                                                  entry=self.driver_creator_new_entry))
+
+        driver_ver_entry = Entry(self.window, width=entry_width, textvariable=main.driver_version_var)
+        driver_ver_entry['state'] = DISABLED
+        self.driver_ver_new_entry = Entry(self.window, width=entry_width,
+                                          textvariable=main.driver_version_new_var)
+        self.driver_ver_new_entry.bind('<FocusOut>', main.export_panel.update_driver_version)
+        main.driver_version_new_var.trace_add('write', self.validate_driver_ver)
+        driver_ver_orig_entry = Entry(self.window, width=6, textvariable=main.driver_ver_orig)
+        driver_ver_orig_entry['state'] = DISABLED
+        instance_id_label.place(x=127, y=220, anchor='n')
+        man_arrow.place(x=115, y=man_y, anchor='nw')
+        creator_arrow.place(x=115, y=creator_y, anchor='nw')
+        version_arrow.place(x=115, y=version_y, anchor='nw')
+        driver_man_label.place(x=127, y=man_y - 15, anchor='n')
+        driver_creator_label.place(x=127, y=creator_y - 15, anchor='n')
+        driver_ver_label.place(x=127, y=version_y - 15, anchor='n')
+        driver_ver_orig_label.place(x=110, y=version_y + 30, anchor='ne')
+        driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
+        self.driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
+        driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
+        self.driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
+        driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
+        self.driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
+        driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
+
+    def validate_man_and_creator(self, string_var=None, entry=None):
+        if not string_var or not entry:
+            return
+        name_compare = re_valid_chars.sub('', name := string_var.get())
+        if str_diff := len(name) - len(name_compare):
+            cursor_pos = entry.index(INSERT)
+            entry.icursor(cursor_pos - str_diff)
+            string_var.set(name_compare)
+
+        self.main.ask_to_save = True
+
+    def validate_driver_ver(self, *_):
+        version_compare = re.sub(r'\D', '', ver_str := self.main.driver_version_new_var.get()).lstrip('0')
+
+        if str_diff := len(ver_str) - len(version_compare):
+            cursor_pos = self.driver_ver_new_entry.index(INSERT)
+            self.driver_ver_new_entry.icursor(cursor_pos - str_diff)
+            self.main.driver_version_new_var.set(version_compare)
+
+        self.main.ask_to_save = True
+
+
 class ConnectionsWin:
     def __init__(self, main: C4IconSwapper):
         self.main = main
@@ -1498,108 +1673,6 @@ class ConnectionEntry:
             self.del_button.place(x=self.x + self.del_button.winfo_x() - 6, y=self.y)
 
 
-class DriverInfoWin:
-    def __init__(self, main: C4IconSwapper):
-        self.main = main
-
-        # Initialize window
-        self.window = Toplevel(main.root)
-        self.window.focus()
-        self.window.protocol('WM_DELETE_WINDOW', main.close_driver_info_win)
-        self.window.title('Edit Driver Info')
-        self.window.geometry('255x240')
-        self.window.geometry(f'+{main.root.winfo_rootx() + main.export_panel.x}+{main.root.winfo_rooty()}')
-        self.window.resizable(False, False)
-
-        # Validate driver version
-        if (main.export_panel.inc_driver_version.get() and
-                main.driver_version_var.get() and main.driver_version_new_var.get() and
-                int(main.driver_version_new_var.get()) <= int(main.driver_version_var.get())):
-            main.driver_version_new_var.set(str(int(main.driver_version_var.get()) + 1))
-
-        # Labels
-        instance_id_label = Label(self.window, text=f'program instance id: {main.instance_id}')
-
-        man_y = 20
-        man_arrow = Label(self.window, text='\u2192', font=('', 15))
-
-        creator_y = man_y + 55
-        creator_arrow = Label(self.window, text='\u2192', font=('', 15))
-
-        version_y = creator_y + 55
-        version_arrow = Label(self.window, text='\u2192', font=('', 15))
-
-        font_size = 10
-        driver_ver_orig_label = Label(self.window, text='Original Version:', font=(label_font, 8))
-        driver_man_label = Label(self.window, text='Driver Manufacturer', font=(label_font, font_size))
-        driver_creator_label = Label(self.window, text='Driver Creator', font=(label_font, font_size))
-        driver_ver_label = Label(self.window, text='Driver Version', font=(label_font, font_size))
-
-        # Entry
-        entry_width = 17
-        driver_man_entry = Entry(self.window, width=entry_width, textvariable=main.driver_manufac_var)
-        driver_man_entry['state'] = DISABLED
-        self.driver_man_new_entry = Entry(self.window, width=entry_width,
-                                          textvariable=main.driver_manufac_new_var)
-        main.driver_manufac_new_var.trace_add('write',
-                                              lambda name, index, mode: self.validate_man_and_creator(
-                                                  entry=self.driver_man_new_entry))
-
-        driver_creator_entry = Entry(self.window, width=entry_width, textvariable=main.driver_creator_var)
-        driver_creator_entry['state'] = DISABLED
-        self.driver_creator_new_entry = Entry(self.window, width=entry_width,
-                                              textvariable=main.driver_creator_new_var)
-        main.driver_creator_new_var.trace_add('write',
-                                              lambda name, index, mode: self.validate_man_and_creator(
-                                                  string_var=main.driver_creator_new_var,
-                                                  entry=self.driver_creator_new_entry))
-
-        driver_ver_entry = Entry(self.window, width=entry_width, textvariable=main.driver_version_var)
-        driver_ver_entry['state'] = DISABLED
-        self.driver_ver_new_entry = Entry(self.window, width=entry_width,
-                                          textvariable=main.driver_version_new_var)
-        self.driver_ver_new_entry.bind('<FocusOut>', main.export_panel.update_driver_version)
-        main.driver_version_new_var.trace_add('write', self.validate_driver_ver)
-        driver_ver_orig_entry = Entry(self.window, width=6, textvariable=main.driver_ver_orig)
-        driver_ver_orig_entry['state'] = DISABLED
-        instance_id_label.place(x=127, y=220, anchor='n')
-        man_arrow.place(x=115, y=man_y, anchor='nw')
-        creator_arrow.place(x=115, y=creator_y, anchor='nw')
-        version_arrow.place(x=115, y=version_y, anchor='nw')
-        driver_man_label.place(x=127, y=man_y - 15, anchor='n')
-        driver_creator_label.place(x=127, y=creator_y - 15, anchor='n')
-        driver_ver_label.place(x=127, y=version_y - 15, anchor='n')
-        driver_ver_orig_label.place(x=110, y=version_y + 30, anchor='ne')
-        driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
-        self.driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
-        driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
-        self.driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
-        driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
-        self.driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
-        driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
-
-    def validate_man_and_creator(self, string_var=None, entry=None):
-        if not string_var or not entry:
-            return
-        name_compare = re_valid_chars.sub('', name := string_var.get())
-        if str_diff := len(name) - len(name_compare):
-            cursor_pos = entry.index(INSERT)
-            entry.icursor(cursor_pos - str_diff)
-            string_var.set(name_compare)
-
-        self.main.ask_to_save = True
-
-    def validate_driver_ver(self, *_):
-        version_compare = re.sub(r'\D', '', ver_str := self.main.driver_version_new_var.get()).lstrip('0')
-
-        if str_diff := len(ver_str) - len(version_compare):
-            cursor_pos = self.driver_ver_new_entry.index(INSERT)
-            self.driver_ver_new_entry.icursor(cursor_pos - str_diff)
-            self.main.driver_version_new_var.set(version_compare)
-
-        self.main.ask_to_save = True
-
-
 class StatesWin:
     def __init__(self, main: C4IconSwapper):
         self.main = main
@@ -1721,74 +1794,200 @@ class StateEntry:
         self.name_var.set(self.state_object.name_var.get())
 
 
-class SubIconWin:
+class RecoveryWin:
     def __init__(self, main: C4IconSwapper):
-        self.main = main
-        self.curr_c4_icon = main.c4z_panel.icons[main.c4z_panel.current_icon]
-        self.icons = self.curr_c4_icon.icons
-        self.num_of_icons = len(self.icons)
-        self.curr_index = 0
-
-        # Initialize window
+        if not os.path.isdir(recovery_path := pathjoin(main.appdata_folder, 'Recovery')):
+            return
+        # Delete any non-directories in Recovery folder (Just in case)
+        for item in os.listdir(recovery_path):
+            if os.path.isdir(item_path := pathjoin(recovery_path, item)):
+                continue
+            os.remove(item_path)
+            print(f'Deleted invalid item from Recovery folder {item}')
+        if not (num_of_rec_folders := len(os.listdir(recovery_path))):
+            shutil.rmtree(recovery_path)
+            if not main.is_server:
+                print('')
+            print('Deleted empty Recovery folder')
+            return
         self.window = window = Toplevel(main.root)
-        self.window.focus()
-        self.window.protocol('WM_DELETE_WINDOW', lambda: main.c4z_panel.toggle_sub_icon_win(close=True))
-        self.window.title('Sub Icons')
-        self.window.geometry('225x255')
-        self.window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
-        self.window.resizable(False, False)
+        self.main = main
+        self.recovery_path = recovery_path
+        window.grab_set()
+        window.focus()
+        window.transient(main.root)
+        window.title('Project Recovery')
+        window.geometry('355x287')
+        window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
+        window.resizable(False, False)
+        window.protocol('WM_DELETE_WINDOW', self.close_dialog)
 
-        # Labels
-        self.sub_icon_label = Label(window, image=main.blank)
-        self.sub_icon_label.image = main.blank
-        self.sub_icon_label.place(relx=0.5, y=10, anchor='n')
-        self.sub_icon_label.bind('<Button-3>', self.right_click_menu)
+        self.recoverable_projects = [rec_obj for item in os.listdir(recovery_path)
+                                     if (rec_obj := RecoveryObject(pathjoin(recovery_path, item)))]
 
-        self.name_label = Label(window, text='icon name', font=(label_font, 10, 'bold'))
-        self.name_label.place(relx=0.5, y=180, anchor='n')
+        title_label = Label(window, text='Select Projects to Recover', font=(label_font, 14))
+        title_label.place(relx=0.5, y=5, anchor='n')
 
-        self.size_label = Label(window, text='0x0', font=(label_font, 10))
-        self.size_label.place(relx=0.5, y=164, anchor='n')
+        canvas = Canvas(window)
+        scrollable_frame = Frame(canvas)
+        if do_scroll := num_of_rec_folders > 8:
+            scrollbar = Scrollbar(window, command=canvas.yview)
+            scrollable_frame.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+            canvas.bind('<MouseWheel>', lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units'))
+            canvas.configure(yscrollcommand=scrollbar.set)
+            scrollbar.place(relx=1, x=-5, y=35, relheight=1, height=-50, anchor='ne')
+        canvas.create_window((0, 0), window=scrollable_frame, anchor='nw')
+        canvas.place(x=10, y=35, relheight=1, height=-80, anchor='nw')
 
-        self.num_label = Label(window, text='0 of 0', font=(label_font, 10))
-        self.num_label.place(relx=0.5, y=146, anchor='n')
+        self.checkboxes = [Checkbutton(
+            scrollable_frame, text=f'{project.name} | '
+                                   f'{project.num_images} {"image" if project.num_images == 1 else "images"} | '
+                                   f'{project.mtime}', variable=project.recover)
+                           for project in self.recoverable_projects]
+        if num_of_rec_folders == 1:
+            self.recoverable_projects[-1].recover.set(1)
+        for check in self.checkboxes:
+            check.pack(anchor='w')
+            if do_scroll:
+                check.bind('<MouseWheel>', lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units'))
 
-        # Buttons
-        self.prev_button = Button(window, text='Prev', command=lambda: self.inc_icon(inc=-1), width=5, takefocus=0)
-        self.prev_button.place(relx=0.5, x=-4, y=222, anchor='e')
-        self.next_button = Button(window, text='Next', command=self.inc_icon, width=5, takefocus=0)
-        self.next_button.place(relx=0.5, x=4, y=222, anchor='w')
+        recover_button = Button(window, text='Recover', width=10, command=self.do_recovery)
+        recover_button.place(relx=0.5, x=-4, rely=1, y=-3, anchor='se')
 
-        self.update_icon()
+        delete_button = Button(window, text='Delete' if num_of_rec_folders == 1 else 'Delete All',
+                               width=10, command=self.close_dialog)
+        delete_button.place(relx=0.5, x=4, rely=1, y=-3, anchor='sw')
 
-    def update_icon(self):
-        if self.curr_c4_icon is not self.main.c4z_panel.icons[self.main.c4z_panel.current_icon]:
-            self.curr_c4_icon = self.main.c4z_panel.icons[self.main.c4z_panel.current_icon]
-            self.icons = self.curr_c4_icon.icons
-            self.num_of_icons = len(self.icons)
-            self.curr_index = self.num_of_icons - 1 if self.curr_index >= self.num_of_icons else self.curr_index
-        curr_sub_icon = self.icons[self.curr_index]
-        with Image.open(curr_sub_icon.path) as img:
-            icon_image = ImageTk.PhotoImage(img.resize((128, 128), Resampling.LANCZOS))
-            self.sub_icon_label.configure(image=icon_image)
-            self.sub_icon_label.image = icon_image
-        self.num_label.config(text=f'{self.curr_index + 1} of {self.num_of_icons}')
-        self.size_label.config(text=f'{curr_sub_icon.size[0]}x{curr_sub_icon.size[1]}')
-        self.name_label.config(text=curr_sub_icon.full_name)
+    def close_dialog(self):
+        def exit_close_dialog():
+            close_dialog.destroy()
+            self.window.deiconify()
+            self.window.focus()
 
-    def inc_icon(self, inc=1):
-        self.curr_index = (self.curr_index + inc) % self.num_of_icons
-        self.update_icon()
+        def do_delete():
+            shutil.rmtree(self.recovery_path)
+            close_dialog.destroy()
+            self.window.destroy()
+            self.main.root.deiconify()
+            self.main.root.focus()
 
-    def right_click_menu(self, event):
-        context_menu = Menu(self.main.root, tearoff=0)
-        context_menu.add_command(label='Show icon in folder', command=self.open_icon_folder)
-        context_menu.tk_popup(event.x_root, event.y_root)
-        context_menu.grab_release()
+        close_dialog = Toplevel(self.window)
+        close_dialog.title('Are you sure?')
+        close_dialog.geometry('239x70')
+        close_dialog.geometry(f'+{self.window.winfo_rootx()}+{self.window.winfo_rooty()}')
+        close_dialog.protocol('WM_DELETE_WINDOW', exit_close_dialog)
+        close_dialog.grab_set()
+        close_dialog.focus()
+        close_dialog.transient(self.window)
+        close_dialog.resizable(False, False)
 
-    def open_icon_folder(self, *_):
-        path = os.path.normpath(self.icons[self.curr_index].path)  # normalize just to be safe
-        subprocess.Popen(f'explorer /select,"{path}"')
+        label = Label(close_dialog, text='Delete recovered project?' if len(self.recoverable_projects) == 1 else
+                        'Delete all recovered projects?', font=(label_font, 10, 'bold'))
+        label.place(relx=0.5, y=3, anchor='n')
+
+        yes_button = Button(close_dialog, text='Yes', width='10', command=do_delete)
+        yes_button.place(relx=0.5, x=-4, rely=1, y=-8, anchor='se')
+
+        no_button = Button(close_dialog, text='No', width='10', command=exit_close_dialog)
+        no_button.place(relx=0.5, x=4, rely=1, y=-8, anchor='sw')
+
+    def warning_dialog(self, dialog_response_var):
+        def close_dialog():
+            warning_dialog.destroy()
+            self.window.deiconify()
+            self.window.focus()
+
+        def abort_recovery():
+            dialog_response_var.set(1)
+            close_dialog()
+
+        def do_recovery():
+            dialog_response_var.set(0)
+            close_dialog()
+
+        warning_dialog = Toplevel(self.window)
+        warning_dialog.title('Warning')
+        warning_dialog.geometry('260x85')
+        warning_dialog.geometry(f'+{self.window.winfo_rootx()}+{self.window.winfo_rooty()}')
+        warning_dialog.protocol('WM_DELETE_WINDOW', abort_recovery)
+        warning_dialog.grab_set()
+        warning_dialog.focus()
+        warning_dialog.transient(self.window)
+        warning_dialog.resizable(False, False)
+
+        label = Label(warning_dialog, text='All unselected projects will be deleted.\nAre you sure?',
+                      font=(label_font, 10, 'bold'))
+        label.place(relx=0.5, y=3, anchor='n')
+
+        yes_button = Button(warning_dialog, text='Yes', width='10', command=do_recovery)
+        yes_button.place(relx=0.5, x=-4, rely=1, y=-8, anchor='se')
+
+        no_button = Button(warning_dialog, text='No', width='10', command=abort_recovery)
+        no_button.place(relx=0.5, x=4, rely=1, y=-8, anchor='sw')
+
+        return warning_dialog
+
+    def do_recovery(self):
+        selected = [rec_obj for rec_obj in self.recoverable_projects if rec_obj.recover.get()]
+        if not selected:
+            return
+        # Warn that unselected projects will be deleted
+        if len(selected) != len(self.recoverable_projects):
+            abort_recovery = IntVar()
+            self.warning_dialog(abort_recovery)
+            self.window.wait_variable(abort_recovery)
+            if abort_recovery.get():
+                return
+        own_project = ''
+        # Delete projects which were not selected
+        for recovery_obj in [rec_obj for rec_obj in self.recoverable_projects if rec_obj not in selected]:
+            shutil.rmtree(recovery_obj.path)
+        # Flag first project to open in self and start new programs to open any remaining projects
+        for recovery_obj in selected:
+            if not own_project and not self.main.driver_selected:
+                own_project = recovery_obj.path
+                continue
+
+            if self.main.running_as_exe:
+                args = [sys.executable, recovery_obj.path]
+            else:
+                # Path to exe, path to python script, recovery path variable
+                args = [sys.executable, os.path.abspath(sys.argv[0]), recovery_obj.path]
+
+            # Start debug console hidden
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = 0
+            print('Launching new application to open recovered project')
+            subprocess.Popen(args, startupinfo=startupinfo, creationflags=subprocess.CREATE_NEW_CONSOLE, close_fds=True)
+
+        # Open recovery project
+        if own_project:
+            print('Opening recovered project')
+            self.main.do_recovery(own_project)
+        self.window.destroy()
+        self.main.root.deiconify()
+        self.main.root.focus()
+
+
+class RecoveryObject:
+    def __init__(self, instance_path: str):
+        if not os.path.isdir(instance_path):
+            return
+        self.name = 'No Driver' if 'driver' not in os.listdir(instance_path) else 'MsgNotFound'
+        self.path = instance_path
+        self.num_images = 0
+        self.mtime = datetime.fromtimestamp(os.path.getmtime(instance_path)).strftime("%m/%d %H:%M:%S")
+        self.recover = IntVar()
+
+        for item in os.listdir(instance_path):
+            if item == 'driver':
+                if os.path.isfile(xml_path := pathjoin(instance_path, 'driver', 'driver.xml')):
+                    driver_xml = XMLObject(xml_path)
+                    if name := driver_xml.get_tag('name').value():
+                        self.name = name
+            elif item == 'Replacement Icons':
+                self.num_images = len(os.listdir(pathjoin(instance_path, 'Replacement Icons')))
 
 
 class C4zPanel:
@@ -2574,7 +2773,7 @@ class ReplacementPanel:
 
         if file_path:
             new_path = pathjoin(self.replacement_icons_dir, Path(file_path).name)
-            next_num = get_next_num(1)
+            next_num = get_next_num_str(1)
             while os.path.isfile(new_path):
                 pathobj = Path(file_path)
                 new_path = pathjoin(self.replacement_icons_dir, f'{pathobj.stem}{next(next_num)}{pathobj.suffix}')
@@ -2937,7 +3136,7 @@ class ExportPanel:
             if os.path.isdir(bak_folder):
                 shutil.rmtree(bak_folder)
             os.mkdir(bak_folder)
-            suffix_num = get_next_num()
+            suffix_num = get_next_num_str()
             for directory in directories:
                 for file in os.listdir(directory):
                     if re.search(r'\.bak[^.]*$', file):
@@ -3237,200 +3436,6 @@ class ExportPanel:
             self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
 
 
-class RecoveryWin:
-    def __init__(self, main: C4IconSwapper):
-        if not os.path.isdir(recovery_path := pathjoin(main.appdata_folder, 'Recovery')):
-            return
-        # Delete any non-directories in Recovery folder (Just in case)
-        for item in os.listdir(recovery_path):
-            if os.path.isdir(item_path := pathjoin(recovery_path, item)):
-                continue
-            os.remove(item_path)
-            print(f'Deleted invalid item from Recovery folder {item}')
-        if not (num_of_rec_folders := len(os.listdir(recovery_path))):
-            shutil.rmtree(recovery_path)
-            print('Deleted empty Recovery folder')
-            return
-        self.window = window = Toplevel(main.root)
-        self.main = main
-        self.recovery_path = recovery_path
-        window.grab_set()
-        window.focus()
-        window.transient(main.root)
-        window.title('Project Recovery')
-        window.geometry('355x287')
-        window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
-        window.resizable(False, False)
-        window.protocol('WM_DELETE_WINDOW', self.close_dialog)
-
-        self.recoverable_projects = [rec_obj for item in os.listdir(recovery_path)
-                                     if (rec_obj := RecoveryObject(pathjoin(recovery_path, item)))]
-
-        title_label = Label(window, text='Select Projects to Recover', font=(label_font, 14))
-        title_label.place(relx=0.5, y=5, anchor='n')
-
-        canvas = Canvas(window)
-        scrollable_frame = Frame(canvas)
-        if do_scroll := num_of_rec_folders > 8:
-            scrollbar = Scrollbar(window, command=canvas.yview)
-            scrollable_frame.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
-            canvas.bind('<MouseWheel>', lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units'))
-            canvas.configure(yscrollcommand=scrollbar.set)
-            scrollbar.place(relx=1, x=-5, y=35, relheight=1, height=-50, anchor='ne')
-        canvas.create_window((0, 0), window=scrollable_frame, anchor='nw')
-        canvas.place(x=10, y=35, relheight=1, height=-80, anchor='nw')
-
-        self.checkboxes = [Checkbutton(
-            scrollable_frame, text=f'{project.name} | '
-                                   f'{project.num_images} {"image" if project.num_images == 1 else "images"} | '
-                                   f'{project.mtime}', variable=project.recover)
-                           for project in self.recoverable_projects]
-        if num_of_rec_folders == 1:
-            self.recoverable_projects[-1].recover.set(1)
-        for check in self.checkboxes:
-            check.pack(anchor='w')
-            if do_scroll:
-                check.bind('<MouseWheel>', lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units'))
-
-        recover_button = Button(window, text='Recover', width=10, command=self.do_recovery)
-        recover_button.place(relx=0.5, x=-4, rely=1, y=-3, anchor='se')
-
-        delete_button = Button(window, text='Delete' if num_of_rec_folders == 1 else 'Delete All',
-                               width=10, command=self.close_dialog)
-        delete_button.place(relx=0.5, x=4, rely=1, y=-3, anchor='sw')
-
-    def close_dialog(self):
-        def exit_close_dialog():
-            close_dialog.destroy()
-            self.window.deiconify()
-            self.window.focus()
-
-        def do_delete():
-            shutil.rmtree(self.recovery_path)
-            close_dialog.destroy()
-            self.window.destroy()
-            self.main.root.deiconify()
-            self.main.root.focus()
-
-        close_dialog = Toplevel(self.window)
-        close_dialog.title('Are you sure?')
-        close_dialog.geometry('239x70')
-        close_dialog.geometry(f'+{self.window.winfo_rootx()}+{self.window.winfo_rooty()}')
-        close_dialog.protocol('WM_DELETE_WINDOW', exit_close_dialog)
-        close_dialog.grab_set()
-        close_dialog.focus()
-        close_dialog.transient(self.window)
-        close_dialog.resizable(False, False)
-
-        label = Label(close_dialog, text='Delete recovered project?' if len(self.recoverable_projects) == 1 else
-                        'Delete all recovered projects?', font=(label_font, 10, 'bold'))
-        label.place(relx=0.5, y=3, anchor='n')
-
-        yes_button = Button(close_dialog, text='Yes', width='10', command=do_delete)
-        yes_button.place(relx=0.5, x=-4, rely=1, y=-8, anchor='se')
-
-        no_button = Button(close_dialog, text='No', width='10', command=exit_close_dialog)
-        no_button.place(relx=0.5, x=4, rely=1, y=-8, anchor='sw')
-
-    def warning_dialog(self, dialog_response_var):
-        def close_dialog():
-            warning_dialog.destroy()
-            self.window.deiconify()
-            self.window.focus()
-
-        def abort_recovery():
-            dialog_response_var.set(1)
-            close_dialog()
-
-        def do_recovery():
-            dialog_response_var.set(0)
-            close_dialog()
-
-        warning_dialog = Toplevel(self.window)
-        warning_dialog.title('Warning')
-        warning_dialog.geometry('260x85')
-        warning_dialog.geometry(f'+{self.window.winfo_rootx()}+{self.window.winfo_rooty()}')
-        warning_dialog.protocol('WM_DELETE_WINDOW', abort_recovery)
-        warning_dialog.grab_set()
-        warning_dialog.focus()
-        warning_dialog.transient(self.window)
-        warning_dialog.resizable(False, False)
-
-        label = Label(warning_dialog, text='All unselected projects will be deleted.\nAre you sure?',
-                      font=(label_font, 10, 'bold'))
-        label.place(relx=0.5, y=3, anchor='n')
-
-        yes_button = Button(warning_dialog, text='Yes', width='10', command=do_recovery)
-        yes_button.place(relx=0.5, x=-4, rely=1, y=-8, anchor='se')
-
-        no_button = Button(warning_dialog, text='No', width='10', command=abort_recovery)
-        no_button.place(relx=0.5, x=4, rely=1, y=-8, anchor='sw')
-
-        return warning_dialog
-
-    def do_recovery(self):
-        selected = [rec_obj for rec_obj in self.recoverable_projects if rec_obj.recover.get()]
-        if not selected:
-            return
-        # Warn that unselected projects will be deleted
-        if len(selected) != len(self.recoverable_projects):
-            abort_recovery = IntVar()
-            self.warning_dialog(abort_recovery)
-            self.window.wait_variable(abort_recovery)
-            if abort_recovery.get():
-                return
-        own_project = ''
-        # Delete projects which were not selected
-        for recovery_obj in [rec_obj for rec_obj in self.recoverable_projects if rec_obj not in selected]:
-            shutil.rmtree(recovery_obj.path)
-        # Flag first project to open in self and start new programs to open any remaining projects
-        for recovery_obj in selected:
-            if not own_project and not self.main.driver_selected:
-                own_project = recovery_obj.path
-                continue
-
-            if self.main.running_as_exe:
-                args = [sys.executable, recovery_obj.path]
-            else:
-                # Path to exe, path to python script, recovery path variable
-                args = [sys.executable, os.path.abspath(sys.argv[0]), recovery_obj.path]
-
-            # Start debug console hidden
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = 0
-            print('Launching new application to open recovered project')
-            subprocess.Popen(args, startupinfo=startupinfo, creationflags=subprocess.CREATE_NEW_CONSOLE, close_fds=True)
-
-        # Open recovery project
-        if own_project:
-            print('Opening recovered project')
-            self.main.do_recovery(own_project)
-        self.window.destroy()
-        self.main.root.deiconify()
-        self.main.root.focus()
-
-
-class RecoveryObject:
-    def __init__(self, instance_path: str):
-        if not os.path.isdir(instance_path):
-            return
-        self.name = 'No Driver' if 'driver' not in os.listdir(instance_path) else 'MsgNotFound'
-        self.path = instance_path
-        self.num_images = 0
-        self.mtime = datetime.fromtimestamp(os.path.getmtime(instance_path)).strftime("%m/%d %H:%M:%S")
-        self.recover = IntVar()
-
-        for item in os.listdir(instance_path):
-            if item == 'driver':
-                if os.path.isfile(xml_path := pathjoin(instance_path, 'driver', 'driver.xml')):
-                    driver_xml = XMLObject(xml_path)
-                    if name := driver_xml.get_tag('name').value():
-                        self.name = name
-            elif item == 'Replacement Icons':
-                self.num_images = len(os.listdir(pathjoin(instance_path, 'Replacement Icons')))
-
-
 class C4IS:
     def __init__(self, main: C4IconSwapper):
         if not isinstance(main, C4IconSwapper):
@@ -3500,8 +3505,7 @@ def natural_key(string: str):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
 
 
-# Yields value as string
-def get_next_num(start=0, yield_start=True):
+def get_next_num_str(start=0, yield_start=True):
     if not yield_start:
         start += 1
     while True:
