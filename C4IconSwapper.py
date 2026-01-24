@@ -96,6 +96,7 @@ class IPC:
                 if do_conflict_check:  # Check for other servers' port files after a delay
                     threading.Thread(target=self.ipc_server_conflict_check, args=[port], daemon=True).start()
                 else:
+                    self.finished_server_init = True
                     self.global_temp_cleanup()
 
             server.listen(7)
@@ -136,6 +137,11 @@ class IPC:
                                 threading.Thread(target=self.ipc_client_loop, args=[client], daemon=True).start()
                                 return True
                             case ['INSTANCE ID COLLISION']:
+                                if not first_time:
+                                    # Hopefully this code should never run
+                                    print('__Something Went Wrong__')
+                                    print('Ignored instruction from server to change instance id')
+                                    continue
                                 grace = True
                                 self.instance_id = str(random.randint(111111, 999999))
                                 print('From Server: INSTANCE ID COLLISION')
@@ -240,6 +246,10 @@ class IPC:
                                 print(self.client_dict)
                             case ['ACK']:
                                 ack_count += 1
+                                if ack_count > 1000000:
+                                    ack_count = 1000001
+                                    print(f'\rACK (1000000+)', end='', flush=True)
+                                    continue
                                 print(f'\rACK ({ack_count})', end='', flush=True)
                             case ['MIGRATE', new_port]:
                                 if ack_count:
@@ -277,6 +287,7 @@ class IPC:
 
     def ipc_server_loop(self, server):
         self.global_temp: str
+        first_client = True
         server.settimeout(1)
         gui_is_alive = self.root.winfo_exists
         if self.reestablish:
@@ -288,6 +299,10 @@ class IPC:
                 client, _ = server.accept()
                 client.settimeout(2)
                 threading.Thread(target=self.ipc_server_client_loop, args=[client], daemon=True).start()
+                if first_client:
+                    if not self.running_as_exe:
+                        self.root.title(f'C4 Icon Swapper ({self.instance_id})')
+                    first_client = False
 
             except socket.timeout:
                 # Reestablish ending logic
@@ -298,7 +313,7 @@ class IPC:
                     print('Reestablishment Period Ended')
                     with self.socket_lock:
                         if self.reestablish_ids - self.client_dict.keys():
-                            print('___Something Went Wrong___')
+                            print('__Something Went Wrong__')
                             print('Client found in reestablish_ids but not client_dict')
                             print(f'client_dict: {self.client_dict.keys()}')
                             print(f'reestablish_ids: {self.reestablish_ids}')
@@ -343,59 +358,6 @@ class IPC:
 
             except Exception as e:
                 print(f'Server Loop Error: {e}')
-
-    def ipc_server_heartbeat(self, port: int, first_time=True):
-        port_file = pathjoin(self.appdata_folder, f'PORT~{port}')
-        sleep_time = 1.23 if first_time else 7.77
-        while self.is_server:
-            Path(port_file).touch()
-            time.sleep(sleep_time)
-            if not self.root.winfo_exists():  # Ghost thread check
-                raise RuntimeError('👻')
-            if first_time:
-                first_time = False
-                sleep_time = 7.77
-
-    def ipc_server_conflict_check(self, port: int):
-        print('Doing server conflict check in 4.20 seconds...')
-        time.sleep(4.20)
-        port_files = {
-            int(re_result.group(1))
-            for item in os.listdir(self.appdata_folder)
-            if os.path.isfile(pathjoin(self.appdata_folder, item))
-            if (re_result := re.search(r'PORT~(\d{5})', item))
-            if int(re_result.group(1)) != port
-        }
-
-        if port_files:
-            print('Detected possible server conflict')
-            # Sort ports by which is closest to default port (smaller port number wins tie)
-            sorted_ports = sorted(port_files, key=lambda p: (abs(p - self.default_port), p))
-            if (new_port := sorted_ports[0]) != port:
-                print(f'Found server conflict')
-                with self.socket_lock:
-                    if self.socket_dict:
-                        print('Instructing clients to migrate')
-                        for cid, sock in self.socket_dict.items():
-                            try:
-                                sock.sendall(f'MIGRATE:{new_port}\n'.encode('utf-8'))
-                                sock.shutdown(socket.SHUT_WR)
-                            except OSError as e:
-                                print(f'Broadcast Error with {cid}: {e}')
-                    self.is_server = False
-                    self.finished_server_init = True
-                time.sleep(1.1)  # Ensure server loop exits
-                Path(pathjoin(self.appdata_folder, f'PORT~{port}')).unlink(missing_ok=True)
-                print(f'Attempting to connect as client on port: {new_port}')
-                self.ipc(port=new_port)
-                return
-            print('Found server conflict; Selected self as valid server')
-            self.finished_server_init = True
-            return
-        print('No conflict found :)')
-        self.finished_server_init = True
-        time.sleep(2)
-        self.global_temp_cleanup()
 
     def ipc_server_client_loop(self, client):
         self.global_temp: str
@@ -459,7 +421,7 @@ class IPC:
                             with socket_lock:
                                 client_dict = self.client_dict.copy()
                                 reestablish = self.reestablish
-                            if client_id in client_dict:
+                            if client_id in client_dict and client_id in os.listdir(self.global_temp):
                                 print('ID collision', client_id, 'in', client_dict)
                                 client.sendall('INSTANCE ID COLLISION\n'.encode('utf-8'))
                                 continue
@@ -506,6 +468,59 @@ class IPC:
                     self.reestablish_ids.discard(client_id)
                 self.server_broadcast_id_update()
                 return
+
+    def ipc_server_heartbeat(self, port: int, first_time=True):
+        port_file = pathjoin(self.appdata_folder, f'PORT~{port}')
+        sleep_time = 1.23 if first_time else 7.77
+        while self.is_server:
+            Path(port_file).touch()
+            time.sleep(sleep_time)
+            if not self.root.winfo_exists():  # Ghost thread check
+                raise RuntimeError('👻')
+            if first_time:
+                first_time = False
+                sleep_time = 7.77
+
+    def ipc_server_conflict_check(self, port: int):
+        print('Doing server conflict check in 4.20 seconds...')
+        time.sleep(4.20)
+        port_files = {
+            int(re_result.group(1))
+            for item in os.listdir(self.appdata_folder)
+            if os.path.isfile(pathjoin(self.appdata_folder, item))
+            if (re_result := re.search(r'PORT~(\d{5})', item))
+            if int(re_result.group(1)) != port
+        }
+
+        if port_files:
+            print('Detected possible server conflict')
+            # Sort ports by which is closest to default port (smaller port number wins tie)
+            sorted_ports = sorted(port_files, key=lambda p: (abs(p - self.default_port), p))
+            if (new_port := sorted_ports[0]) != port:
+                print(f'Found server conflict')
+                with self.socket_lock:
+                    if self.socket_dict:
+                        print('Instructing clients to migrate')
+                        for cid, sock in self.socket_dict.items():
+                            try:
+                                sock.sendall(f'MIGRATE:{new_port}\n'.encode('utf-8'))
+                                sock.shutdown(socket.SHUT_WR)
+                            except OSError as e:
+                                print(f'Broadcast Error with {cid}: {e}')
+                    self.is_server = False
+                    self.finished_server_init = True
+                time.sleep(1.1)  # Ensure server loop exits
+                Path(pathjoin(self.appdata_folder, f'PORT~{port}')).unlink(missing_ok=True)
+                print(f'Attempting to connect as client on port: {new_port}')
+                self.ipc(port=new_port)
+                return
+            print('Found server conflict; Selected self as valid server')
+            self.finished_server_init = True
+            return
+        print('No conflict found :)')
+        self.finished_server_init = True
+        time.sleep(2)
+        self.global_temp_cleanup()
 
     def server_broadcast_id_update(self, new_connection=None, force=False):
         with self.socket_lock:
@@ -745,7 +760,8 @@ class C4IconSwapper(IPC):
         self.ipc(first_time=True)
 
         # Root window properties
-        self.root.title('C4 Icon Swapper')
+        show_id_in_title = not self.running_as_exe and not self.is_server
+        self.root.title(f'C4 Icon Swapper ({self.instance_id})' if show_id_in_title else 'C4 Icon Swapper')
         self.root.resizable(False, False)
 
         # Version Label
@@ -1186,6 +1202,7 @@ class C4IconSwapper(IPC):
             self.root.after_cancel(self.easter_call_after_id)
         if self.easter_counter > 10:
             if self.debug_console and not self.debug_menu:
+                self.root.title(f'C4 Icon Swapper ({self.instance_id})')
                 self.debug_menu = Menu(self.menu, tearoff=0)
                 self.debug_menu.add_command(label='Show/Hide Console', command=self.toggle_debug_console)
                 self.menu.add_cascade(label='Debug', menu=self.debug_menu)
