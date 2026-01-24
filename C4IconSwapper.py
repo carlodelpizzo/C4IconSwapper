@@ -93,8 +93,10 @@ class IPC:
             threading.Thread(target=self.ipc_server_heartbeat, args=[port], daemon=True).start()
 
             if not self.reestablish:  # Only do on launch
-                # Check for other servers' port files after a delay
-                threading.Thread(target=self.ipc_server_conflict_check, args=[port], daemon=True).start()
+                if do_conflict_check:  # Check for other servers' port files after a delay
+                    threading.Thread(target=self.ipc_server_conflict_check, args=[port], daemon=True).start()
+                else:
+                    self.global_temp_cleanup()
 
             server.listen(7)
             threading.Thread(target=self.ipc_server_loop, args=[server], daemon=True).start()
@@ -170,6 +172,19 @@ class IPC:
             if os.path.isfile(port_file_path := pathjoin(self.appdata_folder, item))
             if (re_result := re.search(r'PORT~(\d{5})', item))
         }
+        do_conflict_check = False
+        if not os.path.isdir(self.global_temp):
+            os.mkdir(self.global_temp)
+        elif len(port_files) >= 2:
+            do_conflict_check = True
+
+        # First layer of id collision avoidance
+        while os.path.isdir(self.instance_temp):
+            self.instance_id = str(random.randint(111111, 999999))
+            print(f'Changed Instance ID: {self.instance_id}')
+            self.instance_temp = pathjoin(self.global_temp, self.instance_id)
+        os.mkdir(self.instance_temp)
+
         invalid_port_files = set()
         invalid_ports = set()
         if port is None:
@@ -705,13 +720,6 @@ class C4IconSwapper(IPC):
 
         if not os.path.isdir(self.appdata_folder):
             os.mkdir(self.appdata_folder)
-        if not os.path.isdir(self.global_temp):
-            os.mkdir(self.global_temp)
-        # First layer of id collision avoidance
-        while os.path.isdir(self.instance_temp):
-            self.instance_id = str(random.randint(111111, 999999))
-            self.instance_temp = pathjoin(self.global_temp, self.instance_id)
-        os.mkdir(self.instance_temp)
 
         # Initialize main program
         self.root = TkinterDnD.Tk()
