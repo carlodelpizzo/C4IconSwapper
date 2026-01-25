@@ -6,7 +6,7 @@ from collections import deque
 char_escapes = {'<': '&lt;', '>': '&gt;', '&': '&amp;'}
 
 
-def parse_xml(xml_path: str = '', xml_string: str = ''):
+def parse_xml(xml_path='', xml_string=''):
     if not xml_path and not xml_string:
         return []
     if xml_path:
