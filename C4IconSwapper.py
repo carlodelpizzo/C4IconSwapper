@@ -1558,8 +1558,8 @@ class Connection:
 class ConnectionEntry:
     def __init__(self, parent: ConnectionsWin, conn_obj: Connection, x_pos: int, y_pos: int):
         # Initialize Connection UI Object
-        self.window = parent.window
         self.main = parent.main
+        self.window = parent.window
         self.conn_object = conn_obj
         self.x, self.y = x_pos, y_pos
 
