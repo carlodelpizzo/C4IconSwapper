@@ -33,6 +33,7 @@ def make_exe():
         print('--- Build Failed or Interrupted ---')
 
 
+# pip install nuitka zstandard ordered-set
 # Change to True before running; this is to prevent accidental run
 execute = False
 
