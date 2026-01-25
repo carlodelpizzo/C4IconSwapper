@@ -41,9 +41,9 @@ conn_template = ['connection', '', '', [['id', '0', '', []], ['type', '0', '', [
                                         ['connectionname', 'REPLACE', '', []],
                                         ['consumer', 'False', '', []], ['linelevel', 'True', '', []],
                                         ['classes', '', '', [['class', '', '', [['classname', 'REPLACE', '', []]]]]]]]
-selectable_connections = ['HDMI IN', 'HDMI OUT', 'COMPOSITE IN', 'COMPOSITE OUT', 'VGA IN', 'VGA OUT', 'COMPONENT IN',
+selectable_connections = ('HDMI IN', 'HDMI OUT', 'COMPOSITE IN', 'COMPOSITE OUT', 'VGA IN', 'VGA OUT', 'COMPONENT IN',
                           'COMPONENT OUT', 'DVI IN', 'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
-                          'DIGITAL_OPTICAL OUT', 'IR_OUT']
+                          'DIGITAL_OPTICAL OUT', 'IR_OUT')
 
 if on_mac:
     no_dark_mode = None
@@ -187,15 +187,12 @@ class C4IconSwapper:
         # Class variables
         self.driver_xml = None
         self.driver_manufac_var = StringVar()
-        self.driver_manufac_new_var = StringVar()
-        self.driver_manufac_new_var.set('C4IconSwapper')
+        self.driver_manufac_new_var = StringVar(value='C4IconSwapper')
         self.driver_creator_var = StringVar()
-        self.driver_creator_new_var = StringVar()
-        self.driver_creator_new_var.set('C4IconSwapper')
+        self.driver_creator_new_var = StringVar(value='C4IconSwapper')
         self.driver_ver_orig = StringVar()
         self.driver_version_var = StringVar()
-        self.driver_version_new_var = StringVar()
-        self.driver_version_new_var.set('1')
+        self.driver_version_new_var = StringVar(value='1')
         self.multi_state_driver, self.states_shown, self.ask_to_save = False, False, False
         self.counter, self.easter_counter = 0, 0
         self.connections, self.conn_ids = [Connection(self) for _ in range(18)], []
@@ -229,6 +226,16 @@ class C4IconSwapper:
                                    '\t\t\t<type>1</type>\n\t\t\t<consumer>False</consumer>\n\t\t\t' \
                                    '<audiosource>False</audiosource>\n' \
                                    '\t\t\t<videosource>False</videosource>\n\t\t\t<linelevel>False</linelevel>'
+
+        # Panel Separators
+        self.separator0 = Separator(self.root, orient='vertical')
+        self.separator1 = Separator(self.root, orient='vertical')
+        if on_mac:
+            self.separator0.place(x=350, y=0, height=290)
+            self.separator1.place(x=700, y=0, height=290)
+        else:
+            self.separator0.place(x=305, y=0, height=270)
+            self.separator1.place(x=610, y=0, height=270)
 
         # Panels; Creating blank image for panels
         temp_image_file = f'{self.temp_root_dir}blank.gif'
@@ -268,6 +275,7 @@ class C4IconSwapper:
         self.file.add_separator()
         self.file.add_command(label='Load Generic Driver', command=self.c4z_panel.load_gen_driver)
         self.file.add_command(label='Load Multi Driver', command=self.c4z_panel.load_gen_multi)
+
         self.edit = Menu(self.menu, tearoff=0)
         self.edit.add_command(label='Connections', command=lambda: self.open_edit_win(self.connections_win, 'conn'))
         self.edit.add_command(label='Driver Info', command=lambda: self.open_edit_win(self.driver_info_win, 'driver'))
@@ -280,16 +288,6 @@ class C4IconSwapper:
         self.edit.entryconfig(self.undo_pos, state=DISABLED)
         self.menu.add_cascade(label='File', menu=self.file)
         self.menu.add_cascade(label='Edit', menu=self.edit)
-
-        # Separators
-        self.separator0 = Separator(self.root, orient='vertical')
-        self.separator1 = Separator(self.root, orient='vertical')
-        if on_mac:
-            self.separator0.place(x=350, y=0, height=290)
-            self.separator1.place(x=700, y=0, height=290)
-        else:
-            self.separator0.place(x=305, y=0, height=270)
-            self.separator1.place(x=610, y=0, height=270)
 
         # Creating window icon
         if not on_mac:
@@ -807,8 +805,7 @@ class DriverInfoWin:
             self.window.geometry('255x240')
         else:
             self.window.geometry('347x240')
-        self.window.geometry(f'+{main.root.winfo_rootx() + main.export_panel.x}+'
-                             f'{main.root.winfo_rooty()}')
+        self.window.geometry(f'+{main.root.winfo_rootx() + main.export_panel.x}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
 
         # Validate driver version
@@ -935,9 +932,8 @@ class Connection:
         self.original, self.in_id_group, self.delete, self.enabled = False, False, False, False
         self.prior_txt, self.prior_type = '', ''
         self.tags, self.id_group = [], []
-        self.name_entry_var, self.type = StringVar(), StringVar()
-        self.name_entry_var.set('Connection Name...')
-        self.type.set('HDMI IN')
+        self.name_entry_var = StringVar(value='Connection Name...')
+        self.type = StringVar(value='HDMI IN')
 
     def update_id(self, *_, refresh=False):
         if not self.tags:
@@ -1177,8 +1173,7 @@ class StatesWin:
 class State:
     def __init__(self, name: str):
         self.original_name = name
-        self.name_var = StringVar()
-        self.name_var.set(name)
+        self.name_var = StringVar(value=name)
         background = light_entry_bg
         if on_mac and is_dark_mode():
             background = dark_entry_bg
@@ -1199,8 +1194,7 @@ class StateEntry:
         self.name_label.place(x=self.x + 35, y=self.y, anchor='e')
 
         # Entry
-        self.name_var = StringVar()
-        self.name_var.set(state_obj.name_var.get())
+        self.name_var = StringVar(value=state_obj.name_var.get())
         self.name_var.trace('w', self.validate_state)
         if on_mac:
             self.name_entry = Entry(self.window, width=13, textvariable=self.name_var)
@@ -2523,8 +2517,7 @@ class ExportPanel:
             self.export_as_button.place(x=145 + self.x, y=220 + self.y, anchor='n')
 
         # Entry
-        self.driver_name_var = StringVar()
-        self.driver_name_var.set('New Driver')
+        self.driver_name_var = StringVar(value='New Driver')
         self.driver_name_var.trace('w', self.validate_driver_name)
         self.driver_name_entry = Entry(main.root, width=25, textvariable=self.driver_name_var)
         self.driver_name_entry.place(x=145 + self.x, y=190 + self.y, anchor='n')
@@ -2642,6 +2635,8 @@ class ExportPanel:
                 shutil.rmtree(bak_folder)
 
     def do_export(self, quick_export=False):
+        main = self.main
+        driver_xml = main.driver_xml
         # Format driver name
         driver_name = self.driver_name_var.get()
         temp = []
@@ -2653,19 +2648,19 @@ class ExportPanel:
         self.driver_name_entry.insert(0, driver_name)
         if not driver_name:
             self.driver_name_entry['background'] = 'pink'
-            self.main.counter = 7
-            self.main.root.after(150, self.main.blink_driver_name_entry)
+            main.counter = 7
+            main.root.after(150, main.blink_driver_name_entry)
             return
 
         # Multi-state related checks
-        if self.main.multi_state_driver:
-            if self.main.states_win:
-                self.main.states_win.refresh()
+        if main.multi_state_driver:
+            if main.states_win:
+                main.states_win.refresh()
             # Check State Validity
             invalid_states = False
             single_invalid_state = False
-            for state in self.main.states:
-                if state.bg_color in ['pink', 'cyan']:
+            for state in main.states:
+                if state.bg_color in ('pink', 'cyan'):
                     self.abort = True
                     invalid_states = True
                     if not single_invalid_state:
@@ -2674,7 +2669,7 @@ class ExportPanel:
                     single_invalid_state = False
                     break
             if invalid_states:
-                invalid_states_pop_up = Toplevel(self.main.root)
+                invalid_states_pop_up = Toplevel(main.root)
                 if single_invalid_state:
                     invalid_states_pop_up.title('Invalid State Found')
                     label_text = 'Cannot Export: Invalid state label'
@@ -2682,11 +2677,10 @@ class ExportPanel:
                     invalid_states_pop_up.title('Invalid States Found')
                     label_text = 'Cannot Export: Invalid state labels'
                 invalid_states_pop_up.geometry('239x70')
-                invalid_states_pop_up.geometry(f'+{self.main.root.winfo_rootx() + self.x}+'
-                                               f'{self.main.root.winfo_rooty()}')
+                invalid_states_pop_up.geometry(f'+{main.root.winfo_rootx() + self.x}+{main.root.winfo_rooty()}')
                 invalid_states_pop_up.grab_set()
                 invalid_states_pop_up.focus()
-                invalid_states_pop_up.transient(self.main.root)
+                invalid_states_pop_up.transient(main.root)
                 invalid_states_pop_up.resizable(False, False)
                 confirm_label = Label(invalid_states_pop_up, text=label_text, justify='center')
                 confirm_label.pack()
@@ -2700,12 +2694,12 @@ class ExportPanel:
             # Update state names in lua file
             # state_name_changes = [original_name, new_name, original_name_lower, new_name_lower]
             state_name_changes = []
-            if os.path.isfile(lua_path := f'{self.main.temp_dir}driver/driver.lua'):
+            if os.path.isfile(lua_path := f'{main.temp_dir}driver/driver.lua'):
                 # lua file backup
-                if os.path.isfile(lua_bak_path := f'{self.main.temp_dir}driver/driver.lua.bak'):
+                if os.path.isfile(lua_bak_path := f'{main.temp_dir}driver/driver.lua.bak'):
                     os.remove(lua_bak_path)
                 shutil.copy(lua_path, lua_bak_path)
-                for state in self.main.states:
+                for state in main.states:
                     state_name_changes.append([state.original_name, state.name_var.get()])
                 for name_change in state_name_changes:
                     formatted_name = ''
@@ -2768,7 +2762,7 @@ class ExportPanel:
 
             # Do multi-state related changes in xml
             if state_name_changes:
-                for item_tag in self.main.driver_xml.get_tag('item'):
+                for item_tag in driver_xml.get_tag('item'):
                     for state_name_change in state_name_changes:
                         if state_name_change[0] == item_tag.value:
                             item_tag.value = state_name_change[1]
@@ -2776,19 +2770,15 @@ class ExportPanel:
                         if state_name_change[2] == item_tag.value:
                             item_tag.value = state_name_change[3]
                             break
-                for name_tag in self.main.driver_xml.get_tag('name'):
+                for name_tag in driver_xml.get_tag('name'):
                     for state_name_change in state_name_changes:
-                        if state_name_change[0] == name_tag.value or name_tag.value.endswith(
-                                state_name_change[0]):
-                            name_tag.value = name_tag.value.replace(state_name_change[0],
-                                                                    state_name_change[1])
+                        if state_name_change[0] == name_tag.value or name_tag.value.endswith(state_name_change[0]):
+                            name_tag.value = name_tag.value.replace(state_name_change[0], state_name_change[1])
                             break
-                        if state_name_change[2] == name_tag.value or name_tag.value.endswith(
-                                state_name_change[2]):
-                            name_tag.value = name_tag.value.replace(state_name_change[2],
-                                                                    state_name_change[3])
+                        if state_name_change[2] == name_tag.value or name_tag.value.endswith(state_name_change[2]):
+                            name_tag.value = name_tag.value.replace(state_name_change[2], state_name_change[3])
                             break
-                for description_tag in self.main.driver_xml.get_tag('description'):
+                for description_tag in driver_xml.get_tag('description'):
                     for state_name_change in state_name_changes:
                         if f'{state_name_change[0]} ' in description_tag.value:
                             description_tag.value = description_tag.value.replace(state_name_change[0],
@@ -2798,7 +2788,7 @@ class ExportPanel:
                             description_tag.value = description_tag.value.replace(state_name_change[2],
                                                                                   state_name_change[3])
                             break
-                for state_tag in self.main.driver_xml.get_tag('state'):
+                for state_tag in driver_xml.get_tag('state'):
                     for param in state_tag.parameters:
                         if param[0] == 'id':
                             for state_name_change in state_name_changes:
@@ -2810,17 +2800,16 @@ class ExportPanel:
                                     break
 
         # Check driver info variables
-        if not all([self.main.driver_version_new_var.get(), self.main.driver_manufac_new_var.get(),
-                    self.main.driver_creator_new_var.get()]):
-            missing_driver_info_pop_up = Toplevel(self.main.root)
+        if not all([main.driver_version_new_var.get(), main.driver_manufac_new_var.get(),
+                    main.driver_creator_new_var.get()]):
+            missing_driver_info_pop_up = Toplevel(main.root)
             missing_driver_info_pop_up.title('Missing Driver Information')
             label_text = 'Cannot Export: Missing driver info'
             missing_driver_info_pop_up.geometry('239x70')
-            missing_driver_info_pop_up.geometry(f'+{self.main.root.winfo_rootx() + self.x}+'
-                                                f'{self.main.root.winfo_rooty()}')
+            missing_driver_info_pop_up.geometry(f'+{main.root.winfo_rootx() + self.x}+{main.root.winfo_rooty()}')
             missing_driver_info_pop_up.grab_set()
             missing_driver_info_pop_up.focus()
-            missing_driver_info_pop_up.transient(self.main.root)
+            missing_driver_info_pop_up.transient(main.root)
             missing_driver_info_pop_up.resizable(False, False)
             confirm_label = Label(missing_driver_info_pop_up, text=label_text, justify='center')
             confirm_label.pack()
@@ -2830,46 +2819,46 @@ class ExportPanel:
             return
 
         # Confirm all connections have non-conflicting ids
-        for conn in self.main.connections:
+        for conn in main.connections:
             conn.update_id(refresh=True)
 
         # Set restore point for xml object
-        self.main.driver_xml.set_restore_point()
+        driver_xml.set_restore_point()
 
         # Update connection names
-        for conn in self.main.connections:
+        for conn in main.connections:
             conn.tags[2].value = conn.name_entry_var.get()
             conn.tags[5].value = conn.type.get()
 
         # Update xml with new driver name
-        self.main.driver_xml.get_tag('name')[0].value = driver_name
+        driver_xml.get_tag('name')[0].value = driver_name
         modified_datestamp = str(datetime.now().strftime('%m/%d/%Y %H:%M'))
         if self.inc_driver_version.get() and \
-                int(self.main.driver_version_var.get()) >= int(self.main.driver_version_new_var.get()):
-            self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
-        self.main.driver_xml.get_tag('version')[0].value = self.main.driver_version_new_var.get()
-        self.main.driver_xml.get_tag('modified')[0].value = modified_datestamp
-        self.main.driver_xml.get_tag('creator')[0].value = self.main.driver_creator_new_var.get()
-        self.main.driver_xml.get_tag('manufacturer')[0].value = self.main.driver_manufac_new_var.get()
-        for param in self.main.driver_xml.get_tag('proxy')[0].parameters:
+                int(main.driver_version_var.get()) >= int(main.driver_version_new_var.get()):
+            main.driver_version_new_var.set(str(int(main.driver_version_var.get()) + 1))
+        driver_xml.get_tag('version')[0].value = main.driver_version_new_var.get()
+        driver_xml.get_tag('modified')[0].value = modified_datestamp
+        driver_xml.get_tag('creator')[0].value = main.driver_creator_new_var.get()
+        driver_xml.get_tag('manufacturer')[0].value = main.driver_manufac_new_var.get()
+        for param in driver_xml.get_tag('proxy')[0].parameters:
             if param[0] == 'name':
                 param[1] = driver_name
-        for icon_tag in self.main.driver_xml.get_tag('Icon'):
+        for icon_tag in driver_xml.get_tag('Icon'):
             result = re.search('driver/(.*)/icons', icon_tag.value)
             if result:
                 result = result[1]
                 icon_tag.value = icon_tag.value.replace(result, driver_name)
 
         # Backup xml file and write new xml
-        if os.path.isfile(xml_bak_path := f'{self.main.temp_dir}driver/driver.xml.bak'):
+        if os.path.isfile(xml_bak_path := f'{main.temp_dir}driver/driver.xml.bak'):
             os.remove(xml_bak_path)
-        os.rename(xml_path := f'{self.main.temp_dir}driver/driver.xml', xml_bak_path)
+        os.rename(xml_path := f'{main.temp_dir}driver/driver.xml', xml_bak_path)
         if on_mac:
             with open(get_path(xml_path), 'w', errors='ignore') as out_file:
-                out_file.writelines(self.main.driver_xml.get_lines())
+                out_file.writelines(driver_xml.get_lines())
         else:
             with open(xml_path, 'w', errors='ignore') as out_file:
-                out_file.writelines(self.main.driver_xml.get_lines())
+                out_file.writelines(driver_xml.get_lines())
         if on_mac:
             random_tags = []
 
@@ -2896,11 +2885,11 @@ class ExportPanel:
                     os.remove(out_file_path)
                 bak_files_dict = {}
                 bak_files = []
-                bak_folder = f'{self.main.temp_dir}bak_files/'
+                bak_folder = f'{main.temp_dir}bak_files/'
 
                 # Backup and move all .bak files if not included
                 if not self.include_backups.get():
-                    directories = list_all_sub_directories(f'{self.main.temp_dir}/driver', include_root_dir=True)
+                    directories = list_all_sub_directories(f'{main.temp_dir}/driver', include_root_dir=True)
                     if os.path.isdir(bak_folder):
                         shutil.rmtree(bak_folder)
                     os.mkdir(bak_folder)
@@ -2916,9 +2905,9 @@ class ExportPanel:
                                 os.remove(current_path)
 
                 # Create .c4z file
-                driver_zip = ''.join([self.main.temp_dir, driver_name, '.zip'])
-                driver_c4z = ''.join([self.main.temp_dir, driver_name, '.c4z'])
-                shutil.make_archive(self.main.temp_dir + driver_name, 'zip', f'{self.main.temp_dir}driver')
+                driver_zip = ''.join([main.temp_dir, driver_name, '.zip'])
+                driver_c4z = ''.join([main.temp_dir, driver_name, '.c4z'])
+                shutil.make_archive(main.temp_dir + driver_name, 'zip', f'{main.temp_dir}driver')
                 base = os.path.splitext(driver_zip)[0]
                 os.rename(driver_zip, f'{base}.c4z')
                 shutil.copy(driver_c4z, out_file_path)
@@ -2958,15 +2947,15 @@ class ExportPanel:
                         os.remove(out_file_path.replace('.c4z', ''))
 
         # Restore original xml and lua
-        self.main.driver_version_var.set(self.main.driver_version_new_var.get())
+        main.driver_version_var.set(main.driver_version_new_var.get())
         if self.inc_driver_version.get():
-            self.main.driver_version_new_var.set(str(int(self.main.driver_version_new_var.get()) + 1))
-        self.main.driver_xml.restore()
-        if os.path.isfile(lua_bak_path := f'{self.main.temp_dir}driver/driver.lua.bak'):
-            os.remove(lua_path := f'{self.main.temp_dir}driver/driver.lua')
+            main.driver_version_new_var.set(str(int(main.driver_version_new_var.get()) + 1))
+        driver_xml.restore()
+        if os.path.isfile(lua_bak_path := f'{main.temp_dir}driver/driver.lua.bak'):
+            os.remove(lua_path := f'{main.temp_dir}driver/driver.lua')
             os.rename(lua_bak_path, lua_path)
-        os.remove(xml_path := f'{self.main.temp_dir}driver/driver.xml')
-        os.rename(f'{self.main.temp_dir}driver/driver.xml.bak', xml_path)
+        os.remove(xml_path := f'{main.temp_dir}driver/driver.xml')
+        os.rename(f'{main.temp_dir}driver/driver.xml.bak', xml_path)
 
     def validate_driver_name(self, *_):
         if on_mac:
