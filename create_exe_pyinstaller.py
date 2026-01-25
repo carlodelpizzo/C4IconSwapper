@@ -50,13 +50,14 @@ def make_exe():
 # Change to True before running; this is to prevent accidental run; add tkdnd2.8\ to Python\Python38\tcl\tcl8.6\
 execute = False
 
-if execute:
-    overwrite_file = '_'
-    if isfile(pathjoin(cur_dir, f'{exe_file_name}.{version}.exe')):
-        overwrite_file = input('Overwrite file? (y/n)... ')
+if __name__ == '__main__':
+    if execute:
+        overwrite_file = '_'
+        if isfile(pathjoin(cur_dir, f'{exe_file_name}.{version}.exe')):
+            overwrite_file = input('Overwrite file? (y/n)... ')
+        else:
+            make_exe()
+        if overwrite_file[0] in ('y', 'Y'):
+            make_exe()
     else:
-        make_exe()
-    if overwrite_file[0] in ('y', 'Y'):
-        make_exe()
-else:
-    print(f'{os.path.basename(__file__)} execution set to False')
+        print(f'{os.path.basename(__file__)} execution set to False')
