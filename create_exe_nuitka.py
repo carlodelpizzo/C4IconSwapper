@@ -27,7 +27,7 @@ command = [
 ]
 
 # Change to True before running; this is to prevent accidental run
-execute = True
+execute = False
 
 if __name__ == '__main__':
     if execute:
