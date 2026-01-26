@@ -188,8 +188,9 @@ class IPC:
 
         # First layer of id collision avoidance
         if first_time:
+            global global_instance_id
             while isdir(self.instance_temp):
-                self.instance_id = str(random.randint(111111, 999999))
+                self.instance_id = global_instance_id = str(random.randint(111111, 999999))
                 print(f'Changed Instance ID: {self.instance_id}')
                 self.instance_temp = pathjoin(self.global_temp, self.instance_id)
             os.mkdir(self.instance_temp)
@@ -717,7 +718,7 @@ class C4IconSwapper(IPC):
         self.exceptions = deque()
         self.handler_recall_id = None
 
-        if not sys.platform == 'win32':
+        if sys.platform != 'win32':
             print('***************************************************')
             print('This application is designed to only run on Windows')
             print('***************************************************')
@@ -731,7 +732,8 @@ class C4IconSwapper(IPC):
             self.toggle_debug_console(initialize=True)
 
         # Create temporary directory
-        self.instance_id = str(random.randint(111111, 999999))
+        global global_instance_id
+        self.instance_id = global_instance_id = str(random.randint(111111, 999999))
         print(f'Set Instance ID: {self.instance_id}')
         self.cur_dir = os.getcwd()
         self.appdata_folder = pathjoin(os.environ.get('APPDATA'), 'C4IconSwapper')
@@ -742,12 +744,16 @@ class C4IconSwapper(IPC):
         if not isdir(self.appdata_folder):
             os.mkdir(self.appdata_folder)
 
-        # Initialize main program
+        # Initialize root window
         self.root = TkinterDnD.Tk()
-        self.root.report_callback_exception = exception_handler
-        warnings.showwarning = exception_handler
+        self.root.report_callback_exception, warnings.showwarning = exception_handler, exception_handler
         self.root.geometry('915x287')
+        self.root.resizable(False, False)
         self.root.bind('<KeyRelease>', self.key_release)
+        self.root.bind('<Control-s>', self.save_project)
+        self.root.bind('<Control-o>', self.load_c4is)
+        self.root.bind('<Control-z>', self.undo)
+        self.root.bind('<Control-w>', self.end_program)
 
         self.client_dict = {}
         self.socket_dict = {}
@@ -761,15 +767,9 @@ class C4IconSwapper(IPC):
         self.default_port = 61352
         self.ipc(first_time=True)
 
-        # Root window properties
+        # Root window title after IPC since ipc can change instance_id
         show_id_in_title = not self.running_as_exe and not self.is_server
         self.root.title(f'C4 Icon Swapper ({self.instance_id})' if show_id_in_title else 'C4 Icon Swapper')
-        self.root.resizable(False, False)
-
-        # Version Label
-        self.version_label = Label(self.root, text=version)
-        self.version_label.place(relx=0.997, rely=1.005, anchor='se')
-        self.version_label.bind('<Button-1>', self.easter)
 
         # Class variables
         self.driver_xml = None
@@ -787,7 +787,6 @@ class C4IconSwapper(IPC):
         self.connections = [Connection(self) for _ in range(18)]
         self.conn_ids = []
         self.states = [State('') for _ in range(13)]
-        self.state_dupes = []
         self.states_orig_names = []
         self.device_icon_dir = pathjoin(www_path := pathjoin(self.instance_temp, 'driver', 'www'), 'icons', 'device')
         self.icon_dir = pathjoin(www_path, 'icons')
@@ -796,15 +795,9 @@ class C4IconSwapper(IPC):
         self.driver_selected, self.schedule_entry_restore = False, False
         self.undo_history = deque(maxlen=100)
 
-        # Panel Separators
-        self.separator0 = Separator(self.root, orient='vertical')
-        self.separator1 = Separator(self.root, orient='vertical')
-        self.separator0.place(x=305, y=0, height=270)
-        self.separator1.place(x=610, y=0, height=270)
-
-        # Panels; Creating blank image for panels
+        # Creating blank image for panels
         with Image.open(asset_path('assets/blank_img.png')) as img:
-            self.blank = ImageTk.PhotoImage(img.resize((128, 128)))
+            self.img_blank = ImageTk.PhotoImage(img.resize((128, 128)))
             self.img_bank_blank = ImageTk.PhotoImage(img.resize((60, 60)))
 
         # Initialize Panels
@@ -814,13 +807,22 @@ class C4IconSwapper(IPC):
         self.driver_info_win = None
         self.states_win = None
         self.connections_win = None
-        self.root.bind('<Control-s>', self.save_project)
-        self.root.bind('<Control-o>', self.load_c4is)
-        self.root.bind('<Control-z>', self.undo)
-        self.root.bind('<Control-w>', self.end_program)
+
+        # Panel Separators
+        self.separator0 = Separator(self.root, orient='vertical')
+        self.separator0.place(x=305, y=0, height=270)
+        self.separator1 = Separator(self.root, orient='vertical')
+        self.separator1.place(x=610, y=0, height=270)
+
+        # Version Label
+        self.version_label = Label(self.root, text=version)
+        self.version_label.place(relx=0.997, rely=1.005, anchor='se')
+        self.version_label.bind('<Button-1>', self.easter)
 
         # Menus
         self.menu = Menu(self.root)
+
+        # File Menu
         self.file = Menu(self.menu, tearoff=0)
         self.file.add_command(label='Open Project', command=self.load_c4is)
         self.file.add_command(label='Save Project', command=self.save_project)
@@ -831,6 +833,7 @@ class C4IconSwapper(IPC):
         self.file.add_command(label='Load Generic Driver', command=self.c4z_panel.load_gen_driver)
         self.file.add_command(label='Load Multi Driver', command=lambda: self.c4z_panel.load_gen_driver(multi=True))
 
+        # Edit Menu
         self.edit = Menu(self.menu, tearoff=0)
         self.edit.add_command(label='Driver Info', command=lambda: self.open_edit_win(self.driver_info_win, 'driver'))
         self.edit.add_command(label='Connections', command=lambda: self.open_edit_win(self.connections_win, 'conn'))
@@ -849,6 +852,7 @@ class C4IconSwapper(IPC):
         self.undo_pos = 7
         self.edit.entryconfig(self.undo_pos, state=DISABLED)
 
+        # Debug menu initialized by easter function (repeatedly clicking the version number)
         self.debug_menu = None
 
         self.menu.add_cascade(label='File', menu=self.file)
@@ -856,9 +860,6 @@ class C4IconSwapper(IPC):
 
         # Create window icon
         self.root.iconbitmap(default=asset_path('assets/icon.ico'))
-
-        global global_instance_id
-        global_instance_id = self.instance_id
 
         if recover_path:
             self.do_recovery(recover_path)
@@ -1007,7 +1008,7 @@ class C4IconSwapper(IPC):
         # C4z Panel (and export button)
         self.c4z_panel.icons = []
         self.c4z_panel.current_icon = 0
-        self.c4z_panel.c4_icon_label.configure(image=self.blank)
+        self.c4z_panel.c4_icon_label.configure(image=self.img_blank)
         if isdir(driver_folder := pathjoin(self.instance_temp, 'driver')):
             shutil.rmtree(driver_folder)
         self.c4z_panel.restore_button['state'] = DISABLED
@@ -1346,8 +1347,8 @@ class SubIconWin:
         self.window.resizable(False, False)
 
         # Labels
-        self.sub_icon_label = Label(window, image=main.blank)
-        self.sub_icon_label.image = main.blank
+        self.sub_icon_label = Label(window, image=main.img_blank)
+        self.sub_icon_label.image = main.img_blank
         self.sub_icon_label.place(relx=0.5, y=10, anchor='n')
         self.sub_icon_label.bind('<Button-3>', self.right_click_menu)
 
@@ -2024,8 +2025,8 @@ class C4zPanel:
         # Labels
         self.panel_label = Label(main.root, text='Driver Selection', font=(label_font, 15))
 
-        self.c4_icon_label = Label(main.root, image=main.blank)
-        self.c4_icon_label.image = main.blank
+        self.c4_icon_label = Label(main.root, image=main.img_blank)
+        self.c4_icon_label.image = main.img_blank
         self.c4_icon_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
         self.c4_icon_label.bind('<Button-3>', self.right_click_menu)
 
@@ -2505,7 +2506,6 @@ class C4zPanel:
             main.edit.entryconfig(main.states_pos, state=NORMAL)
         elif main.states_win:
             main.close_states_win()
-        main.state_dupes = []
 
         # Update driver prev/next buttons
         if len(self.icons) - 0 if self.show_extra_icons.get() else self.extra_icons == 1:
@@ -2716,8 +2716,8 @@ class ReplacementPanel:
         # Labels
         self.panel_label = Label(main.root, text='Replacement Icons', font=(label_font, 15))
 
-        self.replacement_img_label = Label(main.root, image=main.blank)
-        self.replacement_img_label.image = main.blank
+        self.replacement_img_label = Label(main.root, image=main.img_blank)
+        self.replacement_img_label.image = main.img_blank
 
         x_offset = 61
         for i in range(main.img_bank_size):
@@ -2818,8 +2818,8 @@ class ReplacementPanel:
                             self.img_bank.append(self.replacement_icon)
                             self.refresh_img_bank()
                             self.replacement_icon = None
-                            self.replacement_img_label.config(image=main.blank)
-                            self.replacement_img_label.image = main.blank
+                            self.replacement_img_label.config(image=main.img_blank)
+                            self.replacement_img_label.image = main.img_blank
                             self.replace_button['state'] = DISABLED
                             self.replace_all_button['state'] = DISABLED
                             return
@@ -3048,8 +3048,8 @@ class ReplacementPanel:
         if img_index == -1:
             os.remove(self.replacement_icon.path)
             self.replacement_icon = None
-            self.replacement_img_label.config(image=self.main.blank)
-            self.replacement_img_label.image = self.main.blank
+            self.replacement_img_label.config(image=self.main.img_blank)
+            self.replacement_img_label.image = self.main.img_blank
             self.replace_button['state'] = DISABLED
             self.replace_all_button['state'] = DISABLED
             return
