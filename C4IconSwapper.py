@@ -56,7 +56,6 @@ conn_id_type = {'HDMI IN': (2000, '5'), 'COMPOSITE IN': (2000, '5'), 'VGA IN': (
                  'STEREO IN': (4000, '6'), 'DIGITAL_OPTICAL IN': (4000, '6'),
                  'STEREO OUT': (3900, '6'), 'DIGITAL_OPTICAL OUT': (3900, '6'),
                  'IR_OUT': (1, '1')}
-global_instance_id = None
 
 pathjoin = os.path.join
 isfile = os.path.isfile
@@ -188,9 +187,8 @@ class IPC:
 
         # First layer of id collision avoidance
         if first_time:
-            global global_instance_id
             while isdir(self.instance_temp):
-                self.instance_id = global_instance_id = str(random.randint(111111, 999999))
+                self.instance_id = str(random.randint(111111, 999999))
                 print(f'Changed Instance ID: {self.instance_id}')
                 self.instance_temp = pathjoin(self.global_temp, self.instance_id)
             os.mkdir(self.instance_temp)
@@ -732,8 +730,7 @@ class C4IconSwapper(IPC):
             self.toggle_debug_console(initialize=True)
 
         # Create temporary directory
-        global global_instance_id
-        self.instance_id = global_instance_id = str(random.randint(111111, 999999))
+        self.instance_id = str(random.randint(111111, 999999))
         print(f'Set Instance ID: {self.instance_id}')
         self.cur_dir = os.getcwd()
         self.appdata_folder = pathjoin(os.environ.get('APPDATA'), 'C4IconSwapper')
@@ -1249,6 +1246,7 @@ class Icon:
         if not isfile(path):
             raise FileNotFoundError('Failed to find path to image file')
         if not os.path.splitext(path)[1].lower() in valid_img_types:
+            print(path)
             raise TypeError('Invalid image type')
         self.path = path
         self.tk_icon_lg = None
@@ -1265,13 +1263,17 @@ class Icon:
 
 
 class C4SubIcon:
-    def __init__(self, root_path: str, img_path: str, name: str, size: int | tuple[int, int], bak_path=None):
+    def __init__(self, instance_id, root_path: str, img_path: str,
+                 name: str, size: int | tuple[int, int], bak_path=None):
         self.root = root_path  # Path to directory containing image
         self.path = img_path  # Full path to image file
-        path_parts = Path(img_path).parts
-        split_i = next(path_parts.index(part) for part in path_parts if part == global_instance_id)
-        split_i = next(path_parts.index(part) for part in path_parts[split_i+1:] if part in ('icons', 'images'))
-        self.rel_path = pathjoin(*list(path_parts[split_i:]))
+        rel_path = img_path.split(instance_id)[1]
+        if 'icons' in rel_path:
+            self.rel_path = rel_path.split('icons')[1].strip(os.sep)
+        elif 'images' in rel_path:
+            self.rel_path = rel_path.split('images')[1].strip(os.sep)
+        else:
+            self.rel_path = rel_path
         self.full_name = os.path.split(img_path)[-1]
         self.name = name
         self.bak_path = bak_path
@@ -1383,6 +1385,12 @@ class SubIconWin:
         self.num_label.config(text=f'{self.curr_index + 1} of {self.num_of_icons}')
         self.size_label.config(text=f'{curr_sub_icon.size[0]}x{curr_sub_icon.size[1]}')
         self.name_label.config(text=curr_sub_icon.full_name)
+        if self.num_of_icons <= 1:
+            self.prev_button['state'] = DISABLED
+            self.next_button['state'] = DISABLED
+        else:
+            self.prev_button['state'] = NORMAL
+            self.next_button['state'] = NORMAL
 
     def inc_icon(self, inc=1):
         self.curr_index = (self.curr_index + inc) % self.num_of_icons
@@ -2265,6 +2273,9 @@ class C4zPanel:
                 for item in os.scandir(directory):
                     if not item.is_file():
                         continue
+                    if not os.path.splitext(item.name)[1].lower() in valid_img_types:
+                        print(f'Skipped item which is not valid image type: {item.name}')
+                        continue
                     if re.search(r'\.bak[^.]*$', item.name):
                         root_name = re.sub(r'\.bak[^.]*$', '', item.name)
                         bak_files[pathjoin(directory, root_name)] = pathjoin(directory, item.name)
@@ -2286,23 +2297,27 @@ class C4zPanel:
                     # If XOR left/right size labels exist
                     if ((l_label := img_info[0]) is None) != ((r_label := img_info[2]) is None):
                         if (l_label and int(l_label) == actual_size) or int(r_label) == actual_size:
-                            icon_groups[img_name].append(C4SubIcon(directory, item.path, img_name, actual_size))
+                            icon_groups[img_name].append(C4SubIcon(self.main.instance_id, directory,
+                                                                   item.path, img_name, actual_size))
                             all_sub_icons.append(icon_groups[img_name][-1])
                             continue
                     elif l_label and r_label:
                         r_size = int(r_label)
                         if l_label == r_label and r_size == actual_size:
-                            both_scheme.append(C4SubIcon(directory, item.path, img_name, actual_size))
+                            both_scheme.append(C4SubIcon(self.main.instance_id, directory,
+                                                         item.path, img_name, actual_size))
                             all_sub_icons.append(both_scheme[-1])
                             continue
                         elif r_size == actual_size:
                             img_name = f'{l_label}_{img_name}'
                         elif int(l_label) == actual_size:
                             img_name = f'{img_name}_{r_label}'
-                        icon_groups[img_name].append(C4SubIcon(directory, item.path, img_name, actual_size))
+                        icon_groups[img_name].append(C4SubIcon(self.main.instance_id, directory, item.path,
+                                                               img_name, actual_size))
                         all_sub_icons.append(icon_groups[img_name][-1])
                         continue
-                    icon_groups[img_name].append(C4SubIcon(directory, item.path, img_name, actual_size))
+                    icon_groups[img_name].append(C4SubIcon(self.main.instance_id, directory, item.path,
+                                                           img_name, actual_size))
                     all_sub_icons.append(icon_groups[img_name][-1])
 
             # Handle icons which have numbers on both sides that match their size
@@ -2336,6 +2351,7 @@ class C4zPanel:
             extras = []
             standard_icons = []
             group_dict = get_icon_groups()
+            # TODO: Reevaluate this loop. Does not seem to be working
             for group in group_dict:
                 group_list = []
                 # range(start, stop, step)
@@ -2399,31 +2415,41 @@ class C4zPanel:
                     rel_path = pathjoin(*Path(value).parts)
                     icon_groups[(group_name if group_name else 'Device Icon', tag.parent)].add(rel_path)
             for tag in main.driver_xml.get_tags('Icon'):
-                path_parts = Path(tag.value()).parts
-                split_i = next(path_parts.index(part) for part in path_parts if part in ('icons', 'images'))
+                if 'controller://' not in (tag_value := tag.value()):
+                    print(f'Could not parse Icon tag value in xml: {tag_value}')
+                    continue
                 group_name = tag.parent.attributes.get('id')
-                rel_path = pathjoin(*list(path_parts[split_i:]))
+                rel_path = tag_value.split('controller://')[1]
+                if 'icons' in rel_path:
+                    rel_path = rel_path.split('icons')[1].strip(os.sep)
+                elif 'images' in rel_path:
+                    rel_path = rel_path.split('images')[1].strip(os.sep)
                 icon_groups[(group_name if group_name else tag.parent.name, tag.parent)].add(rel_path)
 
             seen_groups = {}
             duplicates = set()
-            for key, group in icon_groups.items():
-                f_group = frozenset(group)
-                if f_group in seen_groups:
-                    first_key = seen_groups[f_group]
-                    if not first_key[1].attributes.get('id') and key[1].attributes.get('id'):
-                        duplicates.add(first_key)
-                        seen_groups[f_group] = key
+            for name_and_tag, group_set in icon_groups.items():
+                current_group_set = frozenset(group_set)
+                if current_group_set in seen_groups:
+                    existing_name_and_tag = seen_groups[current_group_set]
+                    if (not existing_name_and_tag[1].attributes.get('id')) and name_and_tag[1].attributes.get('id'):
+                        duplicates.add(existing_name_and_tag)
+                        seen_groups[current_group_set] = name_and_tag
                     else:
-                        duplicates.add(key)
+                        duplicates.add(name_and_tag)
                 else:
-                    seen_groups[f_group] = key
+                    seen_groups[current_group_set] = name_and_tag
             for dupe in duplicates:
                 del icon_groups[dupe]
 
             return icon_groups
 
-        self.icons = get_icons((main.icon_dir, main.images_dir))
+        # TODO: Change this to be a setting?
+        get_all_images = True
+        if get_all_images:
+            self.icons = get_icons((pathjoin(main.instance_temp, 'driver')))
+        else:
+            self.icons = get_icons((main.icon_dir, main.images_dir))
 
         # Update entry fields and restore driver if necessary
         if not self.icons:
@@ -2465,6 +2491,7 @@ class C4zPanel:
         self.current_icon = 0
         self.update_icon()
 
+        # Update show extra icons checkbox
         self.show_extra_icons.set(0)
         extra_icon_text = 'show extra icons' if not self.extra_icons else f'show extra ({self.extra_icons})'
         self.show_extra_icons_check.config(text=extra_icon_text)
@@ -2508,7 +2535,8 @@ class C4zPanel:
             main.close_states_win()
 
         # Update driver prev/next buttons
-        if len(self.icons) - 0 if self.show_extra_icons.get() else self.extra_icons == 1:
+        visible_icons = len(self.icons) - (self.extra_icons if not self.show_extra_icons.get() else 0)
+        if visible_icons <= 1:
             self.prev_icon_button['state'] = DISABLED
             self.next_icon_button['state'] = DISABLED
         else:
