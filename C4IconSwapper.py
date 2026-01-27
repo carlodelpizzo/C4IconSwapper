@@ -1,6 +1,7 @@
 import contextlib
 import ctypes
 import filecmp
+import io
 import itertools
 import os
 import pickle
@@ -617,7 +618,7 @@ class IPC:
 
 # TODO: Completely overhaul everything related to multistate
 class C4IconSwapper(IPC):
-    def __init__(self, recover_path=''):
+    def __init__(self):
         def exception_window(*args, message_txt=None):
             root = Toplevel(self.root)
             root.title('Exception')
@@ -723,8 +724,7 @@ class C4IconSwapper(IPC):
 
         self.running_as_exe = getattr(sys, 'frozen', False) or '__compiled__' in globals()
         self.debug_console = None
-        if len(sys.argv) > 1:
-            recover_path = sys.argv[1]
+        recover_path = '' if len(sys.argv) <= 1 else sys.argv[1]
         if self.running_as_exe or recover_path:
             self.toggle_debug_console(initialize=True)
 
@@ -989,12 +989,13 @@ class C4IconSwapper(IPC):
             pickle.dump(C4IS(self), output)
         self.ask_to_save = False
 
+    # TODO: Currently does not validate project file. Unsure what behavior is for invalid file
     def load_c4is(self, *_):
         if not (file := filedialog.askopenfilename(filetypes=[('C4IconSwapper Project', '*.c4is')])):
             return
         while self.replacement_panel.multi_threading:
             pass
-        save_state = file
+        save_state = None
         if isinstance(file, str):
             with open(file, 'rb') as file:
                 save_state = pickle.load(file)
@@ -1068,9 +1069,10 @@ class C4IconSwapper(IPC):
             shutil.rmtree(replacement_dir)
         os.mkdir(replacement_dir)
         if save_state.replacement:
-            save_state.replacement.save(pathjoin(replacement_dir, 'replacement.png'))
-            save_state.replacement.close()
-            self.replacement_panel.replacement_icon = (Icon(pathjoin(replacement_dir, 'replacement.png')))
+            rp_img = Image.open(io.BytesIO(save_state.replacement))
+            rp_img.save(pathjoin(replacement_dir, 'replacement.png'))
+            self.replacement_panel.replacement_icon = (Icon(pathjoin(replacement_dir, 'replacement.png'), img=rp_img))
+            rp_img.close()
             self.replacement_panel.replacement_img_label.configure(
                 image=self.replacement_panel.replacement_icon.tk_icon_lg)
             self.replacement_panel.replacement_img_label.image = self.replacement_panel.replacement_icon.tk_icon_lg
@@ -1080,9 +1082,10 @@ class C4IconSwapper(IPC):
         next_num = get_next_num_str()
         for img in save_state.img_bank:
             img_path = pathjoin(replacement_dir, f'img_bank{next(next_num)}.png')
-            img.save(img_path)
-            img.close()
-            self.replacement_panel.img_bank.append(Icon(img_path))
+            bank_img = Image.open(io.BytesIO(img))
+            bank_img.save(img_path)
+            self.replacement_panel.img_bank.append(Icon(img_path, img=bank_img))
+            bank_img.close()
         self.replacement_panel.refresh_img_bank()
         self.replacement_panel.replace_button['state'] = save_state.replacement_panel['replace']
         self.replacement_panel.replace_all_button['state'] = save_state.replacement_panel['replace_all']
@@ -1252,8 +1255,8 @@ class Icon:
         self.tk_icon_sm = None
 
         def create_tk_icons(pil_img):
-            self.tk_icon_lg = ImageTk.PhotoImage(pil_img.resize((128, 128), Resampling.LANCZOS))
-            self.tk_icon_sm = ImageTk.PhotoImage(pil_img.resize((60, 60), Resampling.LANCZOS))
+            self.tk_icon_lg = ImageTk.PhotoImage(pil_img.resize((128, 128), Resampling.BICUBIC))
+            self.tk_icon_sm = ImageTk.PhotoImage(pil_img.resize((60, 60), Resampling.BICUBIC))
         if img:
             create_tk_icons(img)
         else:
@@ -1302,7 +1305,7 @@ class C4Icon(Icon):
         if self.bak:
             icon = max(icons, key=lambda sub_icon: sub_icon.size[0] if sub_icon.bak_path else None)
             with Image.open(icon.bak_path) as img:
-                self.bak_tk_icon = ImageTk.PhotoImage(img.resize((128, 128), Resampling.LANCZOS))
+                self.bak_tk_icon = ImageTk.PhotoImage(img.resize((128, 128), Resampling.BICUBIC))
 
     def get_tk_img(self):
         if self.replacement_icon:
@@ -1324,10 +1327,10 @@ class C4Icon(Icon):
         if bak and self.bak:
             icon = max(self.icons, key=lambda sub_icon: sub_icon.size[0] if sub_icon.bak_path else None)
             with Image.open(icon.bak_path) as img:
-                self.bak_tk_icon = ImageTk.PhotoImage(img.resize((128, 128), Resampling.LANCZOS))
+                self.bak_tk_icon = ImageTk.PhotoImage(img.resize((128, 128), Resampling.BICUBIC))
             return
         with Image.open(self.path) as img:
-            self.tk_icon_lg = ImageTk.PhotoImage(img.resize((128, 128), Resampling.LANCZOS))
+            self.tk_icon_lg = ImageTk.PhotoImage(img.resize((128, 128), Resampling.BICUBIC))
 
 
 class SubIconWin:
@@ -1378,7 +1381,7 @@ class SubIconWin:
             self.curr_index = self.num_of_icons - 1 if self.curr_index >= self.num_of_icons else self.curr_index
         curr_sub_icon = self.icons[self.curr_index]
         with Image.open(curr_sub_icon.path) as img:
-            icon_image = ImageTk.PhotoImage(img.resize((128, 128), Resampling.LANCZOS))
+            icon_image = ImageTk.PhotoImage(img.resize((128, 128), Resampling.BICUBIC))
             self.sub_icon_label.configure(image=icon_image)
             self.sub_icon_label.image = icon_image
         self.num_label.config(text=f'{self.curr_index + 1} of {self.num_of_icons}')
@@ -2132,10 +2135,10 @@ class C4zPanel:
         temp_dir = pathjoin(main.instance_temp, 'temp_unpacking')
         os.mkdir(temp_dir)
         for img_name in os.listdir(main.device_icon_dir):
-            img = Image.open(pathjoin(main.device_icon_dir, img_name))
-            for size in sizes:
-                resized_img = img.resize((size, size), Resampling.LANCZOS)
-                resized_img.save(pathjoin(temp_dir, img_name.replace(root_size, str(size))))
+            with Image.open(pathjoin(main.device_icon_dir, img_name)) as img:
+                for size in sizes:
+                    resized_img = img.resize((size, size), Resampling.LANCZOS)
+                    resized_img.save(pathjoin(temp_dir, img_name.replace(root_size, str(size))))
         for img in os.listdir(temp_dir):
             shutil.move(pathjoin(temp_dir, img), pathjoin(main.device_icon_dir, img))
 
@@ -2699,8 +2702,8 @@ class C4zPanel:
     def drop_in_c4z(self, event):
         # Find '{' + any characters until reaching the first '}' OR at least one char of non-whitespace
         paths = [path[0] if path[0] else path[1] for path in re.findall(r'\{(.*?)}|(\S+)', event.data)]
-        threading.Thread(
-            target=self.main.replacement_panel.load_replacement, kwargs={'file_path': paths}, daemon=True).start()
+        threading.Thread(target=self.main.replacement_panel.load_replacement,
+                         kwargs={'file_path': paths}, daemon=True).start()
         if c4z_path := next((path for path in paths if path.endswith('.c4z') and isfile(path)), None):
             # noinspection PyUnboundLocalVariable
             self.load_c4z(file_path=c4z_path)
@@ -2789,6 +2792,7 @@ class ReplacementPanel:
         self.file_entry_field.insert(0, 'Select image file...')
         self.file_entry_field['state'] = DISABLED
 
+    # TODO: Reevaluate threaded usage
     def load_replacement(self, file_path=None, bank_index=None):
         if isinstance(file_path, tuple) or isinstance(file_path, list):
             self.multi_threading = True
@@ -3406,13 +3410,13 @@ class ExportPanel:
         include_bak = self.include_backups.get()
         for icon in main.c4z_panel.icons:
             if icon.replacement_icon:
-                rp_icon = Image.open(icon.replacement_icon.path)
-                for sub_icon in icon.icons:
-                    if include_bak:
-                        sub_icon.bak_path = f'{sub_icon.path}.bak'
-                        shutil.copy(sub_icon.path, sub_icon.bak_path)
-                    out_icon = rp_icon.resize(sub_icon.size, Resampling.LANCZOS)
-                    out_icon.save(sub_icon.path)
+                with Image.open(icon.replacement_icon.path) as rp_icon:
+                    for sub_icon in icon.icons:
+                        if include_bak:
+                            sub_icon.bak_path = f'{sub_icon.path}.bak'
+                            shutil.copy(sub_icon.path, sub_icon.bak_path)
+                        out_icon = rp_icon.resize(sub_icon.size, Resampling.LANCZOS)
+                        out_icon.save(sub_icon.path)
             elif icon.restore_bak and icon.bak:
                 for sub_icon in icon.icons:
                     if not sub_icon.bak_path:
@@ -3521,10 +3525,11 @@ class C4IS:
 
         # Replacement Panel
         if main.replacement_panel.replacement_icon:
-            self.replacement = Image.open(main.replacement_panel.replacement_icon.path)
+            with open(main.replacement_panel.replacement_icon.path, 'rb') as img:
+                self.replacement = img.read()
         else:
             self.replacement = None
-        self.img_bank = [Image.open(img.path) for img in main.replacement_panel.img_bank]
+        self.img_bank = [open(img.path, 'rb').read() for img in main.replacement_panel.img_bank]
 
         self.replacement_panel = {'replace': main.replacement_panel.replace_button['state'],
                                   'replace_all': main.replacement_panel.replace_all_button['state'],
