@@ -31,6 +31,7 @@ version = '1.3'
 
 label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
 re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9]')
+re_natural_sort = re.compile(r'(\d+)')
 valid_img_types = {'.bmp', '.gif', '.jpeg', '.jpg', '.png', '.tif', '.tiff', '.webp'}
 conn_template = """
 <connection>
@@ -57,7 +58,7 @@ conn_id_type = {'HDMI IN': (2000, '5'), 'COMPOSITE IN': (2000, '5'), 'VGA IN': (
                  'STEREO OUT': (3900, '6'), 'DIGITAL_OPTICAL OUT': (3900, '6'),
                  'IR_OUT': (1, '1')}
 
-pathjoin = os.path.join
+pathjoin = os.path.join  # TODO: switch from os.path to all pathlib
 isfile = os.path.isfile
 isdir = os.path.isdir
 
@@ -70,10 +71,6 @@ max_image_pixels = Image.MAX_IMAGE_PIXELS
 # noinspection PyAttributeOutsideInit
 class IPC:
     def ipc(self, takeover=False, port=None, first_time=False):
-        def next_port_number(port_files_dict):
-            for key in port_files_dict:
-                yield key
-
         # noinspection PyShadowingNames
         def establish_self_as_server():
             server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -200,7 +197,8 @@ class IPC:
                 port = self.default_port
                 print(f'Using Default Port: {port}')
             else:
-                next_port = next_port_number(sorted(port_files, key=lambda p: (abs(p - self.default_port), p)))
+                sorted_ports = sorted(port_files, key=lambda p: (abs(p - self.default_port), p))
+                next_port = iter(sorted_ports)
                 port = self.default_port if self.default_port in port_files else next(next_port)
                 print(f'Using Default Port: {port}' if port == self.default_port else f'Using Port: {port}')
 
@@ -471,8 +469,9 @@ class IPC:
                 return
 
     def ipc_server_heartbeat(self, port: int, first_time=True):
+        heartbeat_interval = 7.77
         port_file = pathjoin(self.appdata_folder, f'PORT~{port}')
-        sleep_time = 1.23 if first_time else 7.77
+        sleep_time = 1.23 if first_time else heartbeat_interval
         while self.is_server:
             Path(port_file).touch()
             time.sleep(sleep_time)
@@ -480,7 +479,7 @@ class IPC:
                 raise RuntimeError('👻')
             if first_time:
                 first_time = False
-                sleep_time = 7.77
+                sleep_time = heartbeat_interval
 
     def ipc_server_conflict_check(self, port: int):
         print('Doing server conflict check in 4.20 seconds...')
@@ -2271,10 +2270,7 @@ class C4zPanel:
             bak_files = {}
             for directory in directories:
                 for item in os.scandir(directory):
-                    if not item.is_file():
-                        continue
-                    if not os.path.splitext(item.name)[1].lower() in valid_img_types:
-                        print(f'Skipped item which is not valid image type: {item.name}')
+                    if not item.is_file() or not os.path.splitext(item.name)[1].lower() in valid_img_types:
                         continue
                     if re.search(r'\.bak[^.]*$', item.name):
                         root_name = re.sub(r'\.bak[^.]*$', '', item.name)
@@ -2291,11 +2287,11 @@ class C4zPanel:
                         continue
                     file_stem, file_ext = os.path.splitext(item.name)
                     img_info = re.search(r'^(?:(\d+)_)?(.+?)(?:_(\d+))?$', file_stem).groups()
-                    img_name = img_info[1]
+                    l_label, img_name, r_label = img_info[0], img_info[1], img_info[2]
                     if not img_name or file_stem in ('device_sm', 'device_lg'):
                         img_name = file_stem
                     # If XOR left/right size labels exist
-                    if ((l_label := img_info[0]) is None) != ((r_label := img_info[2]) is None):
+                    if bool(l_label) ^ bool(r_label):
                         if (l_label and int(l_label) == actual_size) or int(r_label) == actual_size:
                             icon_groups[img_name].append(C4SubIcon(self.main.instance_id, directory,
                                                                    item.path, img_name, actual_size))
@@ -3173,7 +3169,6 @@ class ExportPanel:
         if path is None:
             path = pathjoin(main.cur_dir, f'{driver_name}.c4z')
         bak_files_dict = {}
-        bak_files = []
         bak_folder = pathjoin(main.instance_temp, 'bak_files')
         driver_folder = pathjoin(main.instance_temp, 'driver')
 
@@ -3190,7 +3185,6 @@ class ExportPanel:
                         current_path = pathjoin(directory, file)
                         # I think this is to avoid same name collisions
                         new_path = pathjoin(bak_folder, f'{file}{next(suffix_num)}')
-                        bak_files.append(current_path)
                         bak_files_dict[current_path] = new_path
                         shutil.move(current_path, new_path)
 
@@ -3201,7 +3195,7 @@ class ExportPanel:
 
         # Restore .bak files
         if not self.include_backups.get():
-            for file in bak_files:
+            for file in bak_files_dict:
                 shutil.move(bak_files_dict[file], file)
             shutil.rmtree(bak_folder)
 
@@ -3549,7 +3543,7 @@ def list_all_sub_directories(directory: str, include_root_dir=False):
 
 def natural_key(string: str):
     # Splits numbers from all other chars and creates list of ['string', int, etc.]
-    return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
+    return [int(s) if s.isdigit() else s for s in re_natural_sort.split(string)]
 
 
 def get_next_num_str(start=0, yield_start=True):
