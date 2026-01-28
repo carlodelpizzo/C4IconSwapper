@@ -214,6 +214,7 @@ class XMLTag:
             self.is_comment = first_tag.is_comment
             self.is_self_closing = first_tag.is_self_closing
             self.is_prolog = first_tag.is_prolog
+            self.is_special = first_tag.is_special
             self.delete = first_tag.delete
             del first_tag
             return
@@ -306,6 +307,21 @@ class XMLTag:
                 output.extend(tag_list)
         return output
 
+    def get_tags_dict(self, name_set: set[str]):
+        output_dict = {}
+        for element in self.elements:
+            if isinstance(element, str):
+                continue
+            if element.name in name_set:
+                name_set.remove(element.name)
+                output_dict[element.name] = element
+            if element_tag_dict := element.get_tags_dict(name_set):
+                name_set.difference_update(element_tag_dict)
+                output_dict |= element_tag_dict
+            if not name_set:
+                break
+        return output_dict
+
     def get_tag(self, name: str, include_self=True):
         if include_self and name == self.name:
             return self
@@ -326,6 +342,8 @@ class XMLTag:
             if type(element) is str:
                 return element
         return ''
+
+    get_value = value
 
     def set_value(self, new_value: str):
         for i, element in enumerate(self.elements):
@@ -348,6 +366,9 @@ class XMLTag:
             parents = []
         parents.append(self.parent)
         return self.parent.get_parents(parents)
+
+    def get_children(self):
+        return [element for element in self.elements if not isinstance(element, str)]
 
 
 class XMLObject:
