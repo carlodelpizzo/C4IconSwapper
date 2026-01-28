@@ -195,6 +195,7 @@ def parse_xml(xml_path='', xml_string=''):
     return tags
 
 
+# Can only have one root tag
 class XMLTag:
     def __init__(self, name: str = None, elements: list = None, attributes: dict = None, parent=None,
                  comments: list = None, closing_comments: list = None, xml_path: str = None, xml_string: str = None,
@@ -372,6 +373,7 @@ class XMLTag:
         return [element for element in self.elements if not isinstance(element, str)]
 
 
+# Allows multiple root tags
 class XMLObject:
     def __init__(self, xml_path: str = None, xml_string: str = None):
         self.restore_point = None
