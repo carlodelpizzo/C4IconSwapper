@@ -28,7 +28,7 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 
 from XMLObject import XMLObject, XMLTag
 
-version = '1.3'
+version = '2.0'
 
 label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
 re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9]')
@@ -989,7 +989,8 @@ class C4IconSwapper(IPC):
             pickle.dump(C4IS(self), output)
         self.ask_to_save = False
 
-    # TODO: Currently does not validate project file. Unsure what behavior is for invalid file
+    # TODO: Currently does not validate project file. Unsure what behavior is for invalid file.
+    # TODO: Add backwards compatibility.
     def load_c4is(self, *_):
         if not (file := filedialog.askopenfilename(filetypes=[('C4IconSwapper Project', '*.c4is')])):
             return
@@ -3488,6 +3489,7 @@ class C4IS:
         if not isinstance(main, C4IconSwapper):
             raise TypeError(f'Expected type: {C4IconSwapper.__name__}')
         # Root class
+        self.version = version
         self.driver_xml = main.driver_xml
         self.driver_manufac_var = main.driver_manufac_var.get()
         self.driver_manufac_new_var = main.driver_manufac_new_var.get()
