@@ -38,12 +38,12 @@ conn_template = """
 <connection>
     <id>0</id>
     <type>0</type>
-    <connectionname>REPLACE</connectionname>
+    <connectionname>Connection Name...</connectionname>
     <consumer>False</consumer>
     <linelevel>True</linelevel>
     <classes>
         <class>
-            <classname>REPLACE</classname>
+            <classname>HDMI IN</classname>
         </class>
     </classes>
 </connection>
@@ -1539,7 +1539,7 @@ class Connection:
         self.id = 0
         self.original, self.in_id_group, self.delete, self.enabled = False, False, False, False
         self.prior_txt, self.prior_type = '', ''
-        self.tag = None
+        self.tag = XMLTag(xml_string=conn_template)
         self.id_group = []
         self.name_entry_var = StringVar(value='Connection Name...')
         self.type = StringVar(value='HDMI IN')
@@ -1605,7 +1605,7 @@ class ConnectionEntry:
         else:
             self.x_button.place(x=-420, y=-420, anchor='w')
 
-        self.del_button = Button(self.window, text='Del', width=3, command=self.flag_delete, takefocus=0)
+        self.del_button = Button(self.window, text='Del', width=3, command=self.toggle_delete, takefocus=0)
         if self.conn_object.original:
             self.del_button.place(x=self.x, y=self.y, anchor='w')
         else:
@@ -1617,31 +1617,28 @@ class ConnectionEntry:
 
     def enable(self):
         self.conn_object.enabled = True
+        self.conn_object.tag.delete = False
         self.name_entry['state'] = NORMAL
         self.type_menu['state'] = NORMAL
         self.add_button.place(x=-420, y=-420, anchor='w')
         self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
-        if self.conn_object.tag:
-            self.conn_object.tag.delete = False
         self.name_entry['takefocus'] = 1
 
     def disable(self):
         self.conn_object.enabled = False
+        self.conn_object.tag.delete = True
         self.name_entry['state'] = DISABLED
         self.type_menu['state'] = DISABLED
         self.add_button.place(x=self.x, y=self.y, anchor='w')
         self.x_button.place(x=-420, y=-420, anchor='w')
-        if self.conn_object.tag:
-            self.conn_object.tag.delete = True
         self.name_entry['takefocus'] = 0
 
-    def flag_delete(self):
+    def toggle_delete(self):
         if not self.conn_object.original:
             return
         if not self.conn_object.delete:
             self.conn_object.delete = True
-            if self.conn_object.tag:
-                self.conn_object.tag.delete = True
+            self.conn_object.tag.delete = True
             self.conn_object.prior_txt = self.name_entry_var.get()
             self.conn_object.prior_type = self.type.get()
             self.type.set('RIP')
@@ -1651,22 +1648,15 @@ class ConnectionEntry:
             self.del_button['text'] = 'Keep'
             self.del_button['width'] = 4
             self.del_button.place(x=self.del_button.winfo_x() - 6, y=self.y)
-            if len(self.conn_object.id_group) > 1:
-                if all(self.main.connections[i].delete for i in self.conn_object.id_group if i):
-                    self.conn_object.tag.delete = True
-                self.conn_object.tag.delete = True
             return
         self.conn_object.delete = False
-        if self.conn_object.tag:
-            self.conn_object.tag.delete = False
+        self.conn_object.tag.delete = False
         self.name_entry['state'] = NORMAL
         self.name_entry_var.set(self.conn_object.prior_txt)
         self.conn_object.prior_txt = ''
         self.name_entry['state'] = DISABLED
         self.type.set(self.conn_object.prior_type)
         self.conn_object.prior_type = ''
-        if self.conn_object.tag:
-            self.conn_object.tag.delete = False
         self.del_button['text'] = 'Del'
         self.del_button['width'] = 3
         self.del_button.place(x=self.del_button.winfo_x() + 6, y=self.y)
@@ -1684,19 +1674,20 @@ class ConnectionEntry:
             self.type_menu['state'] = DISABLED
             self.name_entry['state'] = DISABLED
 
-        if self.conn_object.enabled or self.conn_object.original:
+        if self.conn_object.original:
             self.add_button.place(x=-420, y=-420, anchor='w')
-        self.add_button.place(x=self.x, y=self.y, anchor='w')
-        self.add_button['state'] = NORMAL if self.main.driver_selected else DISABLED
-        if self.conn_object.enabled and not self.conn_object.original:
+            self.del_button.place(x=self.x, y=self.y, anchor='w')
+            self.x_button.place(x=-420, y=-420, anchor='w')
+        elif self.conn_object.enabled:
+            self.add_button.place(x=-420, y=-420, anchor='w')
+            self.del_button.place(x=-420, y=-420, anchor='w')
             self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
         else:
+            self.add_button['state'] = NORMAL if self.main.driver_selected else DISABLED
+            self.add_button.place(x=self.x, y=self.y, anchor='w')
+            self.del_button.place(x=-420, y=-420, anchor='w')
             self.x_button.place(x=-420, y=-420, anchor='w')
 
-        if self.conn_object.original:
-            self.del_button.place(x=self.x, y=self.y, anchor='w')
-        else:
-            self.del_button.place(x=-420, y=-420, anchor='w')
         if self.conn_object.delete:
             self.del_button['text'] = 'Keep'
             self.del_button['width'] = 4
@@ -2629,33 +2620,44 @@ class C4zPanel:
             conn.__init__(main)
 
         # Get connections from XML object
-        connections = []
-        if classname_tags := main.driver_xml.get_tags('classname'):
-            for classname_tag in reversed(classname_tags):
-                if classname_tag.value() not in self.valid_connections:
-                    classname_tags.pop(classname_tags.index(classname_tag))
-            for classname_tag in classname_tags:
-                class_tag, connection_tag, connectionname_tag, id_tag, type_tag = None, None, None, None, None
-                for parent in reversed(classname_tag.get_parents()):
-                    if not parent:
-                        continue
-                    if (parent_name := parent.name) == 'class':
-                        class_tag = parent
-                    elif parent_name == 'connection':
-                        connection_tag = parent
-                        for child in connection_tag.elements:
-                            if isinstance(child, XMLTag):
-                                continue
-                            if (child_name := child.name) == 'type':
-                                type_tag = child
-                            elif child_name == 'id':
-                                id_tag = child
-                            elif child_name == 'connectionname':
-                                connectionname_tag = child
-                if all([id_tag, connection_tag, class_tag, connectionname_tag, type_tag]):
-                    connections.append([connectionname_tag.value(), classname_tag.value(), id_tag.value(),
-                                        connection_tag, class_tag, connectionname_tag, id_tag, type_tag,
-                                        classname_tag])
+        # connections = []
+        # if classname_tags := main.driver_xml.get_tags('classname'):
+        #     for classname_tag in [tag for tag in classname_tags if tag.value() not in self.valid_connections]:
+        #         class_tag, connection_tag, connectionname_tag, id_tag, type_tag = None, None, None, None, None
+        #         print(classname_tag.get_parents())
+        #         for parent in reversed(classname_tag.get_parents()):
+        #             if not parent:
+        #                 continue
+        #             if parent.name == 'class':
+        #                 class_tag = parent
+        #             elif parent.name == 'connection':
+        #                 connection_tag = parent
+        #                 for child in connection_tag.elements:
+        #                     if isinstance(child, XMLTag):
+        #                         continue
+        #                     if (child_name := child.name) == 'type':
+        #                         type_tag = child
+        #                     elif child_name == 'id':
+        #                         id_tag = child
+        #                     elif child_name == 'connectionname':
+        #                         connectionname_tag = child
+        #         if all([id_tag, connection_tag, class_tag, connectionname_tag, type_tag]):
+        #             connections.append([connectionname_tag.value(), classname_tag.value(), id_tag.value(),
+        #                                 connection_tag, class_tag, connectionname_tag, id_tag, type_tag,
+        #                                 classname_tag])
+        #
+        if connection_tags := main.driver_xml.get_tags('connection'):
+            for connection_tag in connection_tags:
+                name_this_later = connection_tag.get_tags_dict({'class', 'classname', 'connectionname', 'id', 'type'})
+                if len(name_this_later) != 5:
+                    continue
+                if name_this_later['classname'].value() not in self.valid_connections:
+                    print(f'Invalid connection: {name_this_later["classname"].value()}')
+                else:
+                    print(f'Valid connection: {name_this_later["classname"].value()}')
+        return
+
+        # TODO: Finish this...
 
         # Check that number of connections does not exceed maximum
         if len(connections) > len(main.connections):
@@ -2665,6 +2667,7 @@ class C4zPanel:
 
         # Assign panel connections to XML tags and update UI
         id_groups = []
+        # connectionname, classname, id, connection_tag
         for i in range(conn_range):
             not_in_group = True
             for group in id_groups:
@@ -2684,8 +2687,7 @@ class C4zPanel:
             if conn.original:
                 continue
             new_conn = XMLTag(xml_string=conn_template)
-            name_tag = new_conn.get_tag('connectionname')
-            name_tag.value = 'Connection Name...'
+            new_conn.get_tag('connectionname').set_value('Connection Name...')
             new_conn.get_tag('classname').set_value('HDMI IN')
             new_conn.delete = True
             main.driver_xml.get_tag('connections').add_element(new_conn)
