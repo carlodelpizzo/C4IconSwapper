@@ -1,4 +1,5 @@
 import contextlib
+import copy
 import ctypes
 import filecmp
 import io
@@ -34,7 +35,7 @@ label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
 re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9]')
 re_natural_sort = re.compile(r'(\d+)')
 valid_img_types = {'.bmp', '.gif', '.jpeg', '.jpg', '.png', '.tif', '.tiff', '.webp'}
-conn_template = """
+connection_tag_generic = XMLTag(xml_string="""
 <connection>
     <id>0</id>
     <type>0</type>
@@ -47,7 +48,7 @@ conn_template = """
         </class>
     </classes>
 </connection>
-"""
+""")
 selectable_connections = ('HDMI IN', 'HDMI OUT', 'COMPOSITE IN', 'COMPOSITE OUT', 'VGA IN', 'VGA OUT', 'COMPONENT IN',
                           'COMPONENT OUT', 'DVI IN', 'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
                           'DIGITAL_OPTICAL OUT', 'IR_OUT')
@@ -781,7 +782,7 @@ class C4IconSwapper(IPC):
         self.easter_call_after_id = None
         self.img_bank_size = 4
         self.connections = [Connection(self) for _ in range(18)]
-        self.conn_ids = []
+        self.conn_ids = set()
         self.states = [State('') for _ in range(13)]
         self.states_orig_names = []
         self.device_icon_dir = pathjoin(www_path := pathjoin(self.instance_temp, 'driver', 'www'), 'icons', 'device')
@@ -1534,13 +1535,15 @@ class ConnectionsWin:
             conn_entry.refresh()
 
 
+# TODO: Figure out how id_groups work and fix implementation
 class Connection:
     def __init__(self, main: C4IconSwapper):
         self.main = main
         self.id = 0
-        self.original, self.in_id_group, self.delete, self.enabled = False, False, False, False
+        self.original, self.in_id_group, self.enabled = False, False, False
+        self.delete = True
         self.prior_txt, self.prior_type = '', ''
-        self.tag = XMLTag(xml_string=conn_template)
+        self.tag = copy.deepcopy(connection_tag_generic)
         self.id_group = []
         self.name_entry_var = StringVar(value='Connection Name...')
         self.type = StringVar(value='HDMI IN')
@@ -1559,12 +1562,12 @@ class Connection:
         valid_id = conn_id_type[conn_type][0]
         while valid_id in self.main.conn_ids:
             valid_id += 1
-        self.tag.get_tag('type').set_value(conn_id_type[conn_type][1])
         if self.id in self.main.conn_ids:
-            self.main.conn_ids.pop(self.main.conn_ids.index(self.id))
+            self.main.conn_ids.remove(self.id)
+        self.main.conn_ids.add(valid_id)
         self.id = valid_id
+        self.tag.get_tag('type').set_value(conn_id_type[conn_type][1])
         self.tag.get_tag('id').set_value(str(self.id))
-        self.main.conn_ids.append(self.id)
 
 
 class ConnectionEntry:
@@ -2342,7 +2345,7 @@ class C4zPanel:
             extras = []
             standard_icons = []
             group_dict = get_icon_groups()
-            # TODO: Reevaluate this loop. Does not seem to be working
+            # TODO: Reevaluate this loop. Does not seem to be working; Icons given wrong display name
             for group in group_dict:
                 group_list = []
                 # range(start, stop, step)
@@ -2504,11 +2507,11 @@ class C4zPanel:
                 main.driver_version_var.set('0')
                 main.driver_version_new_var.set('1')
         if id_tags := main.driver_xml.get_tags('id'):
-            main.conn_ids = []
+            main.conn_ids = set()
             for id_tag in id_tags:
                 with contextlib.suppress(ValueError):
                     if int(id_tag.value()) not in main.conn_ids:
-                        main.conn_ids.append(int(id_tag.value()))
+                        main.conn_ids.add(int(id_tag.value()))
 
         # Check Lua file for multi-state
         main.multi_state_driver = False
@@ -2616,83 +2619,44 @@ class C4zPanel:
         main = self.main
         if not isfile(pathjoin(main.instance_temp, 'driver', 'driver.xml')) or not main.driver_selected:
             return
+
         # Reinitialize all connections
         for conn in main.connections:
             conn.__init__(main)
 
         # Get connections from XML object
-        # connections = []
-        # if classname_tags := main.driver_xml.get_tags('classname'):
-        #     for classname_tag in [tag for tag in classname_tags if tag.value() not in self.valid_connections]:
-        #         class_tag, connection_tag, connectionname_tag, id_tag, type_tag = None, None, None, None, None
-        #         print(classname_tag.get_parents())
-        #         for parent in reversed(classname_tag.get_parents()):
-        #             if not parent:
-        #                 continue
-        #             if parent.name == 'class':
-        #                 class_tag = parent
-        #             elif parent.name == 'connection':
-        #                 connection_tag = parent
-        #                 for child in connection_tag.elements:
-        #                     if isinstance(child, XMLTag):
-        #                         continue
-        #                     if (child_name := child.name) == 'type':
-        #                         type_tag = child
-        #                     elif child_name == 'id':
-        #                         id_tag = child
-        #                     elif child_name == 'connectionname':
-        #                         connectionname_tag = child
-        #         if all([id_tag, connection_tag, class_tag, connectionname_tag, type_tag]):
-        #             connections.append([connectionname_tag.value(), classname_tag.value(), id_tag.value(),
-        #                                 connection_tag, class_tag, connectionname_tag, id_tag, type_tag,
-        #                                 classname_tag])
-        #
-        if connection_tags := main.driver_xml.get_tags('connection'):
-            for connection_tag in connection_tags:
-                name_this_later = connection_tag.get_tags_dict({'class', 'classname', 'connectionname', 'id', 'type'})
-                if len(name_this_later) != 5:
-                    continue
-                if name_this_later['classname'].value() not in self.valid_connections:
-                    print(f'Invalid connection: {name_this_later["classname"].value()}')
-                else:
-                    print(f'Valid connection: {name_this_later["classname"].value()}')
-        return
+        connections = [
+            tag_dict | {'connection_tag': tag}
+            for tag in main.driver_xml.get_tags('connection')
+            if len(tag_dict := tag.get_tags_dict({'class', 'classname', 'connectionname', 'id', 'type'})) == 5
+            if tag_dict['classname'].value() in self.valid_connections
+        ]
 
-        # TODO: Finish this...
-
-        # Check that number of connections does not exceed maximum
-        if len(connections) > len(main.connections):
-            conn_range = len(main.connections) - 1
-        else:
-            conn_range = len(connections)
+        # Update connection entries up to max number of connections
+        for i, tag_dict in enumerate(connections[:len(main.connections)]):
+            main.connections[i].name_entry_var.set(tag_dict['connectionname'].value())
+            main.connections[i].type.set(tag_dict['classname'].value())
+            main.connections[i].id = tag_dict['id'].value()
+            main.connections[i].tag = tag_dict['connection_tag']
+            main.connections[i].original = True
 
         # Assign panel connections to XML tags and update UI
         id_groups = []
-        # connectionname, classname, id, connection_tag
-        for i in range(conn_range):
-            not_in_group = True
-            for group in id_groups:
-                if group[0] is connections[i][3]:
-                    group.append(i)
-                    not_in_group = False
-            if not_in_group:
-                id_groups.append([connections[i][3], i])
-            main.connections[i].name_entry_var.set(connections[i][0])
-            main.connections[i].type.set(connections[i][1])
-            main.connections[i].id = connections[i][2]
-            main.connections[i].tag = connections[i][3]
-            main.connections[i].original = True
-
-        # Fill in remaining empty connections
-        for conn in main.connections:
-            if conn.original:
-                continue
-            new_conn = XMLTag(xml_string=conn_template)
-            new_conn.get_tag('connectionname').set_value('Connection Name...')
-            new_conn.get_tag('classname').set_value('HDMI IN')
-            new_conn.delete = True
-            main.driver_xml.get_tag('connections').add_element(new_conn)
-            conn.tag = new_conn
+        # 0: connectionname, 1: classname, 2: id, 3: connection_tag
+        # TODO: Rewrite for new data structure
+        # for i in range(conn_range):
+        #     not_in_group = True
+        #     for group in id_groups:
+        #         if group[0] is connections[i][3]:
+        #             group.append(i)
+        #             not_in_group = False
+        #     if not_in_group:
+        #         id_groups.append([connections[i][3], i])
+        #     main.connections[i].name_entry_var.set(connections[i][0])
+        #     main.connections[i].type.set(connections[i][1])
+        #     main.connections[i].id = connections[i][2]
+        #     main.connections[i].tag = connections[i][3]
+        #     main.connections[i].original = True
 
         # Form id groups
         for group in id_groups:
@@ -2795,7 +2759,7 @@ class ReplacementPanel:
         self.file_entry_field.insert(0, 'Select image file...')
         self.file_entry_field['state'] = DISABLED
 
-    # TODO: Reevaluate threaded usage
+    # TODO: Reevaluate threaded usage; Spam UI while large folder of images is being processed
     def load_replacement(self, file_path=None, bank_index=None):
         if isinstance(file_path, tuple) or isinstance(file_path, list):
             self.multi_threading = True
