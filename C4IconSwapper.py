@@ -29,7 +29,7 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 
 from XMLObject import XMLObject, XMLTag
 
-version = '2.0'
+version = '2.0dev'  # TODO: Change before release
 
 label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
 re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9]')
