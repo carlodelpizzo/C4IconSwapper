@@ -781,10 +781,10 @@ class C4IconSwapper(IPC):
         self.counter, self.easter_counter = 0, 0
         self.easter_call_after_id = None
         self.img_bank_size = 4
+        self.taken_conn_ids = defaultdict(object)
         self.connections = [Connection(self) for _ in range(18)]
-        self.conn_ids = set()
-        self.states = [State('') for _ in range(13)]
         self.states_orig_names = []
+        self.states = [State('') for _ in range(13)]
         self.device_icon_dir = (www_path := self.instance_temp / 'driver' / 'www') / 'icons' / 'device'
         self.icon_dir = www_path / 'icons'
         self.images_dir = www_path / 'images'
@@ -1046,12 +1046,12 @@ class C4IconSwapper(IPC):
             self.states[i].name_var.set(state['name_var'])
 
         # Connection Panel
-        self.conn_ids = save_state.ids
+        self.taken_conn_ids.clear()
         for i, conn in enumerate(save_state.connections):
-            self.connections[i].id = conn['id']
+            self.connections[i].id = conn_id = conn['id']
+            if conn_id >= 0:
+                self.taken_conn_ids[conn_id] = self.connections[i]
             self.connections[i].original = conn['original']
-            self.connections[i].id_group = conn['id_group']
-            self.connections[i].in_id_group = conn['in_id_group']
             self.connections[i].delete = conn['delete']
             self.connections[i].prior_txt = conn['prior_txt']
             self.connections[i].prior_type = conn['prior_type']
@@ -1536,34 +1536,30 @@ class ConnectionsWin:
 class Connection:
     def __init__(self, main: C4IconSwapper):
         self.main = main
-        self.id = 0
-        self.original, self.in_id_group, self.enabled = False, False, False
-        self.delete = True
+        self.id = -1
+        self.original, self.enabled, self.delete = False, False, False
         self.prior_txt, self.prior_type = '', ''
         self.tag = copy.deepcopy(connection_tag_generic)
-        self.id_group = []
+        self.tag.delete = True
         self.name_entry_var = StringVar(value='Connection Name...')
         self.type = StringVar(value='HDMI IN')
 
-    def update_id(self, *_, refresh=False):
-        if not self.tag:
+    def update_id(self, *_):
+        if self.original:
             return
         self.main.ask_to_save = True
-        if self.original:
-            self.in_id_group = any(conn is not self and conn.original and conn.id == self.id
-                                   for conn in self.main.connections)
+        if (conn_obj := self.main.taken_conn_ids.get(self.id, None)) and self is conn_obj:
+            self.main.taken_conn_ids.pop(self.id)
+        if not self.enabled:
+            self.id = -1
             return
-        if not refresh:
-            return
-        conn_type = self.type.get()
-        valid_id = conn_id_type[conn_type][0]
-        while valid_id in self.main.conn_ids:
-            valid_id += 1
-        if self.id in self.main.conn_ids:
-            self.main.conn_ids.remove(self.id)
-        self.main.conn_ids.add(valid_id)
-        self.id = valid_id
-        self.tag.get_tag('type').set_value(conn_id_type[conn_type][1])
+        new_type = self.type.get()
+        new_id = conn_id_type[new_type][0]
+        while new_id in self.main.taken_conn_ids:
+            new_id += 1
+        self.main.taken_conn_ids[new_id] = self
+        self.id = new_id
+        self.tag.get_tag('type').set_value(conn_id_type[new_type][1])
         self.tag.get_tag('id').set_value(str(self.id))
 
 
@@ -1611,7 +1607,8 @@ class ConnectionEntry:
             self.del_button.place(x=self.x, y=self.y, anchor='w')
         else:
             self.del_button.place(x=-420, y=-420, anchor='w')
-        if self.conn_object.delete:
+
+        if self.conn_object.delete and self.conn_object.original:
             self.del_button['text'] = 'Keep'
             self.del_button['width'] = 4
             self.del_button.place(x=self.x + self.del_button.winfo_x() - 6, y=self.y)
@@ -2505,11 +2502,11 @@ class C4zPanel:
                 main.driver_version_var.set('0')
                 main.driver_version_new_var.set('1')
         if id_tags := main.driver_xml.get_tags('id'):
-            main.conn_ids = set()
+            main.original_conn_ids = set()
             for id_tag in id_tags:
                 with contextlib.suppress(ValueError):
-                    if int(id_tag.value()) not in main.conn_ids:
-                        main.conn_ids.add(int(id_tag.value()))
+                    if int(id_tag.value()) not in main.original_conn_ids:
+                        main.original_conn_ids.add(int(id_tag.value()))
 
         # Check Lua file for multi-state
         main.multi_state_driver = False
@@ -2637,32 +2634,12 @@ class C4zPanel:
             main.connections[i].id = tag_dict['id'].value()
             main.connections[i].tag = tag_dict['connection_tag']
             main.connections[i].original = True
-
-        # Assign panel connections to XML tags and update UI
-        id_groups = []
-        # 0: connectionname, 1: classname, 2: id, 3: connection_tag
-        # TODO: Rewrite for new data structure
-        # for i in range(conn_range):
-        #     not_in_group = True
-        #     for group in id_groups:
-        #         if group[0] is connections[i][3]:
-        #             group.append(i)
-        #             not_in_group = False
-        #     if not_in_group:
-        #         id_groups.append([connections[i][3], i])
-        #     main.connections[i].name_entry_var.set(connections[i][0])
-        #     main.connections[i].type.set(connections[i][1])
-        #     main.connections[i].id = connections[i][2]
-        #     main.connections[i].tag = connections[i][3]
-        #     main.connections[i].original = True
-
-        # Form id groups
-        for group in id_groups:
-            for conn_i in group[1:]:
-                new_group = [conn_j for conn_j in group if conn_j != conn_i]
-                main.connections[conn_i].id_group = new_group
+        if not (parent_tag := main.driver_xml.get_tag('connections')):
+            main.driver_xml.tags[0].add_element(parent_tag := XMLTag(xml_string='<connections></connections>'))
         for conn in main.connections:
-            conn.update_id()
+            if conn.original:
+                continue
+            parent_tag.add_element(conn.tag)
 
     def drop_in_c4z(self, event):
         paths = parse_drop_event(event)
@@ -3327,7 +3304,7 @@ class ExportPanel:
 
         # Confirm all connections have non-conflicting ids
         for conn in main.connections:
-            conn.update_id(refresh=True)
+            conn.update_id()
 
         # Set restore point for XML object
         driver_xml.set_restore_point()
@@ -3336,7 +3313,7 @@ class ExportPanel:
         driver_bak_folder = main.instance_temp / 'driver_bak'
         shutil.copytree(main.instance_temp / 'driver', driver_bak_folder)
 
-        # Update connection names
+        # Update connections XML data
         for conn in main.connections:
             conn.tag.get_tag('connectionname').set_value(conn.name_entry_var.get())
             conn.tag.get_tag('classname').set_value(conn_type := conn.type.get())
@@ -3476,11 +3453,9 @@ class C4IS:
                        for state in main.states]
 
         # Connection Panel
-        self.ids = main.conn_ids
-        self.connections = [{'id': conn.id, 'original': conn.original, 'in_id_group': conn.in_id_group,
-                             'delete': conn.delete, 'prior_txt': conn.prior_txt, 'prior_type': conn.prior_type,
-                             'tag': conn.tag, 'id_group': conn.id_group, 'type': conn.type.get(),
-                             'name': conn.name_entry_var.get(), 'state': conn.enabled}
+        self.connections = [{'id': conn.id, 'original': conn.original, 'delete': conn.delete,
+                             'prior_txt': conn.prior_txt, 'prior_type': conn.prior_type, 'tag': conn.tag,
+                             'type': conn.type.get(), 'name': conn.name_entry_var.get(), 'state': conn.enabled}
                             for conn in main.connections]
 
         # Export Panel
