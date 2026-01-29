@@ -2634,8 +2634,10 @@ class C4zPanel:
             main.connections[i].id = tag_dict['id'].value()
             main.connections[i].tag = tag_dict['connection_tag']
             main.connections[i].original = True
+
         if not (parent_tag := main.driver_xml.get_tag('connections')):
-            main.driver_xml.tags[0].add_element(parent_tag := XMLTag(xml_string='<connections></connections>'))
+            main.driver_xml.get_tag('devicedata').add_element(
+                parent_tag := XMLTag(xml_string='<connections></connections>'))
         for conn in main.connections:
             if conn.original:
                 continue
