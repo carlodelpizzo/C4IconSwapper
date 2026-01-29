@@ -1,13 +1,14 @@
 import copy
 import re
+from pathlib import Path
 from collections import deque
 
 
 char_escapes = {'<': '&lt;', '>': '&gt;', '&': '&amp;'}
 
 
-# TODO: Reevaluate. Eliminate lists where possible
-def parse_xml(xml_path='', xml_string=''):
+# TODO: Reevaluate. Eliminate lists where possible; combine classes?
+def parse_xml(xml_path: str | Path = None, xml_string=''):
     if not xml_path and not xml_string:
         return []
     if xml_path:
@@ -375,7 +376,7 @@ class XMLTag:
 
 # Allows multiple root tags
 class XMLObject:
-    def __init__(self, xml_path: str = None, xml_string: str = None):
+    def __init__(self, xml_path: str | Path = None, xml_string=''):
         self.restore_point = None
         self.tags = parse_xml(xml_path=xml_path, xml_string=xml_string)
 
