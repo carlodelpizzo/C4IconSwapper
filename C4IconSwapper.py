@@ -610,7 +610,7 @@ class IPC:
             print('Nothing to clean up')
 
 
-# TODO: Completely overhaul everything related to multistate
+# TODO: Require right click menus to use left click to confirm option
 class C4IconSwapper(IPC):
     def __init__(self):
         def exception_window(*args, message_txt=None):
@@ -890,6 +890,7 @@ class C4IconSwapper(IPC):
         elif event.keysym == 'Down':
             self.replacement_panel.dec_img_bank()
 
+    # TODO: Completely overhaul everything related to multistate
     def get_states(self, lua_file):
         self.states_orig_names = []
         # Match 'state_OPTIONS' + 0 or more white spaces + '=' + white space + '{'
@@ -2994,6 +2995,7 @@ class ReplacementPanel:
         self.img_bank_select_lockout[selected_bank] = time.time()
         self.load_replacement(bank_index=bank_num)
 
+    # TODO: Bug if existing img in bank is dropped on replacement, it does not swap
     def drop_in_replacement(self, event, paths=None):
         if self.multi_threading:
             return
@@ -3002,6 +3004,8 @@ class ReplacementPanel:
                 return
         threading.Thread(target=self.load_replacement, kwargs={'file_path': paths}, daemon=True).start()
 
+    # TODO: Bug if existing bank img is dropped in while bank is not full and existing replacement img,
+    #  replacement is moved to bank
     def drop_img_bank(self, bank_num: int, event):
         if self.multi_threading:
             return
@@ -3034,6 +3038,9 @@ class ReplacementPanel:
         context_menu.tk_popup(event.x_root, event.y_root)
         context_menu.grab_release()
 
+    # TODO: Had unknown bug occur during delete. Unsure of how to reproduce.
+    #  I seem to have the last bank img after clicking delete with no replacement selected.
+    #  Should add img_bank_select_lockout regardless.
     def delete_image(self, img_index: int):
         if not -1 <= img_index < self.main.img_bank_size:
             return
