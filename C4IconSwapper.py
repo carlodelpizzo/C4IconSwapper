@@ -60,7 +60,6 @@ conn_id_type = {'HDMI IN': (2000, '5'), 'COMPOSITE IN': (2000, '5'), 'VGA IN': (
                  'STEREO OUT': (3900, '6'), 'DIGITAL_OPTICAL OUT': (3900, '6'),
                  'IR_OUT': (1, '1')}
 
-# TODO: replace os.move with Path.replace; reevaluate os.listdir replace with Path.iterdir()
 assets_path = Path(__file__).resolve().parent / 'assets'  # For Nuitka or venv
 if hasattr(sys, '_MEIPASS'):
     # noinspection PyProtectedMember
@@ -74,7 +73,7 @@ max_image_pixels = Image.MAX_IMAGE_PIXELS
 # noinspection PyUnresolvedReferences
 # noinspection PyAttributeOutsideInit
 class IPC:
-    def ipc(self, takeover=False, port=None, first_time=False):
+    def ipc(self, takeover=False, port: int = None, first_time=False):
         # noinspection PyShadowingNames
         def establish_self_as_server():
             server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -86,10 +85,10 @@ class IPC:
             port_files.pop(port, None)
             for _, file_path in port_files.items():
                 print(f'Trying to delete: {file_path}')
-                Path(file_path).unlink(missing_ok=True)
+                file_path.unlink(missing_ok=True)
             for file_path in invalid_port_files:
                 print(f'Trying to delete: {file_path}')
-                Path(file_path).unlink(missing_ok=True)
+                file_path.unlink(missing_ok=True)
 
             # Start heartbeat thread (Create/update current port file)
             threading.Thread(target=self.ipc_server_heartbeat, args=[port], daemon=True).start()
@@ -175,10 +174,10 @@ class IPC:
                         return False
 
         port_files = {
-            int(re_result.group(1)): port_file_path
-            for item in os.listdir(self.appdata_folder)
-            if (port_file_path := self.appdata_folder / item).is_file()
-            if (re_result := re.search(r'PORT~(\d{5})', item))
+            int(re_result.group(1)): path
+            for path in self.appdata_folder.iterdir()
+            if path.is_file()
+            if (re_result := re.search(r'PORT~(\d{5})', path.name))
         }
         do_conflict_check = False
         if not self.global_temp.is_dir():
@@ -415,7 +414,7 @@ class IPC:
                             with socket_lock:
                                 client_dict = self.client_dict.copy()
                                 reestablish = self.reestablish
-                            if client_id in client_dict and client_id in os.listdir(self.global_temp):
+                            if client_id in client_dict and (self.global_temp / client_id).exists():
                                 print('ID collision', client_id, 'in', client_dict)
                                 client.sendall('INSTANCE ID COLLISION\n'.encode('utf-8'))
                                 continue
@@ -446,9 +445,9 @@ class IPC:
                     return
                 print(f'Client {client_id} disconnected')
                 # If client disconnects but leaves folder behind
-                if client_id in os.listdir(self.global_temp):
-                    has_driver = 'driver' in os.listdir(client_folder := self.global_temp / client_id)
-                    has_replacements = os.listdir(client_folder / 'Replacement Icons')
+                if (self.global_temp / client_id).exists():
+                    has_driver = ((client_folder := self.global_temp / client_id) / 'driver').exists()
+                    has_replacements = any((client_folder / 'Replacement Icons').iterdir())
                     if has_driver or has_replacements:
                         threading.Thread(target=self.handle_dead_clients, kwargs={'recover': True},
                                          args=[{client_folder}], daemon=True).start()
@@ -480,11 +479,11 @@ class IPC:
         print('Doing server conflict check in 4.20 seconds...')
         time.sleep(4.20)
         port_files = {
-            int(re_result.group(1))
-            for item in os.listdir(self.appdata_folder)
-            if (self.appdata_folder / item).is_file()
-            if (re_result := re.search(r'PORT~(\d{5})', item))
-            if int(re_result.group(1)) != port
+            path_port_int: path
+            for path in self.appdata_folder.iterdir()
+            if path.is_file()
+            if (re_result := re.search(r'PORT~(\d{5})', path.name))
+            if (path_port_int := int(re_result.group(1))) != port
         }
 
         if port_files:
@@ -559,7 +558,7 @@ class IPC:
             for path in client_paths:
                 next_num = get_next_num_str(start=len(os.listdir(self.recovery_folder)), yield_start=False)
                 try:
-                    shutil.move(path, self.recovery_folder / next(next_num))
+                    path.replace(self.recovery_folder / next(next_num))
                     print(f'Moved to Recovery: {path}')
                 except PermissionError:
                     print(f'Failed to Move: {path}')
@@ -573,25 +572,25 @@ class IPC:
                         shutil.rmtree(path)
                         print(f'Deleted: {path}')
                         continue
-                    os.remove(path)
+                    path.unlink()
                     print(f'Deleted: {path}')
                 except PermissionError:
                     print(f'Failed to Delete: {path}')
                 except OSError as er:
-                    print(f'OS Error with` {path}: {er}')
+                    print(f'OS Error with {path}: {er}')
 
     def global_temp_cleanup(self):
         print('Starting global temp folder cleanup')
         delete_items = set()
         recover_items = set()
-        for item in os.listdir(self.global_temp):
-            client_folder = self.global_temp / item
-            if not client_folder.is_dir() or item == self.instance_id or item in self.client_dict:
+        for client_folder in self.global_temp.iterdir():
+            if (not client_folder.is_dir() or client_folder.name == self.instance_id or
+                    client_folder.name in self.client_dict):
                 continue
-            has_driver = 'driver' in os.listdir(client_folder)
+            has_driver = (client_folder / 'driver').exists()
             has_replacements = False
             if (rep_imgs_path := client_folder / 'Replacement Icons').is_dir():
-                has_replacements = os.listdir(rep_imgs_path)
+                has_replacements = any(rep_imgs_path.listdir())
             if has_driver or has_replacements:
                 recover_items.add(client_folder)
                 continue
@@ -978,30 +977,28 @@ class C4IconSwapper(IPC):
         self.states_win = None
 
     def save_project(self, *_):
-        out_file = filedialog.asksaveasfile(initialfile=f'{self.export_panel.driver_name_var.get()}.c4is',
-                                            filetypes=[('C4IconSwapper Project', '*.c4is')])
-        if not out_file:
-            return
-        if not (out_file_path := out_file.name).endswith('.c4is'):
-            out_file.close()
-            curr_path = out_file_path
-            os.rename(curr_path, (out_file_path := f'{out_file_path}.c4is'))
-        with open(out_file_path, 'wb') as output:
-            # noinspection PyTypeChecker
-            pickle.dump(C4IS(self), output)
-        self.ask_to_save = False
+        out_file_str = filedialog.asksaveasfilename(initialfile=f'{self.export_panel.driver_name_var.get()}.c4is',
+                                                    filetypes=[('C4IconSwapper Project', '*.c4is'),
+                                                               ('All Files', '*.*')],
+                                                    defaultextension='.c4is')
+        if out_file_str:
+            with open(out_file_str, 'wb') as output:
+                # noinspection PyTypeChecker
+                pickle.dump(C4IS(self), output)
+            self.ask_to_save = False
 
     # TODO: Currently does not validate project file. Unsure what behavior is for invalid file.
     # TODO: Add backwards compatibility.
     def load_c4is(self, *_):
-        if not (file := filedialog.askopenfilename(filetypes=[('C4IconSwapper Project', '*.c4is')])):
+        if not (path_str := filedialog.askopenfilename(filetypes=[('C4IconSwapper Project', '*.c4is'),
+                                                                  ('All Files', '*.*')])):
             return
-        while self.replacement_panel.multi_threading:
+
+        while self.replacement_panel.multi_threading:  # TODO: Use wait variable
             pass
-        save_state = None
-        if isinstance(file, str):
-            with open(file, 'rb') as file:
-                save_state = pickle.load(file)
+
+        with open(path_str, 'rb') as path_str:
+            save_state = pickle.load(path_str)
         if not isinstance(save_state, C4IS):
             raise TypeError(f'Expected type: {C4IS.__name__}')
 
@@ -1009,14 +1006,13 @@ class C4IconSwapper(IPC):
         self.c4z_panel.icons = []
         self.c4z_panel.current_icon = 0
         self.c4z_panel.c4_icon_label.configure(image=self.img_blank)
-        if (driver_folder := self.instance_temp / 'driver').is_dir():
-            shutil.rmtree(driver_folder)
+        shutil.rmtree(self.instance_temp / 'driver', ignore_errors=True)
         self.c4z_panel.restore_button['state'] = DISABLED
         if save_state.driver_selected:
             with open(saved_driver_path := self.instance_temp / 'saved_driver.c4z', 'wb') as driver_zip:
                 driver_zip.write(save_state.driver_zip)
             self.c4z_panel.load_c4z(saved_driver_path)
-            os.remove(saved_driver_path)
+            saved_driver_path.unlink()
         else:
             self.export_panel.export_button['state'] = DISABLED
             self.export_panel.export_as_button['state'] = DISABLED
@@ -1068,8 +1064,7 @@ class C4IconSwapper(IPC):
         # Replacement Panel
         self.replacement_panel.img_bank_select_lockout = {}
         replacement_dir = self.replacement_panel.replacement_icons_dir
-        if replacement_dir.is_dir():
-            shutil.rmtree(replacement_dir)
+        shutil.rmtree(replacement_dir, ignore_errors=True)
         os.mkdir(replacement_dir)
         if save_state.replacement:
             rp_img = Image.open(io.BytesIO(save_state.replacement))
@@ -1100,16 +1095,15 @@ class C4IconSwapper(IPC):
     def do_recovery(self, recover_path: Path):
         has_driver = False
         if (driver_folder := recover_path / 'driver').is_dir():
-            zip_path = f'{driver_folder}.zip'
-            # noinspection PyTypeChecker
-            shutil.make_archive(driver_folder, 'zip', driver_folder)
-            shutil.move(zip_path, recovery_c4z_path := self.instance_temp / 'recovery.c4z')
+            shutil.make_archive(str(driver_folder), 'zip', driver_folder)
+            zip_path = driver_folder.with_suffix('.zip')
+            zip_path.replace(recovery_c4z_path := self.instance_temp / 'recovery.c4z')
             self.c4z_panel.load_c4z(file_path=recovery_c4z_path)
-            os.remove(recovery_c4z_path)
+            recovery_c4z_path.unlink()
             has_driver = True
         if (recovery_icons_path := recover_path / 'Replacement Icons').is_dir():
-            for item in os.listdir(recovery_icons_path):
-                self.replacement_panel.load_replacement(file_path=(recovery_icons_path / item))
+            for path in recovery_icons_path.iterdir():
+                self.replacement_panel.load_replacement(file_path=path)
         shutil.rmtree(recover_path)
         self.ask_to_save = has_driver
 
@@ -1186,7 +1180,7 @@ class C4IconSwapper(IPC):
             self.root.wait_variable(save_dialog_result)
             if save_dialog_result.get() not in ('do', 'dont'):
                 return
-        if (recovery_path := self.appdata_folder / 'Recovery').is_dir() and not os.listdir(recovery_path):
+        if (recovery_path := self.appdata_folder / 'Recovery').is_dir() and not any(recovery_path.iterdir()):
             shutil.rmtree(recovery_path)
             print('Deleted empty Recovery folder')
         if not self.is_server:
@@ -1269,7 +1263,7 @@ class Icon:
 
 class C4SubIcon:
     def __init__(self, instance_id, root_path: str, img_path: Path,
-                 name: str, size: int | tuple[int, int], bak_path=None):
+                 name: str, size: int | tuple[int, int], bak_path: Path = None):
         self.root = root_path  # Path to directory containing image
         self.path = img_path  # Full path to image file
         rel_parts = (parts := img_path.parts)[parts.index(instance_id) + 1:]
@@ -1284,7 +1278,7 @@ class C4SubIcon:
               all(isinstance(n, int) and not isinstance(n, bool) for n in size)):
             self.size = tuple(size)
         else:
-            raise ValueError(f'Expected int or (int, int). Received: {type(size).__name__}: {size}')
+            raise ValueError(f'Expected int or tuple[int, int]. Received: {type(size).__name__}: {size}')
 
 
 class C4Icon(Icon):
@@ -1818,11 +1812,11 @@ class RecoveryWin:
         if not (recovery_path := main.appdata_folder / 'Recovery').is_dir():
             return
         # Delete any non-directories in Recovery folder (Just in case)
-        for item in os.listdir(recovery_path):
-            if (item_path := recovery_path / item).is_dir():
+        for path in recovery_path.iterdir():
+            if path.is_dir():
                 continue
-            os.remove(item_path)
-            print(f'Deleted invalid item from Recovery folder {item}')
+            path.unlink()
+            print(f'Deleted invalid item from Recovery folder {path.name}')
         if not (num_of_rec_folders := len(os.listdir(recovery_path))):
             shutil.rmtree(recovery_path)
             if not main.is_server:
@@ -1841,8 +1835,7 @@ class RecoveryWin:
         window.resizable(False, False)
         window.protocol('WM_DELETE_WINDOW', self.close_dialog)
 
-        self.recoverable_projects = [rec_obj for item in os.listdir(recovery_path)
-                                     if (rec_obj := RecoveryObject(recovery_path / item))]
+        self.recoverable_projects = [rec_obj for path in recovery_path.iterdir() if (rec_obj := RecoveryObject(path))]
 
         title_label = Label(window, text='Select Projects to Recover', font=(label_font, 14))
         title_label.place(relx=0.5, y=5, anchor='n')
@@ -1993,20 +1986,20 @@ class RecoveryObject:
     def __init__(self, instance_path: Path):
         if not instance_path.is_dir():
             return
-        self.name = 'No Driver' if 'driver' not in os.listdir(instance_path) else 'MsgNotFound'
+        self.name = 'MsgNotFound' if (instance_path / 'driver').exists() else 'No Driver'
         self.path = instance_path
         self.num_images = 0
         self.mtime = datetime.fromtimestamp(os.path.getmtime(instance_path)).strftime("%m/%d %H:%M:%S")
         self.recover = IntVar()
 
-        for item in os.listdir(instance_path):
-            if item == 'driver':
-                if (xml_path := instance_path / 'driver' / 'driver.xml').is_file():
-                    driver_xml = XMLObject(xml_path)
-                    if name := driver_xml.get_tag('name').value():
+        for path in instance_path.iterdir():
+            if path.name == 'driver':
+                if (xml_path := path / 'driver.xml').is_file():
+                    # TODO: make quick find function in XMLObject
+                    if name := XMLObject(xml_path).get_tag('name').value():
                         self.name = name
-            elif item == 'Replacement Icons':
-                self.num_images = len(os.listdir(instance_path / 'Replacement Icons'))
+            elif path.name == 'Replacement Icons':
+                self.num_images = len(os.listdir(path))
 
 
 class C4zPanel:
@@ -2113,27 +2106,25 @@ class C4zPanel:
 
         gen_driver_path = assets_path / ('multi_generic.c4z' if multi else 'generic.c4z')
 
-        if (temp_driver_path := main.instance_temp / 'driver').is_dir():
-            shutil.rmtree(temp_driver_path)
+        shutil.rmtree(instance_driver_path := main.instance_temp / 'driver', ignore_errors=True)
 
-        shutil.unpack_archive(gen_driver_path, temp_driver_path, 'zip')
+        shutil.unpack_archive(gen_driver_path, instance_driver_path, 'zip')
 
         sizes = [70, 90, 300, 512]
         root_size = '1024'
-        temp_dir = main.instance_temp / 'temp_unpacking'
-        os.mkdir(temp_dir)
-        for img_name in os.listdir(main.device_icon_dir):
-            with Image.open(main.device_icon_dir / img_name) as img:
+        unpacking_dir = main.instance_temp / 'temp_unpacking'
+        os.mkdir(unpacking_dir)
+        for path in main.device_icon_dir.iterdir():
+            with Image.open(path) as img:
                 for size in sizes:
                     resized_img = img.resize((size, size), Resampling.LANCZOS)
-                    resized_img.save(temp_dir / img_name.replace(root_size, str(size)))
-        for img in os.listdir(temp_dir):
-            shutil.move(temp_dir / img, main.device_icon_dir / img)
+                    resized_img.save(unpacking_dir / path.name.replace(root_size, str(size)))
+        for img_path in unpacking_dir.iterdir():
+            img_path.replace(main.device_icon_dir / img_path.name)
 
-        # noinspection PyTypeChecker
-        shutil.make_archive(temp_dir / 'driver', 'zip', temp_driver_path)
-        self.load_c4z(f'{temp_dir / "driver"}.zip')
-        shutil.rmtree(temp_dir)
+        shutil.make_archive(str(unpacking_dir / 'driver'), 'zip', instance_driver_path)
+        self.load_c4z(unpacking_dir / 'driver.zip')
+        shutil.rmtree(unpacking_dir)
 
         main.export_panel.driver_name_entry.delete(0, 'end')
         main.export_panel.driver_name_entry.insert(0, 'New Driver')
@@ -2214,20 +2205,20 @@ class C4zPanel:
         if self.icons:
             icons_bak = self.icons
             if driver_path.is_dir():
-                shutil.move(driver_path, temp_bak)
+                driver_path.replace(temp_bak)
 
         # File select dialog
         if file_path is None:
-            file_path = filedialog.askopenfilename(filetypes=[('Control4 Drivers', '*.c4z *.zip')])
+            file_path = filedialog.askopenfilename(filetypes=[('Control4 Drivers', '*.c4z *.zip'),
+                                                              ('All Files', '*.*')])
             if not file_path:  # If no file selected
                 if temp_bak.is_dir():
-                    shutil.move(temp_bak, driver_path)
+                    temp_bak.replace(driver_path)
                 return
 
         # Delete existing driver
         main.driver_selected = False
-        if (driver_folder := main.instance_temp / 'driver').is_dir():
-            shutil.rmtree(driver_folder)
+        shutil.rmtree(driver_folder := main.instance_temp / 'driver', ignore_errors=True)
 
         # Unpack selected driver
         shutil.unpack_archive(file_path, driver_folder, 'zip')
@@ -2236,16 +2227,16 @@ class C4zPanel:
         curr_xml = main.driver_xml  # store current XML in case of abort
         main.driver_xml = XMLObject(main.instance_temp / 'driver' / 'driver.xml')
 
-        # Get icons
+        # noinspection PyShadowingNames
         def get_icons(root_directory):
             if not root_directory:
                 return []
             directories = set()
             if isinstance(root_directory, (list, tuple)):
-                for item in root_directory:
-                    if not item.is_dir():
+                for path in root_directory:
+                    if not path.is_dir():
                         continue
-                    directories.update(list_all_sub_directories(item, include_root_dir=True))
+                    directories.update(list_all_sub_directories(path, include_root_dir=True))
                 if not directories:
                     return []
             elif isinstance(root_directory, Path):
@@ -2261,28 +2252,28 @@ class C4zPanel:
             all_sub_icons = []
             bak_files = {}
             for directory in directories:
-                for item in os.scandir(directory):
-                    if not item.is_file() or not os.path.splitext(item.name)[1].lower() in valid_img_types:
+                for path in os.scandir(directory):
+                    if not path.is_file() or not os.path.splitext(path.name)[1].lower() in valid_img_types:
                         continue
-                    if re.search(r'\.bak[^.]*$', item.name):
-                        root_name = re.sub(r'\.bak[^.]*$', '', item.name)
-                        bak_files[Path(directory, root_name)] = Path(directory, item.name)
+                    if re.search(r'\.bak[^.]*$', path.name):
+                        root_name = re.sub(r'\.bak[^.]*$', '', path.name)
+                        bak_files[Path(directory, root_name)] = Path(directory, path.name)
                         continue
                     try:
-                        with Image.open(item.path) as img:
+                        with Image.open(path.path) as img:
                             actual_size = img.size[0]
                     except Image.DecompressionBombError:
-                        print(f'Skipping potential decompression bomb: {item.path}')
+                        print(f'Skipping potential decompression bomb: {path.path}')
                         continue
                     except (UnidentifiedImageError, OSError):
-                        print(f'Issue with item in get_icons: {item.path}')
+                        print(f'Issue with item in get_icons: {path.path}')
                         continue
-                    file_stem, file_ext = os.path.splitext(item.name)
+                    file_stem, file_ext = os.path.splitext(path.name)
                     img_info = re.search(r'^(?:(\d+)_)?(.+?)(?:_(\d+))?$', file_stem).groups()
                     l_label, img_name, r_label = img_info[0], img_info[1], img_info[2]
                     if not img_name or file_stem in ('device_sm', 'device_lg'):
                         img_name = file_stem
-                    item_path = Path(directory) / item.name
+                    item_path = Path(directory) / path.name
                     # If XOR left/right size labels exist
                     if bool(l_label) ^ bool(r_label):
                         if (l_label and int(l_label) == actual_size) or int(r_label) == actual_size:
@@ -2448,8 +2439,7 @@ class C4zPanel:
                 # Restore existing driver data if invalid driver selected
                 self.icons = icons_bak
                 if temp_bak.is_dir():
-                    if driver_folder.is_dir():
-                        shutil.rmtree(driver_folder)
+                    shutil.rmtree(driver_folder, ignore_errors=True)
                     temp_bak.replace(driver_folder)
                 # noinspection PyTypeChecker
                 main.root.after(3000, main.restore_entry_text)
@@ -2546,9 +2536,9 @@ class C4zPanel:
         done = False
         self.restore_all_button['state'] = DISABLED
         for path in list_all_sub_directories(driver_folder):
-            for file in os.listdir(path):
-                # (?<!\.xml) = not preceded by '.xml' and file ends with '.bak' + any characters other than '.'
-                if re.search(r'(?<!\.xml)\.bak[^.]*$', file):
+            for item in path.glob('*.bak*'):
+                # If any item is not '.xml' and ends with '.bak' + any chars other than '.'
+                if not item.name.endswith('.xml.bak') and '.' not in item.name.split('.bak')[-1]:
                     self.restore_all_button['state'] = NORMAL
                     done = True
                     break
@@ -2557,8 +2547,7 @@ class C4zPanel:
         self.update_icon()
 
         # Remove temp backup directory
-        if temp_bak.is_dir():
-            shutil.rmtree(temp_bak)
+        shutil.rmtree(temp_bak, ignore_errors=True)
 
         # Update connections panel
         self.get_connections()
@@ -2753,9 +2742,9 @@ class ReplacementPanel:
                     self.load_replacement(file_path=path)
                     continue
                 for directory in list_all_sub_directories(path, include_root_dir=True):
-                    for file in os.listdir(directory):
-                        if os.path.splitext(file)[1].lower() in valid_img_types:
-                            self.load_replacement(file_path=directory / file)
+                    for file in directory.iterdir():
+                        if file.suffix in valid_img_types:
+                            self.load_replacement(file_path=file)
             self.multi_threading = False
             return
         elif not file_path.is_file() or not os.path.splitext(file_path)[1].lower() in valid_img_types:
@@ -2778,12 +2767,12 @@ class ReplacementPanel:
                     img.save(new_path)
                     new_file_size = os.path.getsize(new_path)
                     # Check if image already in replacement icons directory
-                    for file in os.listdir(self.replacement_icons_dir):
-                        if os.path.getsize(cmp_path := self.replacement_icons_dir / file) != new_file_size:
+                    for cmp_path in self.replacement_icons_dir.iterdir():
+                        if os.path.getsize(cmp_path) != new_file_size:
                             continue
                         if cmp_path == new_path or not filecmp.cmp(cmp_path, new_path):
                             continue
-                        os.remove(new_path)
+                        new_path.unlink()
                         if not self.img_bank or (len(self.img_bank) < main.img_bank_size and self.replacement_icon):
                             if bank_index is None:
                                 return
@@ -3024,14 +3013,14 @@ class ReplacementPanel:
         if not -1 <= img_index < self.main.img_bank_size:
             return
         if img_index == -1:
-            os.remove(self.replacement_icon.path)
+            self.replacement_icon.path.unlink()
             self.replacement_icon = None
             self.replacement_img_label.config(image=self.main.img_blank)
             self.replacement_img_label.image = self.main.img_blank
             self.replace_button['state'] = DISABLED
             self.replace_all_button['state'] = DISABLED
             return
-        os.remove(self.img_bank[img_index].path)
+        self.img_bank[img_index].path.unlink()
         self.img_bank.pop(img_index)
         if (label_index := len(self.img_bank)) <= self.main.img_bank_size:
             self.prev_icon_button['state'] = DISABLED
@@ -3118,7 +3107,7 @@ class ExportPanel:
             return
         self.do_export(quick_export=True)
 
-    def export_file(self, driver_name: str, path=None):
+    def export_file(self, driver_name='', path=None):
         main = self.main
         if path is None:
             path = main.cur_dir / f'{driver_name}.c4z'
@@ -3129,29 +3118,26 @@ class ExportPanel:
         # Backup and move all .bak files if not included
         if not self.include_backups.get():
             directories = list_all_sub_directories(driver_folder, include_root_dir=True)
-            if bak_folder.is_dir():
-                shutil.rmtree(bak_folder)
+            shutil.rmtree(bak_folder, ignore_errors=True)
             os.mkdir(bak_folder)
             suffix_num = map(str, itertools.count(0))
             for directory in directories:
-                for file in os.listdir(directory):
-                    if re.search(r'\.bak[^.]*$', file):
-                        current_path = directory / file
-                        # I think this is to avoid same name collisions
-                        new_path = bak_folder / f'{file}{next(suffix_num)}'
-                        bak_files_dict[current_path] = new_path
-                        shutil.move(current_path, new_path)
+                for path in directory.iterdir():
+                    if re.search(r'\.bak[^.]*$', path.name):
+                        # Sequential suffix used to avoid same name collisions
+                        new_path = bak_folder / f'{path.name}{next(suffix_num)}'
+                        bak_files_dict[path] = new_path
+                        path.replace(new_path)
 
         # Create .c4z file
-        zip_path = f'{driver_folder}.zip'
-        # noinspection PyTypeChecker
-        shutil.make_archive(driver_folder, 'zip', driver_folder)
-        shutil.move(zip_path, path)
+        shutil.make_archive(str(driver_folder), 'zip', driver_folder)
+        zip_path = driver_folder.with_suffix('.zip')
+        zip_path.replace(path)
 
         # Restore .bak files
         if not self.include_backups.get():
             for file in bak_files_dict:
-                shutil.move(bak_files_dict[file], file)
+                bak_files_dict[file].replace(file)
             shutil.rmtree(bak_folder)
 
     def do_export(self, quick_export=None):
@@ -3245,7 +3231,7 @@ class ExportPanel:
                             new_line = new_line.replace(f'{orig_lower}=', f'{new_lower}=')
                     modified_lua_lines.append(new_line)
                 # Backup Lua file and write modified version
-                os.replace(lua_path, f'{lua_path}.bak')
+                lua_path.replace(lua_path.with_suffix('.bak'))
                 with open(lua_path, 'w', errors='ignore') as driver_lua_file:
                     driver_lua_file.writelines(modified_lua_lines)
 
@@ -3349,14 +3335,13 @@ class ExportPanel:
 
         # Backup XML file and write new XML
         xml_path = main.instance_temp / 'driver' / 'driver.xml'
-        os.replace(xml_path, f'{xml_path}.bak')
+        xml_path.replace(xml_path.with_suffix('.bak'))
         with open(xml_path, 'w', errors='ignore') as out_file:
             out_file.writelines(driver_xml.get_lines())
 
         # Make icon changes
         bak_folder = main.instance_temp / 'bak_files'
-        if bak_folder.is_dir():
-            shutil.rmtree(bak_folder)
+        shutil.rmtree(bak_folder, ignore_errors=True)
         os.mkdir(bak_folder)
         include_bak = self.include_backups.get()
         for icon in main.c4z_panel.icons:
@@ -3364,7 +3349,7 @@ class ExportPanel:
                 with Image.open(icon.replacement_icon.path) as rp_icon:
                     for sub_icon in icon.icons:
                         if include_bak:
-                            sub_icon.bak_path = f'{sub_icon.path}.bak'
+                            sub_icon.bak_path = sub_icon.path.with_suffix('.bak')
                             shutil.copy(sub_icon.path, sub_icon.bak_path)
                         out_icon = rp_icon.resize(sub_icon.size, Resampling.LANCZOS)
                         out_icon.save(sub_icon.path)
@@ -3374,33 +3359,26 @@ class ExportPanel:
                         continue
                     if include_bak:
                         temp_bak_path = bak_folder / sub_icon.name
-                        shutil.move(sub_icon.path, temp_bak_path)
-                        shutil.move(sub_icon.bak_path, sub_icon.path)
-                        shutil.move(temp_bak_path, sub_icon.bak_path)
-                        os.remove(temp_bak_path)
+                        sub_icon.path.replace(temp_bak_path)
+                        sub_icon.bak_path.replace(sub_icon.path)
+                        temp_bak_path.replace(sub_icon.bak_path)
                     else:
-                        shutil.move(sub_icon.bak_path, sub_icon.path)
+                        sub_icon.bak_path.replace(sub_icon.path)
         shutil.rmtree(bak_folder)
 
         # Save As Dialog and export file
-        if not quick_export:
-            out_file = filedialog.asksaveasfile(initialfile=f'{driver_name}.c4z',
-                                                filetypes=[('Control4 Drivers', '*.c4z')])
-            with contextlib.suppress(AttributeError):
-                out_file_path = out_file.name
-                out_file.close()
-                if '.c4z' not in out_file_path:
-                    # Remove file created by save dialog
-                    os.remove(out_file_path)
-                    out_file_path += '.c4z'
-                # Export file
-                if out_file_path.is_file():
-                    os.remove(out_file_path)
-                self.export_file(driver_name, path=out_file_path)
+        if quick_export:
+            out_file_path = main.cur_dir / f'{driver_name}.c4z'
+            out_file_path.unlink(missing_ok=True)
+            self.export_file(path=out_file_path)
         else:
-            if (existing_file := main.cur_dir / f'{driver_name}.c4z').is_file():
-                os.remove(existing_file)
-            self.export_file(driver_name)
+            out_file_str = filedialog.asksaveasfilename(initialfile=f'{driver_name}.c4z',
+                                                        filetypes=[('Control4 Drivers', '*.c4z'), ('All Files', '*.*')],
+                                                        defaultextension='.c4z')
+            if out_file_str:
+                out_file_path = Path(out_file_str)
+                out_file_path.unlink(missing_ok=True)
+                self.export_file(path=out_file_path)
 
         # Restore original files
         main.driver_version_var.set(main.driver_version_new_var.get())
@@ -3408,7 +3386,7 @@ class ExportPanel:
             main.driver_version_new_var.set(str(int(main.driver_version_new_var.get()) + 1))
         driver_xml.restore()
         shutil.rmtree(main.instance_temp / 'driver')
-        shutil.move(driver_bak_folder, main.instance_temp / 'driver')
+        driver_bak_folder.replace(main.instance_temp / 'driver')
 
     def validate_driver_name(self, *_):
         driver_name_cmp = re_valid_chars.sub('', driver_name := self.driver_name_var.get())
@@ -3467,12 +3445,11 @@ class C4IS:
 
         # C4z Panel
         if main.driver_selected:
-            driver_path_noext = main.instance_temp / 'driver'
-            # noinspection PyTypeChecker
-            shutil.make_archive(driver_path_noext, 'zip', driver_path_noext)
-            with open(driver_path := f'{driver_path_noext}.zip', 'rb') as driver_zip:
+            driver_path = main.instance_temp / 'driver.zip'
+            shutil.make_archive(str(driver_path.with_suffix('')), 'zip', driver_path.with_suffix(''))
+            with open(driver_path, 'rb') as driver_zip:
                 self.driver_zip = driver_zip.read()
-            os.remove(driver_path)
+            driver_path.unlink()
 
         # Replacement Panel
         if main.replacement_panel.replacement_icon:
