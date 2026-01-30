@@ -609,7 +609,6 @@ class IPC:
             print('Nothing to clean up')
 
 
-# TODO: Require right click menus to use left click to confirm option
 class C4IconSwapper(IPC):
     def __init__(self):
         def exception_window(*args, message_txt=None):
@@ -1526,7 +1525,6 @@ class ConnectionsWin:
             conn_entry.refresh()
 
 
-# TODO: Figure out how id_groups work and fix implementation
 class Connection:
     def __init__(self, main: C4IconSwapper):
         self.main = main
@@ -1542,7 +1540,7 @@ class Connection:
         if self.original:
             return
         self.main.ask_to_save = True
-        if (conn_obj := self.main.taken_conn_ids.get(self.id, None)) and self is conn_obj:
+        if (conn_obj_in_dict := self.main.taken_conn_ids.get(self.id, None)) and self is conn_obj_in_dict:
             self.main.taken_conn_ids.pop(self.id)
         if not self.enabled:
             self.id = -1
@@ -1993,11 +1991,9 @@ class RecoveryObject:
         self.recover = IntVar()
 
         for path in instance_path.iterdir():
-            if path.name == 'driver':
-                if (xml_path := path / 'driver.xml').is_file():
-                    # TODO: make quick find function in XMLObject
-                    if name := XMLObject(xml_path).get_tag('name').value():
-                        self.name = name
+            if path.name == 'driver' and (xml_path := path / 'driver.xml').is_file():
+                if (name_tag := XMLTag(xml_path=xml_path, sub_tag='name')) and (name := name_tag.value()):
+                    self.name = name
             elif path.name == 'Replacement Icons':
                 self.num_images = len(os.listdir(path))
 
@@ -2644,7 +2640,7 @@ class C4zPanel:
         context_menu = Menu(self.main.root, tearoff=0)
         context_menu.add_command(label='View Sub Icons', command=self.toggle_sub_icon_win)
         menu_state = NORMAL if self.icons else DISABLED
-        context_menu.entryconfig(1, state=menu_state)
+        context_menu.entryconfig(0, state=menu_state)
         context_menu.tk_popup(event.x_root, event.y_root)
         context_menu.grab_release()
 
@@ -3002,7 +2998,7 @@ class ReplacementPanel:
             menu_state = DISABLED
         context_menu = Menu(self.main.root, tearoff=0)
         context_menu.add_command(label='Delete Image', command=lambda: self.delete_image(img_index))
-        context_menu.entryconfig(1, state=menu_state)
+        context_menu.entryconfig(0, state=menu_state)
         context_menu.tk_popup(event.x_root, event.y_root)
         context_menu.grab_release()
 

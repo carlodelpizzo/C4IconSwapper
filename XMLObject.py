@@ -8,7 +8,7 @@ char_escapes = {'<': '&lt;', '>': '&gt;', '&': '&amp;'}
 
 
 # TODO: Reevaluate. Eliminate lists where possible; combine classes?
-def parse_xml(xml_path: str | Path = None, xml_string=''):
+def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag=''):
     if not xml_path and not xml_string:
         return []
     if xml_path:
@@ -25,6 +25,7 @@ def parse_xml(xml_path: str | Path = None, xml_string=''):
     nested_comments = 0
     nested_skip = False
     special_tag = False
+    sub_tag_found = False
 
     # Begin Parsing
     for i in (x for x, char in enumerate(xml_string) if char in ('<', '>')):
@@ -42,6 +43,36 @@ def parse_xml(xml_path: str | Path = None, xml_string=''):
 
         try:
             data = xml_string[tag_start + 1:i]
+            if sub_tag and not sub_tag_found:
+                self_closing = False
+                attributes = {}
+                if ' ' in data:
+                    if data[:data.index(' ')] != sub_tag:
+                        continue
+                    if data.endswith('/'):
+                        self_closing = True
+                    data_no_attr = re.sub(r'([\w:]+)=([\'"])(.*?)\2', '', data)
+                    if '=' in data_no_attr:
+                        continue
+                    attributes = {k: v for k, _, v in re.findall(r'([\w:]+)=([\'"])(.*?)\2', data)}
+                    data = data[:data.index(' ')]
+                elif data.endswith('/'):
+                    if (data := data[:-1]) != sub_tag:
+                        continue
+                    if '<' in data or '>' in data:
+                        raise SyntaxError('< or > found in self-closing tag')
+                    self_closing = True
+                elif data != sub_tag:
+                    continue
+                if self_closing:
+                    return [XMLTag(name=data, attributes=attributes, is_self_closing=True)]
+                tag_stack.append(XMLTag(name=data, attributes=attributes, comments=comments))
+                sub_tag_found = True
+                attributes = {}
+                comments = []
+                tag_start = None
+                tag_end = i + 1
+                continue
         except TypeError:
             raise SyntaxError('Generic issue with XML syntax')
 
@@ -102,10 +133,10 @@ def parse_xml(xml_path: str | Path = None, xml_string=''):
 
         # Parse tag attributes
         if ' ' in data:
-            attr_pairs = re.findall(r'([\w:]+)="([^"]*)"', data)
-            if len(attr_pairs) != len(re.findall(r'(\w+)="([^"]*)', data)):
+            data_no_attr = re.sub(r'([\w:]+)=([\'"])(.*?)\2', '', data)
+            if '=' in data_no_attr:
                 continue
-            attributes = {k: v for k, v in attr_pairs}
+            attributes = {k: v for k, _, v in re.findall(r'([\w:]+)=([\'"])(.*?)\2', data)}
 
         # Handle self-closing tags
         if data.endswith('/'):
@@ -164,6 +195,8 @@ def parse_xml(xml_path: str | Path = None, xml_string=''):
                 tag_stack[-1].elements.append(temp_tag)
             else:
                 tags.append(temp_tag)
+                if sub_tag and sub_tag_found and tags[-1].name == sub_tag:
+                    return tags
             tag_start = None
             tag_end = None
             continue
@@ -177,9 +210,11 @@ def parse_xml(xml_path: str | Path = None, xml_string=''):
                 temp_tag.parent = tag_stack[-1]
                 tag_stack[-1].elements.append(temp_tag)
             else:
-                tags.append(temp_tag)
+                tags.append(temp_tag)  # Would this ever happen?
             tag_start = None
             tag_end = None
+            if sub_tag and data == f'/{sub_tag}':
+                return tags
             continue
         if tag_end and xml_string[tag_end:tag_start].strip():
             continue
@@ -199,15 +234,16 @@ def parse_xml(xml_path: str | Path = None, xml_string=''):
 # Can only have one root tag
 class XMLTag:
     def __init__(self, name: str = None, elements: list = None, attributes: dict = None, parent=None,
-                 comments: list = None, closing_comments: list = None, xml_path: str = None, xml_string: str = None,
-                 is_comment=False, is_self_closing=False, is_prolog=False, is_special=False):
+                 comments: list = None, closing_comments: list = None, xml_path: str | Path = None,
+                 xml_string: str = None, is_comment=False, is_self_closing=False, is_prolog=False, is_special=False,
+                 sub_tag=''):
         # Constructs an XMLTag object based on the first tag in data if XML path/data is passed in
         if xml_path or xml_string:
-            first_tag = parse_xml(xml_path=xml_path, xml_string=xml_string)[0]
+            first_tag = parse_xml(xml_path=xml_path, xml_string=xml_string, sub_tag=sub_tag)[0]
             if not first_tag:
-                raise ValueError
+                raise ValueError('Excepted XMLTag')
             if type(first_tag) is not type(self):
-                raise TypeError
+                raise TypeError(f'Expected type: {self.__name__} Received type: {first_tag.__name__}')
             self.name = first_tag.name
             self.elements = first_tag.elements
             self.attributes = first_tag.attributes
@@ -233,8 +269,7 @@ class XMLTag:
         self.is_special = is_special
         self.delete = False
 
-    # Returns list of lines
-    def get_lines(self, indent='', use_esc_chars=True):
+    def get_lines(self, indent='', use_esc_chars=True) -> list[str]:
         if self.delete:
             return []
         if self.is_comment:
@@ -303,14 +338,14 @@ class XMLTag:
             output.append(f'{indent}</{self.name}>')
         return output
 
-    def get_tags(self, name: str):
+    def get_tags(self, name: str) -> list['XMLTag']:
         output = [self] if name == self.name else []
         for element in self.elements:
             if type(element) is XMLTag and (tag_list := element.get_tags(name)):
                 output.extend(tag_list)
         return output
 
-    def get_tags_dict(self, name_set: set[str]):
+    def get_tags_dict(self, name_set: set[str]) -> dict[str, 'XMLTag']:
         output_dict = {}
         for element in self.elements:
             if isinstance(element, str):
@@ -325,7 +360,7 @@ class XMLTag:
                 break
         return output_dict
 
-    def get_tag(self, name: str, include_self=True):
+    def get_tag(self, name: str, include_self=True) -> 'XMLTag | None':
         if include_self and name == self.name:
             return self
 
@@ -340,7 +375,7 @@ class XMLTag:
                     return matching_tag
         return None
 
-    def value(self):
+    def value(self) -> str:
         for element in self.elements:
             if type(element) is str:
                 return element
@@ -355,14 +390,14 @@ class XMLTag:
                 break
 
     def add_element(self, element, index=None):
-        if type(element) is not str and not isinstance(element, XMLTag):
+        if not isinstance(element, (str, XMLTag)):
             raise TypeError
         if index:
             self.elements.insert(index, element)
         else:
             self.elements.append(element)
 
-    def get_parents(self, parents=None):
+    def get_parents(self, parents=None) -> list['XMLTag']:
         if not self.parent:
             return [] if not parents else parents
         if not parents:
@@ -370,7 +405,8 @@ class XMLTag:
         parents.append(self.parent)
         return self.parent.get_parents(parents)
 
-    def get_children(self):
+    def get_children(self) -> list['XMLTag']:
+        # noinspection PyTypeChecker
         return [element for element in self.elements if not isinstance(element, str)]
 
 
@@ -378,9 +414,9 @@ class XMLTag:
 class XMLObject:
     def __init__(self, xml_path: str | Path = None, xml_string=''):
         self.restore_point = None
-        self.tags = parse_xml(xml_path=xml_path, xml_string=xml_string)
+        self.tags: list[XMLTag] = parse_xml(xml_path=xml_path, xml_string=xml_string)
 
-    def get_lines(self, use_esc_chars=True):
+    def get_lines(self, use_esc_chars=True) -> list[str]:
         output = []
         if len(self.tags) == 1:
             return self.tags[0].get_lines(use_esc_chars=use_esc_chars)
@@ -390,13 +426,13 @@ class XMLObject:
                 output[-1] += '\n'
         return output
 
-    def get_tags(self, name: str):
+    def get_tags(self, name: str) -> list[XMLTag]:
         output = []
         for tag in self.tags:
             output.extend(tag.get_tags(name))
         return output
 
-    def get_tag(self, name: str):
+    def get_tag(self, name: str) -> XMLTag | None:
         for tag in self.tags:
             if output := tag.get_tag(name):
                 return output
@@ -412,3 +448,38 @@ class XMLObject:
         if keep_restore_point:
             return
         self.restore_point = None
+
+    # TODO: Print warning when pass through function called
+    # Functions bellow this point will pass call to first tag in self.tags
+    def get_tags_dict(self, name_set: set[str]) -> dict[str, XMLTag]:
+        if not self.tags:
+            return {}
+        return self.tags[0].get_tags_dict(name_set)
+
+    def value(self):
+        if not self.tags:
+            return ''
+        return self.tags[0].value()
+
+    get_value = value
+
+    def set_value(self, new_value: str):
+        if not self.tags:
+            return
+        self.tags[0].set_value(new_value)
+
+    def add_element(self, element, index=None):
+        if not self.tags:
+            return
+        self.tags[0].add_element(element, index=index)
+
+    def get_parents(self, parents=None) -> list[XMLTag]:
+        if not self.tags:
+            return []
+        return self.tags[0].get_parents(parents=parents)
+
+    def get_children(self) -> list[XMLTag]:
+        if not self.tags:
+            return []
+        return self.tags[0].get_children()
+
