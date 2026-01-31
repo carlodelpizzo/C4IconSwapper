@@ -775,19 +775,17 @@ class C4IconSwapper(IPC):
         self.driver_ver_orig = StringVar()
         self.driver_version_var = StringVar()
         self.driver_version_new_var = StringVar(value='1')
-        self.multi_state_driver, self.states_shown, self.ask_to_save = False, False, False
+        self.multi_state_driver, self.ask_to_save = False, False
         self.counter, self.easter_counter = 0, 0
         self.easter_call_after_id = None
+        self.restore_entry_after_id = None
+        self.restore_entry_string = ''
         self.img_bank_size = 4
         self.taken_conn_ids = defaultdict(object)
         self.connections = [Connection(self) for _ in range(18)]
         self.states_orig_names = []
         self.states = [State('') for _ in range(13)]
-        self.device_icon_dir = (www_path := self.instance_temp / 'driver' / 'www') / 'icons' / 'device'
-        self.icon_dir = www_path / 'icons'
-        self.images_dir = www_path / 'images'
-        self.orig_file_dir, self.orig_file_path, self.restore_entry_string = '', '', ''
-        self.driver_selected, self.schedule_entry_restore = False, False
+        self.driver_selected = False
         self.undo_history = deque(maxlen=100)
 
         # Creating blank image for panels
@@ -799,9 +797,7 @@ class C4IconSwapper(IPC):
         self.c4z_panel = C4zPanel(self)
         self.replacement_panel = ReplacementPanel(self)
         self.export_panel = ExportPanel(self)
-        self.driver_info_win = None
-        self.states_win = None
-        self.connections_win = None
+        self.driver_info_win, self.states_win, self.connections_win = None, None, None
 
         # Panel Separators
         self.separator0 = Separator(self.root, orient='vertical')
@@ -869,14 +865,13 @@ class C4IconSwapper(IPC):
         self.root.mainloop()
 
     def restore_entry_text(self):
-        if self.schedule_entry_restore:
-            self.schedule_entry_restore = False
-            if self.restore_entry_string:
-                self.c4z_panel.file_entry_field['state'] = NORMAL
-                self.c4z_panel.file_entry_field.delete(0, 'end')
-                self.c4z_panel.file_entry_field.insert(0, self.restore_entry_string)
-                self.c4z_panel.file_entry_field['state'] = 'readonly'
-                self.restore_entry_string = ''
+        if not self.restore_entry_string:
+            return
+        self.c4z_panel.file_entry_field['state'] = NORMAL
+        self.c4z_panel.file_entry_field.delete(0, 'end')
+        self.c4z_panel.file_entry_field.insert(0, self.restore_entry_string)
+        self.c4z_panel.file_entry_field['state'] = 'readonly'
+        self.restore_entry_string = ''
 
     def key_release(self, event):
         if event.keysym == 'Right':
@@ -2087,6 +2082,7 @@ class C4zPanel:
 
     def load_gen_driver(self, multi=False):
         main = self.main
+        device_icon_dir = main.instance_temp / 'driver' / 'www' / 'icons' / 'device'
         if main.ask_to_save:
             save_dialog_result = StringVar()
             main.ask_to_save_dialog(save_dialog_result, on_exit=False)
@@ -2110,13 +2106,13 @@ class C4zPanel:
         root_size = '1024'
         unpacking_dir = main.instance_temp / 'temp_unpacking'
         os.mkdir(unpacking_dir)
-        for path in main.device_icon_dir.iterdir():
+        for path in device_icon_dir.iterdir():
             with Image.open(path) as img:
                 for size in sizes:
                     resized_img = img.resize((size, size), Resampling.LANCZOS)
                     resized_img.save(unpacking_dir / path.name.replace(root_size, str(size)))
         for img_path in unpacking_dir.iterdir():
-            img_path.replace(main.device_icon_dir / img_path.name)
+            img_path.replace(device_icon_dir / img_path.name)
 
         shutil.make_archive(str(unpacking_dir / 'driver'), 'zip', instance_driver_path)
         self.load_c4z(unpacking_dir / 'driver.zip')
@@ -2182,7 +2178,15 @@ class C4zPanel:
             if save_dialog_result.get() not in ('do', 'dont'):
                 return
 
+        abort = False
+        driver_path = main.instance_temp / 'driver'
+        new_driver_path = main.instance_temp / 'new_driver'
+        new_icon_dir = new_driver_path / 'www' / 'icons'
+        new_images_dir = new_driver_path / 'www' / 'images'
+
         if self.file_entry_field.get() == 'Invalid driver selected...':
+            if main.restore_entry_after_id:
+                main.root.after_cancel(main.restore_entry_after_id)
             self.file_entry_field['state'] = NORMAL
             self.file_entry_field.delete(0, 'end')
             if main.restore_entry_string:
@@ -2191,39 +2195,27 @@ class C4zPanel:
                 self.file_entry_field.insert(0, 'Select .c4z file...')
             self.file_entry_field['state'] = 'readonly'
             main.restore_entry_string = ''
-            main.time_var = 0
-            main.schedule_entry_restore = False
-
-        # Backup existing driver data
-        temp_bak = main.instance_temp / 'temp_driver_backup'
-        if (driver_path := main.instance_temp / 'driver').is_dir():
-            driver_path.replace(temp_bak)
 
         # File select dialog
         if file_path is None:
             file_path = filedialog.askopenfilename(filetypes=[('Control4 Drivers', '*.c4z *.zip'),
                                                               ('All Files', '*.*')])
             if not file_path:  # If no file selected
-                if temp_bak.is_dir():
-                    temp_bak.replace(driver_path)
                 return
 
-        # Delete existing driver
-        main.driver_selected = False
-        shutil.rmtree(driver_folder := main.instance_temp / 'driver', ignore_errors=True)
-
-        # Unpack selected driver
-        shutil.unpack_archive(file_path, driver_folder, 'zip')
+        # Unpack selected driver; Delete temp folder if it exists
+        shutil.rmtree(new_driver_path, ignore_errors=True)
+        shutil.unpack_archive(file_path, new_driver_path, 'zip')
 
         # Read XML
-        abort = False
-        driver_xml_bak = None
-        if new_driver := XMLObject(main.instance_temp / 'driver' / 'driver.xml'):
-            driver_xml_bak = main.driver_xml
+        driver_xml_bak = main.driver_xml
+        if new_driver := XMLObject(new_driver_path / 'driver.xml'):
             main.driver_xml = new_driver
         else:
+            shutil.rmtree(new_driver_path, ignore_errors=True)
             abort = True
 
+        # Get icons
         if not abort:
             # noinspection PyShadowingNames
             def get_icons(root_directory):
@@ -2345,7 +2337,7 @@ class C4zPanel:
                 device_group = []
                 for i in range(len(all_sub_icons) - 1, -1, -1):
                     sub_icon = all_sub_icons[i]
-                    if sub_icon.root == main.icon_dir:
+                    if sub_icon.root == new_icon_dir:
                         if sub_icon.name == 'device_sm':
                             device_group.append(all_sub_icons.pop(i))
                         elif sub_icon.name == 'device_lg':
@@ -2423,51 +2415,48 @@ class C4zPanel:
                 return icon_groups
 
             # TODO: Change this to be a setting?
-            get_all_images = True
-            img_paths = (main.instance_temp / 'driver') if get_all_images else (main.icon_dir, main.images_dir)
+            get_all_images = False
+            img_paths = new_driver_path if get_all_images else (new_icon_dir, new_images_dir)
             if new_icons := get_icons(img_paths):
                 self.icons = new_icons
             else:
                 abort = True
 
-        # Update entry fields and abort if necessary
+        # Abort if no valid driver XML or no icons found
         if abort:
-            if driver_xml_bak:
-                main.driver_xml = driver_xml_bak
+            shutil.rmtree(new_driver_path, ignore_errors=True)
+            main.driver_xml = driver_xml_bak
             self.file_entry_field['state'] = NORMAL
             if self.file_entry_field.get() not in ('Select .c4z file...', 'Invalid driver selected...'):
-                # Restore driver folder if it exists
-                if temp_bak.is_dir():
-                    shutil.rmtree(driver_folder, ignore_errors=True)
-                    temp_bak.replace(driver_folder)
                 # noinspection PyTypeChecker
-                main.root.after(3000, main.restore_entry_text)
-                main.schedule_entry_restore = True
+                main.restore_entry_after_id = main.root.after(3000, main.restore_entry_text)
                 main.restore_entry_string = self.file_entry_field.get()
-                main.driver_selected = True
             self.file_entry_field.delete(0, 'end')
             self.file_entry_field.insert(0, 'Invalid driver selected...')
             self.file_entry_field['state'] = DISABLED
             return
 
-        # Update entry with driver file path
+        # Delete driver folder and replace with new driver
+        shutil.rmtree(driver_path, ignore_errors=True)
+        new_driver_path.replace(driver_path)
+        main.driver_selected = True
+        main.undo_history.clear()
+        self.current_icon = 0
+        self.update_icon()
+
+        # Update C4zPanel entry with driver file path
         self.file_entry_field['state'] = NORMAL
         self.file_entry_field.delete(0, 'end')
         self.file_entry_field.insert(0, file_path)
         self.file_entry_field['state'] = 'readonly'
 
+        # Update ExportPanel entry with output filename
         orig_file_path = Path(file_path)
-        main.orig_file_dir = orig_file_path.parent
         if (orig_driver_name := orig_file_path.stem) not in ('generic', 'multi generic'):
             main.export_panel.driver_name_entry.delete(0, 'end')
             main.export_panel.driver_name_entry.insert(0, orig_driver_name)
         if not main.export_panel.driver_name_entry.get():
             main.export_panel.driver_name_entry.insert(0, 'New Driver')
-
-        main.driver_selected = True
-        main.undo_history.clear()
-        self.current_icon = 0
-        self.update_icon()
 
         # Update show extra icons checkbox
         self.show_extra_icons.set(0)
@@ -2531,10 +2520,10 @@ class C4zPanel:
         if main.driver_selected:
             main.export_panel.export_button['state'] = NORMAL
             main.export_panel.export_as_button['state'] = NORMAL
-        # Update 'Restore All' button in driver panel
         done = False
         self.restore_all_button['state'] = DISABLED
-        for path in list_all_sub_directories(driver_folder):
+        # Update 'Restore All' button in driver panel
+        for path in list_all_sub_directories(driver_path):
             for item in path.glob('*.bak*'):
                 # If any item is not '.xml' and ends with '.bak' + any chars other than '.'
                 if not item.name.endswith('.xml.bak') and '.' not in item.name.split('.bak')[-1]:
@@ -2544,9 +2533,6 @@ class C4zPanel:
             if done:
                 break
         self.update_icon()
-
-        # Remove temp backup directory
-        shutil.rmtree(temp_bak, ignore_errors=True)
 
         # Update connections panel
         self.get_connections()
