@@ -1256,16 +1256,16 @@ class Icon:
 
 
 class C4SubIcon:
-    def __init__(self, instance_id, root_path: str, img_path: Path,
-                 name: str, size: int | tuple[int, int], bak_path: Path = None):
-        self.root = root_path  # Path to directory containing image
-        self.path = img_path  # Full path to image file
-        rel_parts = (parts := img_path.parts)[parts.index(instance_id) + 1:]
-        rel_root_index = next((i for i, part in enumerate(rel_parts) if part in {'icons', 'images'}), -1)
-        self.rel_path = Path(*rel_parts[rel_root_index + 1:]) if rel_root_index != -1 else Path(*rel_parts)
-        self.full_name = img_path.name
+    def __init__(self, instance_id, img_path: Path, name: str, size: int | tuple[int, int], bak_path: Path = None):
         self.name = name
+        # Full path to image file
+        self.path = img_path
+        # Relative path to icon from driver folder
+        self.rel_path = Path(*(parts := img_path.parts)[parts.index(instance_id) + 1:][1:])
+        # Full path to bak file
         self.bak_path = bak_path
+        # Relative path to bak file from driver folder
+        self.rel_bak_path = None if not bak_path else Path(*(parts := bak_path.parts)[parts.index(instance_id)+1:][1:])
         if isinstance(size, int) and not isinstance(size, bool):
             self.size = (size, size)
         elif (isinstance(size, (tuple, list)) and len(size) == 2 and
@@ -1274,15 +1274,19 @@ class C4SubIcon:
         else:
             raise ValueError(f'Expected int or tuple[int, int]. Received: {type(size).__name__}: {size}')
 
+    def update_path(self, new_driver_dir: Path):
+        self.path = new_driver_dir / self.rel_path
+        if self.bak_path:
+            self.bak_path = new_driver_dir / self.rel_bak_path
+
 
 class C4Icon(Icon):
     def __init__(self, icons: list[C4SubIcon], name=None, replacement_icon=None, extra=False):
         icons.sort(key=lambda sub_icon: sub_icon.size[0], reverse=True)
-        icon = icons[0]
-        super().__init__(path=icon.path)
+        self.display_icon = icons[0]
+        super().__init__(path=self.display_icon.path)
         self.tk_icon_sm = None
-        self.name = icon.name if not name else name
-        self.root = icon.root  # Path to directory containing 'icon'
+        self.name = self.display_icon.name if not name else name
         self.icons = icons
         self.extra = extra
         self.bak = any(icn.bak_path for icn in icons)
@@ -1318,6 +1322,11 @@ class C4Icon(Icon):
             return
         with Image.open(self.path) as img:
             self.tk_icon_lg = ImageTk.PhotoImage(img.resize((128, 128), Resampling.BICUBIC))
+
+    def update_path(self, new_driver_dir: Path):
+        for icon in self.icons:
+            icon.update_path(new_driver_dir)
+        self.path = self.display_icon.path
 
 
 class SubIconWin:
@@ -1373,7 +1382,7 @@ class SubIconWin:
             self.sub_icon_label.image = icon_image
         self.num_label.config(text=f'{self.curr_index + 1} of {self.num_of_icons}')
         self.size_label.config(text=f'{curr_sub_icon.size[0]}x{curr_sub_icon.size[1]}')
-        self.name_label.config(text=curr_sub_icon.full_name)
+        self.name_label.config(text=curr_sub_icon.path.name)
         if self.num_of_icons <= 1:
             self.prev_button['state'] = DISABLED
             self.next_button['state'] = DISABLED
@@ -2240,55 +2249,55 @@ class C4zPanel:
                 icon_groups = defaultdict(list)
                 both_scheme = deque()
                 all_sub_icons = []
-                bak_files = {}
-                for directory in directories:
-                    for path in os.scandir(directory):
-                        if not path.is_file() or not os.path.splitext(path.name)[1].lower() in valid_img_types:
-                            continue
-                        if re.search(r'\.bak[^.]*$', path.name):
-                            root_name = re.sub(r'\.bak[^.]*$', '', path.name)
-                            bak_files[Path(directory, root_name)] = Path(directory, path.name)
-                            continue
-                        try:
-                            with Image.open(path.path) as img:
-                                actual_size = img.size[0]
-                        except Image.DecompressionBombError:
-                            print(f'Skipping potential decompression bomb: {path.path}')
-                            continue
-                        except (UnidentifiedImageError, OSError):
-                            print(f'Issue with item in get_icons: {path.path}')
-                            continue
-                        file_stem, file_ext = os.path.splitext(path.name)
-                        img_info = re.search(r'^(?:(\d+)_)?(.+?)(?:_(\d+))?$', file_stem).groups()
-                        l_label, img_name, r_label = img_info[0], img_info[1], img_info[2]
-                        if not img_name or file_stem in ('device_sm', 'device_lg'):
-                            img_name = file_stem
-                        item_path = Path(directory) / path.name
-                        # If XOR left/right size labels exist
-                        if bool(l_label) ^ bool(r_label):
-                            if (l_label and int(l_label) == actual_size) or int(r_label) == actual_size:
-                                icon_groups[img_name].append(C4SubIcon(self.main.instance_id, directory,
-                                                                       item_path, img_name, actual_size))
-                                all_sub_icons.append(icon_groups[img_name][-1])
-                                continue
-                        elif l_label and r_label:
-                            r_size = int(r_label)
-                            if l_label == r_label and r_size == actual_size:
-                                both_scheme.append(C4SubIcon(self.main.instance_id, directory,
-                                                             item_path, img_name, actual_size))
-                                all_sub_icons.append(both_scheme[-1])
-                                continue
-                            elif r_size == actual_size:
-                                img_name = f'{l_label}_{img_name}'
-                            elif int(l_label) == actual_size:
-                                img_name = f'{img_name}_{r_label}'
-                            icon_groups[img_name].append(C4SubIcon(self.main.instance_id, directory, item_path,
-                                                                   img_name, actual_size))
+                all_paths = [path for directory in directories for path in directory.iterdir()]
+                bak_pattern = re.compile(r'\.bak[^.]*$')
+                bak_files = {
+                    Path(path.parent, bak_pattern.sub('', path.name)): Path(path.parent, path.name)
+                    for path in all_paths if bak_pattern.search(path.name)
+                }
+                for path in all_paths:
+                    if not path.is_file() or path.suffix not in valid_img_types:
+                        continue
+                    try:
+                        with Image.open(path) as img:
+                            actual_size = img.size[0]
+                    except Image.DecompressionBombError:
+                        warnings.warn(f'Skipping potential decompression bomb: {path}', RuntimeWarning)
+                        continue
+                    except (UnidentifiedImageError, OSError):
+                        print(f'Issue with item in get_icons: {path}')
+                        continue
+                    file_stem, file_ext = os.path.splitext(path.name)
+                    bak_path = bak_files.get(path.with_suffix(''))
+                    img_info = re.search(r'^(?:(\d+)_)?(.+?)(?:_(\d+))?$', file_stem).groups()
+                    l_label, img_name, r_label = img_info[0], img_info[1], img_info[2]
+                    if not img_name or file_stem in ('device_sm', 'device_lg'):
+                        img_name = file_stem
+                    # If XOR left/right size labels exist
+                    if bool(l_label) ^ bool(r_label):
+                        if (l_label and int(l_label) == actual_size) or int(r_label) == actual_size:
+                            icon_groups[img_name].append(C4SubIcon(self.main.instance_id, path, img_name,
+                                                                   actual_size, bak_path=bak_path))
                             all_sub_icons.append(icon_groups[img_name][-1])
                             continue
-                        icon_groups[img_name].append(C4SubIcon(self.main.instance_id, directory, item_path,
-                                                               img_name, actual_size))
+                    elif l_label and r_label:
+                        r_size = int(r_label)
+                        if l_label == r_label and r_size == actual_size:
+                            both_scheme.append(C4SubIcon(self.main.instance_id, path, img_name,
+                                                         actual_size, bak_path=bak_path))
+                            all_sub_icons.append(both_scheme[-1])
+                            continue
+                        elif r_size == actual_size:
+                            img_name = f'{l_label}_{img_name}'
+                        elif int(l_label) == actual_size:
+                            img_name = f'{img_name}_{r_label}'
+                        icon_groups[img_name].append(C4SubIcon(self.main.instance_id, path, img_name,
+                                                               actual_size, bak_path=bak_path))
                         all_sub_icons.append(icon_groups[img_name][-1])
+                        continue
+                    icon_groups[img_name].append(C4SubIcon(self.main.instance_id, path, img_name,
+                                                           actual_size, bak_path=bak_path))
+                    all_sub_icons.append(icon_groups[img_name][-1])
 
                 # Handle icons which have numbers on both sides that match their size
                 for sub_icon in both_scheme:
@@ -2312,22 +2321,17 @@ class C4zPanel:
                     else:
                         warnings.warn(f'Failed to parse icon data: {sub_icon.path}', RuntimeWarning)
 
-                # Update .bak status of all sub_icons
-                for sub_icon in all_sub_icons:
-                    if bak_path := bak_files.get(sub_icon.path):
-                        sub_icon.bak_path = bak_path
-
                 # Use XML data to form icon groups
                 extras = []
                 standard_icons = []
                 group_dict = get_icon_groups()
-                # TODO: Reevaluate this loop. Does not seem to be working; Icons given wrong display name
                 for group in group_dict:
                     group_list = []
                     # range(start, stop, step)
                     for i in range(len(all_sub_icons) - 1, -1, -1):
-                        sub_icon = all_sub_icons[i]
-                        if sub_icon.rel_path in group_dict[group]:
+                        parts = all_sub_icons[i].rel_path.parts
+                        split_point = next((idx for idx, part in enumerate(parts) if part in {'icons', 'images'}), -1)
+                        if Path(*parts[split_point + 1:]) in group_dict[group]:
                             group_list.append(all_sub_icons.pop(i))
                     if not group_list:
                         continue
@@ -2337,14 +2341,14 @@ class C4zPanel:
                 device_group = []
                 for i in range(len(all_sub_icons) - 1, -1, -1):
                     sub_icon = all_sub_icons[i]
-                    if sub_icon.root == new_icon_dir:
+                    if sub_icon.path.parent == new_icon_dir:
                         if sub_icon.name == 'device_sm':
                             device_group.append(all_sub_icons.pop(i))
                         elif sub_icon.name == 'device_lg':
                             device_group.append(all_sub_icons.pop(i))
                             continue
 
-                # Flag 'extra' icons
+                # Divide icons into 'standard' and 'extra'
                 for key in icon_groups:
                     extra_flag = True
                     if not (group_list := [subicon for subicon in icon_groups[key] if subicon in all_sub_icons]):
@@ -2358,7 +2362,7 @@ class C4zPanel:
                         continue
                     standard_icons.append(C4Icon(group_list))
 
-                # Mark extra icons as standard icons if no standard icons found
+                # Mark extra icons as standard if no standard icons found
                 if not standard_icons and not device_group and extras:
                     self.extra_icons = 0
                     for icon in extras:
@@ -2376,25 +2380,25 @@ class C4zPanel:
             def get_icon_groups():
                 icon_groups = defaultdict(set)
                 for tag in main.driver_xml.get_tags('proxy'):
-                    if value := tag.attributes.get('small_image'):
+                    if sm_img_path := tag.attributes.get('small_image'):
                         group_name = tag.attributes.get('name')
-                        rel_path = os.path.join(*Path(value).parts)
+                        rel_path = Path(sm_img_path)
                         icon_groups[(group_name if group_name else 'Device Icon', tag.parent)].add(rel_path)
-                    if value := tag.attributes.get('large_image'):
+                    if lg_img_path := tag.attributes.get('large_image'):
                         group_name = tag.attributes.get('name')
-                        rel_path = os.path.join(*Path(value).parts)
+                        rel_path = Path(lg_img_path)
                         icon_groups[(group_name if group_name else 'Device Icon', tag.parent)].add(rel_path)
                 for tag in main.driver_xml.get_tags('Icon'):
                     if 'controller://' not in (tag_value := tag.value()):
-                        print(f'Could not parse Icon tag value in xml: {tag_value}')
+                        print(f'Could not parse Icon tag value in XML: {tag_value}')
                         continue
                     group_name = tag.parent.attributes.get('id')
                     rel_path = tag_value.split('controller://')[1]
                     if 'icons' in rel_path:
-                        rel_path = rel_path.split('icons')[1].strip(os.sep)
+                        rel_path = rel_path.split('icons')[1].lstrip('/\\')
                     elif 'images' in rel_path:
-                        rel_path = rel_path.split('images')[1].strip(os.sep)
-                    icon_groups[(group_name if group_name else tag.parent.name, tag.parent)].add(rel_path)
+                        rel_path = rel_path.split('images')[1].lstrip('/\\')
+                    icon_groups[(group_name if group_name else tag.parent.name, tag.parent)].add(Path(rel_path))
 
                 seen_groups = {}
                 duplicates = set()
@@ -2439,6 +2443,8 @@ class C4zPanel:
         # Delete driver folder and replace with new driver
         shutil.rmtree(driver_path, ignore_errors=True)
         new_driver_path.replace(driver_path)
+        for c4icon in self.icons:
+            c4icon.update_path(driver_path)
         main.driver_selected = True
         main.undo_history.clear()
         self.current_icon = 0
@@ -3400,7 +3406,7 @@ class C4IS:
         if not isinstance(main, C4IconSwapper):
             raise TypeError(f'Expected type: {C4IconSwapper.__name__}')
         # Root class
-        self.version = version
+        self.version = 2
         self.driver_xml = main.driver_xml
         self.driver_manufac_var = main.driver_manufac_var.get()
         self.driver_manufac_new_var = main.driver_manufac_new_var.get()
