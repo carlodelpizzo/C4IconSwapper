@@ -1261,11 +1261,11 @@ class C4SubIcon:
         # Full path to image file
         self.path = img_path
         # Relative path to icon from driver folder
-        self.rel_path = Path(*(parts := img_path.parts)[parts.index(instance_id) + 1:][1:])
+        self.rel_path = Path(*(parts := img_path.parts)[parts.index(instance_id) + 2:])
         # Full path to bak file
         self.bak_path = bak_path
         # Relative path to bak file from driver folder
-        self.rel_bak_path = None if not bak_path else Path(*(parts := bak_path.parts)[parts.index(instance_id)+1:][1:])
+        self.rel_bak_path = None if not bak_path else Path(*(parts := bak_path.parts)[parts.index(instance_id) + 2:])
         if isinstance(size, int) and not isinstance(size, bool):
             self.size = (size, size)
         elif (isinstance(size, (tuple, list)) and len(size) == 2 and
