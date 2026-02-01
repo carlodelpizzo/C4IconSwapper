@@ -555,7 +555,7 @@ class IPC:
         if recover:
             self.recovery_dir.mkdir(exist_ok=True)
             for path in client_paths:
-                next_num = get_next_num_str(start=len(os.listdir(self.recovery_dir)), yield_start=False)
+                next_num = map(str, itertools.count(len(os.listdir(self.recovery_dir)) + 1))
                 try:
                     path.replace(self.recovery_dir / next(next_num))
                     print(f'Moved to Recovery: {path}')
@@ -589,7 +589,7 @@ class IPC:
             has_driver = (client_folder / 'driver').exists()
             has_replacements = False
             if (rep_imgs_path := client_folder / 'Replacement Icons').is_dir():
-                has_replacements = any(rep_imgs_path.listdir())
+                has_replacements = any(rep_imgs_path.iterdir())
             if has_driver or has_replacements:
                 recover_items.add(client_folder)
                 continue
