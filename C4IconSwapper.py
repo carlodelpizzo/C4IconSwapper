@@ -2620,6 +2620,7 @@ class C4zPanel:
                              daemon=True).start()
             return
         self._load_c4z(file_path=file_path, force=force)
+        self.main.pending_load_save = False
 
     def restore(self, do_all=False):
         if self.main.pending_load_save:
