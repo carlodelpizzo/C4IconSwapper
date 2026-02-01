@@ -620,6 +620,8 @@ class IPC:
             print('Nothing to clean up')
 
 
+# TODO: Prompt during load_c4is and recovery if user wants to merge or overwrite existing replacement images.
+#  Add option to not ask again
 class C4IconSwapper(IPC):
     def __init__(self):
         def exception_window(*args, message_txt=None):
@@ -798,6 +800,8 @@ class C4IconSwapper(IPC):
         self.states = [State('') for _ in range(13)]
         self.driver_selected = False
         self.undo_history = deque(maxlen=100)
+        self.thread_lock = threading.Lock()
+        self.pending_load_save = False
 
         # Creating blank image for panels
         with Image.open(assets_path / 'blank_img.png') as img:
@@ -830,7 +834,7 @@ class C4IconSwapper(IPC):
         self.file.add_command(label='Save Project', command=self.save_project)
         self.file.add_separator()
         self.file.add_command(label='Open C4z', command=self.c4z_panel.load_c4z)
-        self.file.add_command(label='Open Replacement Image', command=self.replacement_panel.load_replacement)
+        self.file.add_command(label='Open Replacement Image', command=self.replacement_panel.process_image)
         self.file.add_separator()
         self.file.add_command(label='Load Generic Driver', command=self.c4z_panel.load_gen_driver)
         self.file.add_command(label='Load Multi Driver', command=lambda: self.c4z_panel.load_gen_driver(multi=True))
@@ -892,7 +896,7 @@ class C4IconSwapper(IPC):
         elif event.keysym == 'Up':
             self.replacement_panel.inc_img_bank()
         elif event.keysym == 'Down':
-            self.replacement_panel.dec_img_bank()
+            self.replacement_panel.inc_img_bank(inc=0)
 
     # TODO: Completely overhaul everything related to multistate
     def get_states(self, lua_file):
@@ -981,26 +985,56 @@ class C4IconSwapper(IPC):
         self.states_win.window.destroy()
         self.states_win = None
 
-    def save_project(self, *_):
-        out_file_str = filedialog.asksaveasfilename(initialfile=f'{self.export_panel.driver_name_var.get()}.c4is',
-                                                    filetypes=[('C4IconSwapper Project', '*.c4is'),
-                                                               ('All Files', '*.*')],
-                                                    defaultextension='.c4is')
-        if out_file_str:
-            with open(out_file_str, 'wb') as output:
-                # noinspection PyTypeChecker
-                pickle.dump(C4IS(self), output)
-            self.ask_to_save = False
+    def save_project(self, *_, out_file_str='', scheduled=False):
+        if scheduled:
+            self.replacement_panel.multi_threading.wait()
+        elif self.pending_load_save:
+            return
+
+        if not out_file_str:
+            out_file_str = filedialog.asksaveasfilename(initialfile=f'{self.export_panel.driver_name_var.get()}.c4is',
+                                                        filetypes=[('C4IconSwapper Project', '*.c4is'),
+                                                                   ('All Files', '*.*')],
+                                                        defaultextension='.c4is')
+            if not out_file_str:
+                return
+
+        if not self.replacement_panel.multi_threading.is_set():
+            with self.thread_lock:
+                self.pending_load_save = True
+            threading.Thread(target=self.save_project,
+                             kwargs={'out_file_str': out_file_str, 'scheduled': True}, daemon=True).start()
+            return
+
+        with open(out_file_str, 'wb') as output:
+            # noinspection PyTypeChecker
+            pickle.dump(C4IS(self), output)
+        self.ask_to_save = False
+        self.pending_load_save = False
 
     # TODO: Currently does not validate project file. Unsure what behavior is for invalid file.
     # TODO: Add backwards compatibility.
-    def load_c4is(self, *_):
-        if not (path_str := filedialog.askopenfilename(filetypes=[('C4IconSwapper Project', '*.c4is'),
-                                                                  ('All Files', '*.*')])):
+    def load_c4is(self, *_, path_str='', scheduled=False):
+        if scheduled:
+            self.replacement_panel.multi_threading.wait()
+        elif self.pending_load_save:
             return
 
-        while self.replacement_panel.multi_threading:  # TODO: Use wait variable
-            pass
+        if not path_str:
+            path_str = filedialog.askopenfilename(filetypes=[('C4IconSwapper Project', '*.c4is'), ('All Files', '*.*')])
+            if not path_str:
+                return
+
+        # Start new thread which will wait for images to finish processing before running
+        if not self.replacement_panel.multi_threading.is_set():
+            self.pending_load_save = True
+            with Image.open(assets_path / 'loading_img.png') as img:
+                icon = ImageTk.PhotoImage(img)
+                self.c4z_panel.c4_icon_label.configure(image=icon)
+                self.c4z_panel.c4_icon_label.image = icon
+            threading.Thread(target=self.load_c4is,
+                             kwargs={'path_str': path_str, 'scheduled': True}, daemon=True).start()
+            return
 
         with open(path_str, 'rb') as path_str:
             save_state = pickle.load(path_str)
@@ -1016,7 +1050,7 @@ class C4IconSwapper(IPC):
         if save_state.driver_selected:
             with open(saved_driver_path := self.instance_temp / 'saved_driver.c4z', 'wb') as driver_zip:
                 driver_zip.write(save_state.driver_zip)
-            self.c4z_panel.load_c4z(saved_driver_path)
+            self.c4z_panel.load_c4z(saved_driver_path, force=True)
             saved_driver_path.unlink()
         else:
             self.export_panel.export_button['state'] = DISABLED
@@ -1079,6 +1113,10 @@ class C4IconSwapper(IPC):
             self.replacement_panel.replacement_img_label.configure(
                 image=self.replacement_panel.replacement_icon.tk_icon_lg)
             self.replacement_panel.replacement_img_label.image = self.replacement_panel.replacement_icon.tk_icon_lg
+        else:
+            self.replacement_panel.replacement_icon = None
+            self.replacement_panel.replacement_img_label.config(image=self.img_blank)
+            self.replacement_panel.replacement_img_label.image = self.img_blank
         self.replacement_panel.img_bank = []
         for img_bank_label in self.replacement_panel.img_bank_tk_labels:
             img_bank_label.configure(image=self.img_bank_blank)
@@ -1096,6 +1134,7 @@ class C4IconSwapper(IPC):
         self.replacement_panel.next_icon_button['state'] = save_state.replacement_panel['next']
 
         self.ask_to_save = False
+        self.pending_load_save = False
 
     def do_recovery(self, recover_path: Path):
         has_driver = False
@@ -1108,7 +1147,8 @@ class C4IconSwapper(IPC):
             has_driver = True
         if (recovery_icons_path := recover_path / 'Replacement Icons').is_dir():
             for path in recovery_icons_path.iterdir():
-                self.replacement_panel.load_replacement(file_path=path)
+                self.replacement_panel.process_image(file_path=path, new_thread=False)
+                self.root.update()
         shutil.rmtree(recover_path)
         self.ask_to_save = has_driver
 
@@ -1191,10 +1231,10 @@ class C4IconSwapper(IPC):
         if not self.is_server:
             print('')
         if self.is_server and not self.client_dict and self.finished_server_init:
-            shutil.rmtree(self.global_temp)
+            shutil.rmtree(self.global_temp, ignore_errors=True)
             print('Removed Global Temp')
         else:
-            shutil.rmtree(self.instance_temp)
+            shutil.rmtree(self.instance_temp, ignore_errors=True)
             print('Removed Instance Temp')
 
         self.root.destroy()
@@ -2091,7 +2131,7 @@ class C4zPanel:
         self.show_extra_icons_check.config(state='disabled')
 
     def toggle_extra_icons(self, *_):
-        if not self.main.driver_selected:
+        if not self.main.driver_selected or self.main.pending_load_save:
             return
         if not (show_extra := self.show_extra_icons.get()):
             if self.extra_icons:
@@ -2110,8 +2150,9 @@ class C4zPanel:
         self.update_icon()
 
     def load_gen_driver(self, multi=False):
+        if self.main.pending_load_save:
+            return
         main = self.main
-        device_icon_dir = main.instance_temp / 'driver' / 'www' / 'icons' / 'device'
         if main.ask_to_save:
             save_dialog_result = StringVar()
             main.ask_to_save_dialog(save_dialog_result, on_exit=False)
@@ -2119,37 +2160,39 @@ class C4zPanel:
             if save_dialog_result.get() not in ('do', 'dont'):
                 return
 
-        with Image.open(assets_path / 'loading_img.png') as img:
-            icon = ImageTk.PhotoImage(img)
-            self.c4_icon_label.configure(image=icon)
-            self.c4_icon_label.image = icon
-        main.root.update()
+        def gen_driver_unpack():
+            self.main.pending_load_save = True
+            device_icon_dir = main.instance_temp / 'driver' / 'www' / 'icons' / 'device'
+            instance_driver_path = main.instance_temp / 'driver'
+            with Image.open(assets_path / 'loading_img.png') as loading_img:
+                icon = ImageTk.PhotoImage(loading_img)
+                self.c4_icon_label.configure(image=icon)
+                self.c4_icon_label.image = icon
+            gen_driver_path = assets_path / ('multi_generic.c4z' if multi else 'generic.c4z')
+            shutil.rmtree(instance_driver_path, ignore_errors=True)
+            shutil.unpack_archive(gen_driver_path, instance_driver_path, 'zip')
+            sizes = [70, 90, 300, 512]
+            root_size = '1024'
+            unpacking_dir = main.instance_temp / 'temp_unpacking'
+            unpacking_dir.mkdir()
+            for path in device_icon_dir.iterdir():
+                with Image.open(path) as img:
+                    for size in sizes:
+                        resized_img = img.resize((size, size), Resampling.LANCZOS)
+                        resized_img.save(unpacking_dir / path.name.replace(root_size, str(size)))
+            for img_path in unpacking_dir.iterdir():
+                img_path.replace(device_icon_dir / img_path.name)
 
-        gen_driver_path = assets_path / ('multi_generic.c4z' if multi else 'generic.c4z')
+            shutil.make_archive(str(unpacking_dir / 'driver'), 'zip', instance_driver_path)
+            self.load_c4z(file_path=unpacking_dir / 'driver.zip', new_thread=False, force=True)
+            shutil.rmtree(unpacking_dir)
 
-        shutil.rmtree(instance_driver_path := main.instance_temp / 'driver', ignore_errors=True)
+            main.export_panel.driver_name_entry.delete(0, 'end')
+            main.export_panel.driver_name_entry.insert(0, 'New Driver')
+            main.ask_to_save = False
+            self.main.pending_load_save = False
 
-        shutil.unpack_archive(gen_driver_path, instance_driver_path, 'zip')
-
-        sizes = [70, 90, 300, 512]
-        root_size = '1024'
-        unpacking_dir = main.instance_temp / 'temp_unpacking'
-        unpacking_dir.mkdir()
-        for path in device_icon_dir.iterdir():
-            with Image.open(path) as img:
-                for size in sizes:
-                    resized_img = img.resize((size, size), Resampling.LANCZOS)
-                    resized_img.save(unpacking_dir / path.name.replace(root_size, str(size)))
-        for img_path in unpacking_dir.iterdir():
-            img_path.replace(device_icon_dir / img_path.name)
-
-        shutil.make_archive(str(unpacking_dir / 'driver'), 'zip', instance_driver_path)
-        self.load_c4z(unpacking_dir / 'driver.zip')
-        shutil.rmtree(unpacking_dir)
-
-        main.export_panel.driver_name_entry.delete(0, 'end')
-        main.export_panel.driver_name_entry.insert(0, 'New Driver')
-        main.ask_to_save = False
+        threading.Thread(target=gen_driver_unpack, daemon=True).start()
 
     def update_icon(self):
         if not (icons := self.icons):
@@ -2199,8 +2242,9 @@ class C4zPanel:
         else:
             self.main.edit.entryconfig(self.main.unrestore_all_pos, state=DISABLED)
 
-    def load_c4z(self, file_path=None):
-        if (main := self.main).ask_to_save:
+    def _load_c4z(self, file_path=None, force=False):
+        main = self.main
+        if not force and main.ask_to_save:
             save_dialog_result = StringVar()
             main.ask_to_save_dialog(save_dialog_result, on_exit=False)
             main.root.wait_variable(save_dialog_result)
@@ -2437,8 +2481,7 @@ class C4zPanel:
 
                 return icon_groups
 
-            # TODO: Change this to be a setting?
-            get_all_images = False
+            get_all_images = False  # TODO: Add this as a user setting
             img_paths = new_driver_path if get_all_images else (new_icon_dir, new_images_dir)
             if new_icons := get_icons(img_paths):
                 self.icons = new_icons
@@ -2568,7 +2611,19 @@ class C4zPanel:
 
         main.ask_to_save = False
 
+    def load_c4z(self, file_path=None, force=False, new_thread=True):
+        if not force and self.main.pending_load_save:
+            return
+        self.main.pending_load_save = True
+        if new_thread:
+            threading.Thread(target=self.load_c4z, kwargs={'file_path': file_path, 'force': force, 'new_thread': False},
+                             daemon=True).start()
+            return
+        self._load_c4z(file_path=file_path, force=force)
+
     def restore(self, do_all=False):
+        if self.main.pending_load_save:
+            return
         self.main.update_undo_history()
         if do_all:
             show_extra = self.show_extra_icons.get()
@@ -2581,6 +2636,8 @@ class C4zPanel:
         self.main.ask_to_save = True
 
     def unrestore(self, *_, do_all=False):
+        if self.main.pending_load_save:
+            return
         self.main.update_undo_history()
         if do_all:
             for icon in self.icons:
@@ -2592,7 +2649,7 @@ class C4zPanel:
         self.main.ask_to_save = True
 
     def inc_icon(self, inc=1, validate=True):
-        if not self.main.driver_selected or not inc:
+        if not self.main.driver_selected or not inc or self.main.pending_load_save:
             return
 
         self.current_icon = (self.current_icon + inc) % len(self.icons)
@@ -2643,17 +2700,18 @@ class C4zPanel:
             parent_tag.add_element(conn.tag)
 
     def drop_in_c4z(self, event):
+        if self.main.pending_load_save:
+            return
         paths = parse_drop_event(event)
-        threading.Thread(target=self.main.replacement_panel.load_replacement,
-                         kwargs={'file_path': paths}, daemon=True).start()
         if c4z_path := next((path for path in paths if path.suffix == '.c4z' and path.is_file()), None):
             # noinspection PyUnboundLocalVariable
             self.load_c4z(file_path=c4z_path)
+        self.main.replacement_panel.process_image(file_path=paths)
 
     def right_click_menu(self, event):
         context_menu = Menu(self.main.root, tearoff=0)
         context_menu.add_command(label='View Sub Icons', command=self.toggle_sub_icon_win)
-        menu_state = NORMAL if self.icons else DISABLED
+        menu_state = NORMAL if self.icons and not self.main.pending_load_save else DISABLED
         context_menu.entryconfig(0, state=menu_state)
         context_menu.tk_popup(event.x_root, event.y_root)
         context_menu.grab_release()
@@ -2677,7 +2735,8 @@ class ReplacementPanel:
         self.replacement_icon = None
         self.img_bank, self.img_bank_tk_labels = [], []
         self.img_bank_lockout_dict = {}
-        self.multi_threading = False
+        self.multi_threading = threading.Event()
+        self.multi_threading.set()
         self.replacement_icons_dir = main.instance_temp / 'Replacement Icons'
         self.replacement_icons_dir.mkdir(exist_ok=True)
 
@@ -2691,21 +2750,21 @@ class ReplacementPanel:
         for i in range(main.img_bank_size):
             self.img_bank_tk_labels.append(Label(main.root, image=main.img_bank_blank))
             self.img_bank_tk_labels[-1].image = main.img_bank_blank
-            self.img_bank_tk_labels[-1].bind('<Button-1>', lambda e, bn=i: self.select_img_bank(bn, e))
+            self.img_bank_tk_labels[-1].bind('<Button-1>', lambda e, bn=i: self.select_img_bank(e, bn))
             self.img_bank_tk_labels[-1].bind('<Button-3>', self.right_click_menu)
             self.img_bank_tk_labels[-1].place(x=31 + self.x + x_offset * i, y=176 + self.y, anchor='nw')
             self.img_bank_tk_labels[-1].drop_target_register(DND_FILES)
-            self.img_bank_tk_labels[-1].dnd_bind('<<Drop>>', lambda e, bn=i: self.drop_img_bank(bn, e))
+            self.img_bank_tk_labels[-1].dnd_bind('<<Drop>>', lambda e, bn=i: self.dnd_image(e, bn))
 
         self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
 
         self.replacement_img_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
         self.replacement_img_label.drop_target_register(DND_FILES)
-        self.replacement_img_label.dnd_bind('<<Drop>>', self.drop_in_replacement)
+        self.replacement_img_label.dnd_bind('<<Drop>>', self.dnd_image)
         self.replacement_img_label.bind('<Button-3>', self.right_click_menu)
 
         # Buttons
-        self.open_file_button = Button(main.root, text='Open', width=10, command=self.load_replacement, takefocus=0)
+        self.open_file_button = Button(main.root, text='Open', width=10, command=self.process_image, takefocus=0)
 
         self.replace_all_button = Button(main.root, text='Replace All', command=self.replace_all, takefocus=0)
         self.replace_all_button['state'] = DISABLED
@@ -2713,7 +2772,8 @@ class ReplacementPanel:
         self.replace_button = Button(main.root, text='Replace\nCurrent Icon', command=self.replace_icon, takefocus=0)
         self.replace_button['state'] = DISABLED
 
-        self.prev_icon_button = Button(main.root, text='Prev', command=self.dec_img_bank, width=5, takefocus=0)
+        self.prev_icon_button = Button(main.root, text='Prev', command=lambda: self.inc_img_bank(inc=0),
+                                       width=5, takefocus=0)
         self.prev_icon_button['state'] = DISABLED
 
         self.next_icon_button = Button(main.root, text='Next', command=self.inc_img_bank, width=5, takefocus=0)
@@ -2729,45 +2789,44 @@ class ReplacementPanel:
         self.file_entry_field = Entry(main.root, width=25, takefocus=0)
         self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
         self.file_entry_field.drop_target_register(DND_FILES)
-        self.file_entry_field.dnd_bind('<<Drop>>', self.drop_in_replacement)
+        self.file_entry_field.dnd_bind('<<Drop>>', self.dnd_image)
         self.file_entry_field.insert(0, 'Select image file...')
         self.file_entry_field['state'] = DISABLED
 
-    # TODO: Reevaluate threaded usage; Spam UI while large folder of images is being processed
-    def load_replacement(self, file_path: Path | str | list | tuple = None, bank_index=None):
+    def _process_image(self, file_path: Path | str | list | tuple = None, bank_index=None, threaded=False):
+        if not threaded and not self.multi_threading.is_set():
+            return
         if not file_path:
             if bank_index is None:
-                if self.multi_threading:
-                    return
                 for path in filedialog.askopenfilenames(filetypes=[('Image', ' '.join(valid_img_types))]):
-                    self.load_replacement(file_path=path)
+                    self._process_image(file_path=path, threaded=threaded)
                 return
         elif isinstance(file_path, str):
             file_path = Path(file_path)
         elif isinstance(file_path, tuple) or isinstance(file_path, list):
-            self.multi_threading = True
             for path in file_path:
-                if not path.is_dir():
-                    self.load_replacement(file_path=path)
+                if path.is_file():
+                    self._process_image(file_path=path, bank_index=bank_index, threaded=threaded)
                     continue
                 for directory in list_all_sub_directories(path, include_root_dir=True):
                     for file in directory.iterdir():
-                        if file.suffix in valid_img_types:
-                            self.load_replacement(file_path=file)
-            self.multi_threading = False
+                        if file.is_file():
+                            self._process_image(file_path=file, bank_index=bank_index, threaded=threaded)
             return
-        if not file_path.is_file() or file_path.suffix not in valid_img_types:
+        if file_path and (not file_path.is_file() or file_path.suffix not in valid_img_types):
+            print(f'Issue in load_replacement with file_path: {file_path}')
             return
 
         main = self.main
 
+        # Process image and check if it is already in replacement images folder
         if file_path:
             new_path = self.replacement_icons_dir / file_path.name
             next_num = map(str, itertools.count(1))
             while new_path.is_file():
                 new_path = self.replacement_icons_dir / f'{file_path.stem}{next(next_num)}{file_path.suffix}'
 
-            try:  # Process image and check if it is already in replacement images folder
+            try:
                 Image.MAX_IMAGE_PIXELS = None  # Temporarily allow very large images to be processed; Trusting user
                 with (Image.open(file_path) as img):
                     Image.MAX_IMAGE_PIXELS = max_image_pixels
@@ -2849,6 +2908,7 @@ class ReplacementPanel:
                 self.add_to_img_bank(new_icon, bank_index)
                 return
 
+        # If image not found in existing images
         if self.replacement_icon:
             if bank_index is not None:
                 rp_icon = self.replacement_icon
@@ -2894,6 +2954,18 @@ class ReplacementPanel:
         if main.driver_selected:
             main.ask_to_save = True
 
+    def process_image(self, file_path: Path | str | list | tuple = None, bank_index=None, new_thread=True):
+        if new_thread:
+            threading.Thread(target=self.process_image,
+                             kwargs={'file_path': file_path, 'bank_index': bank_index, 'new_thread': False},
+                             daemon=True).start()
+            return
+
+        with self.main.thread_lock:
+            self.multi_threading.clear()
+            self._process_image(file_path=file_path, bank_index=bank_index, threaded=True)
+            self.multi_threading.set()
+
     def add_to_img_bank(self, img: Icon, bank_index=None):
         if img in self.img_bank:
             return
@@ -2917,28 +2989,21 @@ class ReplacementPanel:
             self.img_bank_tk_labels[i].configure(image=img.tk_icon_sm)
             self.img_bank_tk_labels[i].image = img.tk_icon_sm
 
-    def dec_img_bank(self):
-        if self.multi_threading:
+    def inc_img_bank(self, inc=-1):
+        if not self.multi_threading.is_set():
             return
         if len(self.img_bank) <= self.main.img_bank_size:
             return
-        temp = self.img_bank[0]
-        self.img_bank.pop(0)
-        self.img_bank.append(temp)
-        self.refresh_img_bank()
-
-    def inc_img_bank(self):
-        if self.multi_threading:
-            return
-        if len(self.img_bank) <= self.main.img_bank_size:
-            return
-        temp = self.img_bank[-1]
-        self.img_bank.pop(-1)
-        self.img_bank.insert(0, temp)
+        temp = self.img_bank[inc]
+        self.img_bank.pop(inc)
+        if inc == -1:
+            self.img_bank.insert(0, temp)
+        else:
+            self.img_bank.append(temp)
         self.refresh_img_bank()
 
     def replace_icon(self, update_undo_history=True, c4_icn_index=None):
-        if self.multi_threading:
+        if not self.multi_threading.is_set():
             return
         c4z_panel = self.main.c4z_panel
         if c4_icn_index is None:
@@ -2955,7 +3020,7 @@ class ReplacementPanel:
         self.main.ask_to_save = True
 
     def replace_all(self):
-        if self.multi_threading:
+        if not self.multi_threading.is_set():
             return
         self.main.update_undo_history()
         show_extra = self.main.c4z_panel.show_extra_icons.get()
@@ -2964,8 +3029,8 @@ class ReplacementPanel:
                 continue
             self.replace_icon(update_undo_history=False, c4_icn_index=i)
 
-    def select_img_bank(self, bank_num: int, event):
-        if self.multi_threading:
+    def select_img_bank(self, event, bank_num: int):
+        if not self.multi_threading.is_set():
             return
         if not self.img_bank or len(self.img_bank) <= bank_num or not event:
             return
@@ -2975,27 +3040,13 @@ class ReplacementPanel:
         if (last_time := self.img_bank_lockout_dict.get(bank_key)) and time.time() - last_time < debounce_val:
             return
         self.img_bank_lockout_dict[bank_key] = time.time()
-        self.load_replacement(bank_index=bank_num)
+        self._process_image(bank_index=bank_num)
 
-    def drop_in_replacement(self, event, paths=None):
-        if self.multi_threading:
-            return
-        if not paths:
-            if not (paths := parse_drop_event(event)):
-                return
-        threading.Thread(target=self.load_replacement, kwargs={'file_path': paths}, daemon=True).start()
-
-    def drop_img_bank(self, bank_num: int, event):
-        if self.multi_threading:
-            return
+    def dnd_image(self, event, bank_num: int | None = None):
         paths = parse_drop_event(event)
         if not paths:
             return
-        # If multiple paths, ignore bank_num and load all images as replacement
-        if len(paths) > 1:
-            threading.Thread(target=self.load_replacement, kwargs={'file_path': paths}, daemon=True).start()
-            return
-        self.load_replacement(paths[0], bank_index=bank_num)
+        self.process_image(file_path=paths, bank_index=bank_num)
 
     def right_click_menu(self, event):
         # Assume call from replacement label
