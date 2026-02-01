@@ -175,7 +175,7 @@ class IPC:
 
         port_files = {
             int(re_result.group(1)): path
-            for path in self.appdata_folder.iterdir()
+            for path in self.appdata_dir.iterdir()
             if path.is_file()
             if (re_result := re.search(r'PORT~(\d{5})', path.name))
         }
@@ -464,7 +464,7 @@ class IPC:
 
     def ipc_server_heartbeat(self, port: int, first_time=True):
         heartbeat_interval = 7.77
-        port_file = self.appdata_folder / f'PORT~{port}'
+        port_file = self.appdata_dir / f'PORT~{port}'
         sleep_time = 1.23 if first_time else heartbeat_interval
         while self.is_server:
             port_file.touch()
@@ -480,7 +480,7 @@ class IPC:
         time.sleep(4.20)
         port_files = {
             path_port_int: path
-            for path in self.appdata_folder.iterdir()
+            for path in self.appdata_dir.iterdir()
             if path.is_file()
             if (re_result := re.search(r'PORT~(\d{5})', path.name))
             if (path_port_int := int(re_result.group(1))) != port
@@ -504,7 +504,7 @@ class IPC:
                     self.is_server = False
                     self.finished_server_init = True
                 time.sleep(1.1)  # Ensure server loop exits
-                (self.appdata_folder / f'PORT~{port}').unlink(missing_ok=True)
+                (self.appdata_dir / f'PORT~{port}').unlink(missing_ok=True)
                 print(f'Attempting to connect as client on port: {new_port}')
                 self.ipc(port=new_port)
                 return
@@ -553,11 +553,11 @@ class IPC:
 
     def handle_dead_clients(self, client_paths, recover=False, delete=False):
         if recover:
-            self.recovery_folder.mkdir(exist_ok=True)
+            self.recovery_dir.mkdir(exist_ok=True)
             for path in client_paths:
-                next_num = get_next_num_str(start=len(os.listdir(self.recovery_folder)), yield_start=False)
+                next_num = get_next_num_str(start=len(os.listdir(self.recovery_dir)), yield_start=False)
                 try:
-                    path.replace(self.recovery_folder / next(next_num))
+                    path.replace(self.recovery_dir / next(next_num))
                     print(f'Moved to Recovery: {path}')
                 except PermissionError:
                     print(f'Failed to Move: {path}')
