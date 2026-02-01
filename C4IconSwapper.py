@@ -2612,7 +2612,7 @@ class C4zPanel:
         main.ask_to_save = False
 
     def load_c4z(self, file_path=None, force=False, new_thread=True):
-        if not force and self.main.pending_load_save:
+        if new_thread and self.main.pending_load_save:
             return
         self.main.pending_load_save = True
         if new_thread:
