@@ -70,9 +70,21 @@ max_image_pixels = Image.MAX_IMAGE_PIXELS
 
 # Inter-Process Communication (For running multiple instances simultaneously); Port range: (49200-65500)
 # I'm not very happy with separating the IPC functions into their own class, but I think it makes it more readable
-# noinspection PyUnresolvedReferences
 # noinspection PyAttributeOutsideInit
 class IPC:
+    self: 'C4IconSwapper'
+    root: TkinterDnD.Tk
+    instance_id: str
+    appdata_dir: Path
+    global_temp: Path
+    recovery_dir: Path
+    default_port: int
+    reestablish_ids: set
+    running_as_exe: bool
+    socket_lock: threading.Lock
+    last_seen: dict
+    socket_dict: dict
+
     def ipc(self, takeover=False, port: int = None, first_time=False):
         # noinspection PyShadowingNames
         def establish_self_as_server():
@@ -724,6 +736,7 @@ class C4IconSwapper(IPC):
         self.appdata_dir = Path(os.environ['APPDATA']) / 'C4IconSwapper'
         self.recovery_dir = self.appdata_dir / 'Recovery'
         self.global_temp = self.appdata_dir / 'C4IconSwapperTemp'
+
         self.appdata_dir.mkdir(exist_ok=True)
 
         # Set Instance ID; Check for existing folders with same ID
@@ -757,6 +770,7 @@ class C4IconSwapper(IPC):
         self.socket_lock = threading.Lock()
         self.default_port = 61352
         self.ipc(first_time=True)
+
         self.instance_temp.mkdir()
 
         # Root window title after IPC since ipc can change instance_id
@@ -1053,7 +1067,7 @@ class C4IconSwapper(IPC):
         self.export_panel.include_backups.set(save_state.include_backups)
 
         # Replacement Panel
-        self.replacement_panel.img_bank_select_lockout = {}
+        self.replacement_panel.img_bank_lockout_dict = {}
         replacement_dir = self.replacement_panel.replacement_icons_dir
         shutil.rmtree(replacement_dir, ignore_errors=True)
         replacement_dir.mkdir()
@@ -2662,7 +2676,7 @@ class ReplacementPanel:
         self.x, self.y = (303, 20)
         self.replacement_icon = None
         self.img_bank, self.img_bank_tk_labels = [], []
-        self.img_bank_select_lockout = {}
+        self.img_bank_lockout_dict = {}
         self.multi_threading = False
         self.replacement_icons_dir = main.instance_temp / 'Replacement Icons'
         self.replacement_icons_dir.mkdir(exist_ok=True)
@@ -2956,12 +2970,11 @@ class ReplacementPanel:
         if not self.img_bank or len(self.img_bank) <= bank_num or not event:
             return
         # Debounce stack selection
-        debounce_timer = 0.25
-        selected_bank = f'bank{bank_num}'
-        if (selected_bank in self.img_bank_select_lockout and
-                time.time() - self.img_bank_select_lockout[selected_bank] < debounce_timer):
+        debounce_val = 0.25
+        bank_key = f'bank{bank_num}'
+        if (last_time := self.img_bank_lockout_dict.get(bank_key)) and time.time() - last_time < debounce_val:
             return
-        self.img_bank_select_lockout[selected_bank] = time.time()
+        self.img_bank_lockout_dict[bank_key] = time.time()
         self.load_replacement(bank_index=bank_num)
 
     def drop_in_replacement(self, event, paths=None):
@@ -3004,9 +3017,6 @@ class ReplacementPanel:
         context_menu.tk_popup(event.x_root, event.y_root)
         context_menu.grab_release()
 
-    # TODO: Had unknown bug occur during delete. Unsure of how to reproduce.
-    #  I seem to have the last bank img after clicking delete with no replacement selected.
-    #  Should add img_bank_select_lockout regardless.
     def delete_image(self, img_index: int):
         if not -1 <= img_index < self.main.img_bank_size:
             return
@@ -3018,6 +3028,14 @@ class ReplacementPanel:
             self.replace_button['state'] = DISABLED
             self.replace_all_button['state'] = DISABLED
             return
+
+        # Added this because of a bug that I could not reproduce, but seemed to happen from clicking the bank after
+        # selecting delete, but before the delete was finished.. which doesn't seem possible, but whatever
+        bank_key = f'bank{img_index}'
+        if (last_time := self.img_bank_lockout_dict.get(bank_key)) and time.time() - last_time < 0.25:
+            return
+        self.img_bank_lockout_dict[bank_key] = time.time()
+
         self.img_bank[img_index].path.unlink()
         self.img_bank.pop(img_index)
         if (label_index := len(self.img_bank)) <= self.main.img_bank_size:
