@@ -181,7 +181,7 @@ class IPC:
         }
         do_conflict_check = False
         if not self.global_temp.is_dir():
-            os.mkdir(self.global_temp)
+            self.global_temp.mkdir()
         elif len(port_files) >= 2:
             do_conflict_check = True
 
@@ -553,8 +553,7 @@ class IPC:
 
     def handle_dead_clients(self, client_paths, recover=False, delete=False):
         if recover:
-            if not self.recovery_folder.is_dir():
-                os.mkdir(self.recovery_folder)
+            self.recovery_folder.mkdir(exist_ok=True)
             for path in client_paths:
                 next_num = get_next_num_str(start=len(os.listdir(self.recovery_folder)), yield_start=False)
                 try:
@@ -721,22 +720,20 @@ class C4IconSwapper(IPC):
             self.toggle_debug_console(initialize=True)
 
         # Common Directories
-        self.cur_dir = Path(os.getcwd())
-        self.appdata_folder = Path(os.environ.get('APPDATA')) / 'C4IconSwapper'
-        self.recovery_folder = self.appdata_folder / 'Recovery'
-        self.global_temp = self.appdata_folder / 'C4IconSwapperTemp'
+        self.cur_dir = Path.cwd()
+        self.appdata_dir = Path(os.environ['APPDATA']) / 'C4IconSwapper'
+        self.recovery_dir = self.appdata_dir / 'Recovery'
+        self.global_temp = self.appdata_dir / 'C4IconSwapperTemp'
+        self.appdata_dir.mkdir(exist_ok=True)
 
         # Set Instance ID; Check for existing folders with same ID
         self.instance_id = str(random.randint(111111, 999999))
         self.instance_temp = self.global_temp / self.instance_id
+        # instance_temp folder created after IPC validation
         while self.instance_temp.is_dir():
             self.instance_id = str(random.randint(111111, 999999))
             self.instance_temp = self.global_temp / self.instance_id
         print(f'Set Instance ID: {self.instance_id}')
-        # instance_temp folder created after IPC validation
-
-        if not self.appdata_folder.is_dir():
-            os.mkdir(self.appdata_folder)
 
         # Initialize root window
         self.root = TkinterDnD.Tk()
@@ -760,7 +757,7 @@ class C4IconSwapper(IPC):
         self.socket_lock = threading.Lock()
         self.default_port = 61352
         self.ipc(first_time=True)
-        os.mkdir(self.instance_temp)
+        self.instance_temp.mkdir()
 
         # Root window title after IPC since ipc can change instance_id
         show_id_in_title = not self.running_as_exe and not self.is_server
@@ -854,7 +851,7 @@ class C4IconSwapper(IPC):
 
         if recover_path:
             self.do_recovery(recover_path)
-        elif (self.appdata_folder / 'Recovery').is_dir():
+        elif self.recovery_dir.is_dir():
             # noinspection PyTypeChecker
             self.root.after(10, lambda: RecoveryWin(self))
 
@@ -1059,7 +1056,7 @@ class C4IconSwapper(IPC):
         self.replacement_panel.img_bank_select_lockout = {}
         replacement_dir = self.replacement_panel.replacement_icons_dir
         shutil.rmtree(replacement_dir, ignore_errors=True)
-        os.mkdir(replacement_dir)
+        replacement_dir.mkdir()
         if save_state.replacement:
             rp_img = Image.open(io.BytesIO(save_state.replacement))
             rp_img.save(replacement_dir / 'replacement.png')
@@ -1174,17 +1171,17 @@ class C4IconSwapper(IPC):
             self.root.wait_variable(save_dialog_result)
             if save_dialog_result.get() not in ('do', 'dont'):
                 return
-        if (recovery_path := self.appdata_folder / 'Recovery').is_dir() and not any(recovery_path.iterdir()):
-            shutil.rmtree(recovery_path)
-            print('Deleted empty Recovery folder')
+        if self.recovery_dir.is_dir() and not any(self.recovery_dir.iterdir()):
+            shutil.rmtree(self.recovery_dir)
+            print('Removed Empty Recovery Folder')
         if not self.is_server:
             print('')
         if self.is_server and not self.client_dict and self.finished_server_init:
             shutil.rmtree(self.global_temp)
-            print('Global Delete')
+            print('Removed Global Temp')
         else:
             shutil.rmtree(self.instance_temp)
-            print('Local Delete')
+            print('Removed Instance Temp')
 
         self.root.destroy()
 
@@ -1401,8 +1398,7 @@ class SubIconWin:
         context_menu.grab_release()
 
     def open_icon_folder(self, *_):
-        path = os.path.normpath(self.icons[self.curr_index].path)  # normalize just to be safe
-        subprocess.Popen(f'explorer /select,"{path}"')
+        subprocess.Popen(f'explorer /select,"{self.icons[self.curr_index].path.resolve()}"')
 
 
 class DriverInfoWin:
@@ -1811,23 +1807,23 @@ class StateEntry:
 
 class RecoveryWin:
     def __init__(self, main: C4IconSwapper):
-        if not (recovery_path := main.appdata_folder / 'Recovery').is_dir():
+        if not (recovery_dir := main.recovery_dir).is_dir():
             return
         # Delete any non-directories in Recovery folder (Just in case)
-        for path in recovery_path.iterdir():
+        for path in recovery_dir.iterdir():
             if path.is_dir():
                 continue
             path.unlink()
             print(f'Deleted invalid item from Recovery folder {path.name}')
-        if not (num_of_rec_folders := len(os.listdir(recovery_path))):
-            shutil.rmtree(recovery_path)
+        if not (num_of_rec_folders := len(os.listdir(recovery_dir))):
+            shutil.rmtree(recovery_dir)
             if not main.is_server:
                 print('')
             print('Deleted empty Recovery folder')
             return
         self.window = window = Toplevel(main.root)
         self.main = main
-        self.recovery_path = recovery_path
+        self.recovery_dir = recovery_dir
         window.grab_set()
         window.focus()
         window.transient(main.root)
@@ -1837,7 +1833,7 @@ class RecoveryWin:
         window.resizable(False, False)
         window.protocol('WM_DELETE_WINDOW', self.close_dialog)
 
-        self.recoverable_projects = [rec_obj for path in recovery_path.iterdir() if (rec_obj := RecoveryObject(path))]
+        self.recoverable_projects = [rec_obj for path in recovery_dir.iterdir() if (rec_obj := RecoveryObject(path))]
 
         title_label = Label(window, text='Select Projects to Recover', font=(label_font, 14))
         title_label.place(relx=0.5, y=5, anchor='n')
@@ -1879,7 +1875,7 @@ class RecoveryWin:
             self.window.focus()
 
         def do_delete():
-            shutil.rmtree(self.recovery_path)
+            shutil.rmtree(self.recovery_dir)
             close_dialog.destroy()
             self.window.destroy()
             self.main.root.deiconify()
@@ -1966,7 +1962,7 @@ class RecoveryWin:
                 args = [sys.executable, recovery_obj.path]
             else:
                 # Path to exe, path to python script, recovery path variable
-                args = [sys.executable, os.path.abspath(sys.argv[0]), recovery_obj.path]
+                args = [sys.executable, Path(__file__).resolve(), recovery_obj.path]
 
             # Start debug console hidden
             startupinfo = subprocess.STARTUPINFO()
@@ -1986,20 +1982,30 @@ class RecoveryWin:
 
 class RecoveryObject:
     def __init__(self, instance_path: Path):
+        self.init_success = False
         if not instance_path.is_dir():
             return
-        self.name = 'MsgNotFound' if (instance_path / 'driver').exists() else 'No Driver'
+        self.name = ''
         self.path = instance_path
         self.num_images = 0
-        self.mtime = datetime.fromtimestamp(os.path.getmtime(instance_path)).strftime("%m/%d %H:%M:%S")
+        self.mtime = datetime.fromtimestamp(instance_path.stat().st_mtime).strftime("%m/%d %H:%M:%S")
         self.recover = IntVar()
 
-        for path in instance_path.iterdir():
-            if path.name == 'driver' and (xml_path := path / 'driver.xml').is_file():
-                if (name_tag := XMLTag(xml_path=xml_path, sub_tag='name')) and (name := name_tag.value()):
-                    self.name = name
-            elif path.name == 'Replacement Icons':
-                self.num_images = len(os.listdir(path))
+        xml_path = instance_path / 'driver' / 'driver.xml'
+        replacement_path = instance_path / 'Replacement Icons'
+        if xml_path.is_file() and (tag := XMLTag(xml_path=xml_path, sub_tag='name')) and (name := tag.value()):
+            self.name = name
+        if replacement_path.is_dir():
+            self.num_images = len(os.listdir(replacement_path))
+
+        if not self.name:
+            if not self.num_images:
+                return
+            self.name = 'MsgNotFound' if xml_path.parent.exists() else 'No Driver'
+        self.init_success = True
+
+    def __bool__(self):
+        return self.init_success
 
 
 class C4zPanel:
@@ -2114,7 +2120,7 @@ class C4zPanel:
         sizes = [70, 90, 300, 512]
         root_size = '1024'
         unpacking_dir = main.instance_temp / 'temp_unpacking'
-        os.mkdir(unpacking_dir)
+        unpacking_dir.mkdir()
         for path in device_icon_dir.iterdir():
             with Image.open(path) as img:
                 for size in sizes:
@@ -2267,37 +2273,36 @@ class C4zPanel:
                     except (UnidentifiedImageError, OSError):
                         print(f'Issue with item in get_icons: {path}')
                         continue
-                    file_stem, file_ext = os.path.splitext(path.name)
                     bak_path = bak_files.get(path.with_suffix(''))
-                    img_info = re.search(r'^(?:(\d+)_)?(.+?)(?:_(\d+))?$', file_stem).groups()
+                    img_info = re.search(r'^(?:(\d+)_)?(.+?)(?:_(\d+))?$', path.stem).groups()
                     l_label, img_name, r_label = img_info[0], img_info[1], img_info[2]
-                    if not img_name or file_stem in ('device_sm', 'device_lg'):
-                        img_name = file_stem
+                    if not img_name or path.stem in ('device_sm', 'device_lg'):
+                        img_name = path.stem
                     # If XOR left/right size labels exist
                     if bool(l_label) ^ bool(r_label):
                         if (l_label and int(l_label) == actual_size) or int(r_label) == actual_size:
-                            icon_groups[img_name].append(C4SubIcon(self.main.instance_id, path, img_name,
-                                                                   actual_size, bak_path=bak_path))
-                            all_sub_icons.append(icon_groups[img_name][-1])
+                            sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
+                            icon_groups[img_name].append(sub_icon)
+                            all_sub_icons.append(sub_icon)
                             continue
                     elif l_label and r_label:
                         r_size = int(r_label)
                         if l_label == r_label and r_size == actual_size:
-                            both_scheme.append(C4SubIcon(self.main.instance_id, path, img_name,
-                                                         actual_size, bak_path=bak_path))
-                            all_sub_icons.append(both_scheme[-1])
+                            sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
+                            both_scheme.append(sub_icon)
+                            all_sub_icons.append(sub_icon)
                             continue
                         elif r_size == actual_size:
                             img_name = f'{l_label}_{img_name}'
                         elif int(l_label) == actual_size:
                             img_name = f'{img_name}_{r_label}'
-                        icon_groups[img_name].append(C4SubIcon(self.main.instance_id, path, img_name,
-                                                               actual_size, bak_path=bak_path))
-                        all_sub_icons.append(icon_groups[img_name][-1])
+                        sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
+                        icon_groups[img_name].append(sub_icon)
+                        all_sub_icons.append(sub_icon)
                         continue
-                    icon_groups[img_name].append(C4SubIcon(self.main.instance_id, path, img_name,
-                                                           actual_size, bak_path=bak_path))
-                    all_sub_icons.append(icon_groups[img_name][-1])
+                    sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
+                    icon_groups[img_name].append(sub_icon)
+                    all_sub_icons.append(sub_icon)
 
                 # Handle icons which have numbers on both sides that match their size
                 for sub_icon in both_scheme:
@@ -2354,7 +2359,7 @@ class C4zPanel:
                     if not (group_list := [subicon for subicon in icon_groups[key] if subicon in all_sub_icons]):
                         continue
                     for sub_icon in group_list:
-                        if extra_flag and os.path.basename(os.path.dirname(sub_icon.path)) == 'device':
+                        if extra_flag and sub_icon.path.parent.name == 'device':
                             extra_flag = False
                     if extra_flag:
                         extras.append(C4Icon(group_list))
@@ -2660,8 +2665,7 @@ class ReplacementPanel:
         self.img_bank_select_lockout = {}
         self.multi_threading = False
         self.replacement_icons_dir = main.instance_temp / 'Replacement Icons'
-        if not self.replacement_icons_dir.is_dir():
-            os.mkdir(self.replacement_icons_dir)
+        self.replacement_icons_dir.mkdir(exist_ok=True)
 
         # Labels
         self.panel_label = Label(main.root, text='Replacement Icons', font=(label_font, 15))
@@ -2738,7 +2742,7 @@ class ReplacementPanel:
                             self.load_replacement(file_path=file)
             self.multi_threading = False
             return
-        elif not file_path.is_file() or not os.path.splitext(file_path)[1].lower() in valid_img_types:
+        if not file_path.is_file() or file_path.suffix not in valid_img_types:
             return
 
         main = self.main
@@ -2749,74 +2753,80 @@ class ReplacementPanel:
             while new_path.is_file():
                 new_path = self.replacement_icons_dir / f'{file_path.stem}{next(next_num)}{file_path.suffix}'
 
-            try:
-                Image.MAX_IMAGE_PIXELS = None
+            try:  # Process image and check if it is already in replacement images folder
+                Image.MAX_IMAGE_PIXELS = None  # Temporarily allow very large images to be processed; Trusting user
                 with (Image.open(file_path) as img):
                     Image.MAX_IMAGE_PIXELS = max_image_pixels
                     img.draft('RGB', (1024, 1024))
                     img.thumbnail((1024, 1024), Resampling.LANCZOS)
                     img.save(new_path)
-                    new_file_size = os.path.getsize(new_path)
+                    new_file_size = new_path.stat().st_size
                     # Check if image already in replacement icons directory
                     for cmp_path in self.replacement_icons_dir.iterdir():
-                        if os.path.getsize(cmp_path) != new_file_size:
+                        if cmp_path.stat().st_size != new_file_size:
                             continue
                         if cmp_path == new_path or not filecmp.cmp(cmp_path, new_path):
                             continue
+                        # If image already in directory
                         new_path.unlink()
-                        if not self.img_bank or (len(self.img_bank) < main.img_bank_size and self.replacement_icon):
-                            if bank_index is None:
-                                return
-                            self.img_bank.append(self.replacement_icon)
-                            self.refresh_img_bank()
-                            self.replacement_icon = None
-                            self.replacement_img_label.config(image=main.img_blank)
-                            self.replacement_img_label.image = main.img_blank
-                            self.replace_button['state'] = DISABLED
-                            self.replace_all_button['state'] = DISABLED
-                            return
-                        elif (self.replacement_icon and
-                                self.replacement_icon.path == cmp_path and bank_index is not None):
-                            rp_icon = self.replacement_icon
-                            max_bank_size = main.img_bank_size - 1
+                        # If image is dropped on bank
+                        if bank_index is not None:
+                            # Set bank index to last image if it is set outside current bank size
                             cur_bank_size = len(self.img_bank) - 1
-                            bank_index = bank_index if cur_bank_size >= max_bank_size else cur_bank_size
-                            self.replacement_icon = self.img_bank[bank_index]
-                            self.img_bank[bank_index] = rp_icon
+                            drop_on_blank = False
+                            if not bank_index <= cur_bank_size:
+                                drop_on_blank = True
+                                bank_index = cur_bank_size
+                            # If existing replacement image is dropped onto img_bank
+                            if bank_index == -1 or (self.replacement_icon and self.replacement_icon.path == cmp_path):
+                                if not drop_on_blank and bank_index >= 0:
+                                    rp_icon = self.replacement_icon
+                                    self.replacement_icon = self.img_bank[bank_index]
+                                    self.img_bank[bank_index] = rp_icon
+                                    self.replacement_img_label.configure(image=self.replacement_icon.tk_icon_lg)
+                                    self.replacement_img_label.image = self.replacement_icon.tk_icon_lg
+                                else:
+                                    self.img_bank.append(self.replacement_icon)
+                                    self.replacement_icon = None
+                                    self.replacement_img_label.config(image=main.img_blank)
+                                    self.replacement_img_label.image = main.img_blank
+                                    self.replace_button['state'] = DISABLED
+                                    self.replace_all_button['state'] = DISABLED
+                                self.refresh_img_bank()
+                                return
+                            # If existing image is dropped onto itself
+                            if self.img_bank[bank_index].path == cmp_path:
+                                return
+                            # If existing image is dropped onto another image in img_bank
+                            existing_icon = next((icon for icon in self.img_bank if icon.path == cmp_path))
+                            existing_index = self.img_bank.index(existing_icon)
+                            swap_icon = self.img_bank[bank_index]
+                            self.img_bank[bank_index] = existing_icon
+                            self.img_bank[existing_index] = swap_icon
+                            self.refresh_img_bank()
+                            return
+                        else:  # If image is dropped on replacement
+                            existing_icon = next((icon for icon in self.img_bank if icon.path == cmp_path))
+                            bank_index = self.img_bank.index(existing_icon)
+                            if self.replacement_icon:
+                                rp_icon = self.replacement_icon
+                                self.replacement_icon = existing_icon
+                                self.img_bank[bank_index] = rp_icon
+                            else:  # If dropped on blank replacement
+                                self.replacement_icon = self.img_bank.pop(bank_index)
+                                self.img_bank_tk_labels[bank_index].configure(image=main.img_bank_blank)
+                                self.img_bank_tk_labels[bank_index].image = main.img_bank_blank
+                                if main.driver_selected:
+                                    self.replace_button['state'] = NORMAL
+                                    self.replace_all_button['state'] = NORMAL
+                                if len(self.img_bank) <= main.img_bank_size:
+                                    self.prev_icon_button['state'] = DISABLED
+                                    self.next_icon_button['state'] = DISABLED
                             self.replacement_img_label.configure(image=self.replacement_icon.tk_icon_lg)
                             self.replacement_img_label.image = self.replacement_icon.tk_icon_lg
                             self.refresh_img_bank()
                             return
-                        elif bank_index is None:
-                            if existing_icon := next((icon for icon in self.img_bank if icon.path == cmp_path), None):
-                                rp_icon = self.replacement_icon if self.replacement_icon else None
-                                bank_index = self.img_bank.index(existing_icon)
-                                if rp_icon:
-                                    self.replacement_icon = existing_icon
-                                    self.img_bank[bank_index] = rp_icon
-                                else:
-                                    self.replacement_icon = self.img_bank.pop(bank_index)
-                                    self.img_bank_tk_labels[bank_index].configure(image=main.img_bank_blank)
-                                    self.img_bank_tk_labels[bank_index].image = main.img_bank_blank
-                                    if len(self.img_bank) <= main.img_bank_size:
-                                        self.prev_icon_button['state'] = DISABLED
-                                        self.next_icon_button['state'] = DISABLED
-                                self.refresh_img_bank()
-                                self.replacement_img_label.configure(image=self.replacement_icon.tk_icon_lg)
-                                self.replacement_img_label.image = self.replacement_icon.tk_icon_lg
-                                return
-                        if not len(self.img_bank) > 1:
-                            return
-                        if not (existing_icon := next((icon for icon in self.img_bank if icon.path == cmp_path), None)):
-                            return
-                        existing_index = self.img_bank.index(existing_icon)
-                        if existing_index == bank_index or bank_index > len(self.img_bank) - 1:
-                            return
-                        swap_icon = self.img_bank[bank_index]
-                        self.img_bank[bank_index] = existing_icon
-                        self.img_bank[existing_index] = swap_icon
-                        self.refresh_img_bank()
-                        return
+
                     new_icon = Icon(new_path, img=img)
             finally:
                 Image.MAX_IMAGE_PIXELS = max_image_pixels
@@ -2954,7 +2964,6 @@ class ReplacementPanel:
         self.img_bank_select_lockout[selected_bank] = time.time()
         self.load_replacement(bank_index=bank_num)
 
-    # TODO: Bug if existing img in bank is dropped on replacement, it does not swap
     def drop_in_replacement(self, event, paths=None):
         if self.multi_threading:
             return
@@ -2963,8 +2972,6 @@ class ReplacementPanel:
                 return
         threading.Thread(target=self.load_replacement, kwargs={'file_path': paths}, daemon=True).start()
 
-    # TODO: Bug if existing bank img is dropped in while bank is not full and existing replacement img,
-    #  replacement is moved to bank
     def drop_img_bank(self, bank_num: int, event):
         if self.multi_threading:
             return
@@ -3110,7 +3117,7 @@ class ExportPanel:
         if not self.include_backups.get():
             directories = list_all_sub_directories(driver_folder, include_root_dir=True)
             shutil.rmtree(bak_folder, ignore_errors=True)
-            os.mkdir(bak_folder)
+            bak_folder.mkdir()
             suffix_num = map(str, itertools.count(0))
             for directory in directories:
                 for path in directory.iterdir():
@@ -3333,7 +3340,7 @@ class ExportPanel:
         # Make icon changes
         bak_folder = main.instance_temp / 'bak_files'
         shutil.rmtree(bak_folder, ignore_errors=True)
-        os.mkdir(bak_folder)
+        bak_folder.mkdir()
         include_bak = self.include_backups.get()
         for icon in main.c4z_panel.icons:
             if icon.replacement_icon:
