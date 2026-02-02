@@ -68,6 +68,11 @@ if hasattr(sys, '_MEIPASS'):
 
 max_image_pixels = Image.MAX_IMAGE_PIXELS
 
+# TODO: Organize/Standardize all class inits
+# TODO: Add default Manufacturer, Creator, include backups, and increment driver ver as setting
+# TODO: Add default folder for quick export as setting
+# TODO: Make sure c4z and c4is can be loaded with alternate extensions
+
 
 # Inter-Process Communication (For running multiple instances simultaneously); Port range: (49200-65500)
 # I'm not very happy with separating the IPC functions into their own class, but I think it makes it more readable
@@ -621,7 +626,7 @@ class IPC:
             print('Nothing to clean up')
 
 
-# TODO: Prompt during load_c4is and recovery if user wants to merge or overwrite existing replacement images.
+# TODO: Prompt during load_c4is and recovery if user wants to merge with or overwrite existing project
 #  Add option to not ask again
 class C4IconSwapper(IPC):
     def __init__(self):
@@ -1287,7 +1292,7 @@ class SettingsWin:
         self.window.protocol('WM_DELETE_WINDOW', self.close)
         self.window.title('Settings')
         self.window.geometry('255x240')
-        self.window.geometry(f'+{main.root.winfo_rootx() + main.export_panel.x}+{main.root.winfo_rooty()}')
+        self.window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
 
         self.title = Label(self.window, text='User Settings', font=(label_font, 12, 'bold'))
@@ -1508,7 +1513,7 @@ class DriverInfoWin:
         self.window.focus()
         self.window.protocol('WM_DELETE_WINDOW', self.close)
         self.window.title('Edit Driver Info')
-        self.window.geometry('255x240')
+        self.window.geometry('255x215')
         self.window.geometry(f'+{main.root.winfo_rootx() + main.export_panel.x}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
 
@@ -1519,65 +1524,68 @@ class DriverInfoWin:
             main.driver_version_new_var.set(str(int(main.driver_version_var.get()) + 1))
 
         # Labels
-        instance_id_label = Label(self.window, text=f'program instance id: {main.instance_id}')
-
+        font_size = 10
         man_y = 20
         man_arrow = Label(self.window, text='\u2192', font=('', 15))
+        man_arrow.place(x=115, y=man_y, anchor='nw')
 
         creator_y = man_y + 55
         creator_arrow = Label(self.window, text='\u2192', font=('', 15))
+        creator_arrow.place(x=115, y=creator_y, anchor='nw')
 
         version_y = creator_y + 55
         version_arrow = Label(self.window, text='\u2192', font=('', 15))
+        version_arrow.place(x=115, y=version_y, anchor='nw')
 
-        font_size = 10
         driver_ver_orig_label = Label(self.window, text='Original Version:', font=(label_font, 8))
+        driver_ver_orig_label.place(x=110, y=version_y + 45, anchor='ne')
+
         driver_man_label = Label(self.window, text='Driver Manufacturer', font=(label_font, font_size))
+        driver_man_label.place(x=127, y=man_y - 15, anchor='n')
+
         driver_creator_label = Label(self.window, text='Driver Creator', font=(label_font, font_size))
+        driver_creator_label.place(x=127, y=creator_y - 15, anchor='n')
+
         driver_ver_label = Label(self.window, text='Driver Version', font=(label_font, font_size))
+        driver_ver_label.place(x=127, y=version_y - 15, anchor='n')
 
         # Entry
         entry_width = 17
         driver_man_entry = Entry(self.window, width=entry_width, textvariable=main.driver_manufac_var)
+        driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
         driver_man_entry['state'] = DISABLED
         self.driver_man_new_entry = Entry(self.window, width=entry_width,
                                           textvariable=main.driver_manufac_new_var)
+        self.driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
         main.driver_manufac_new_var.trace_add('write',
                                               lambda name, index, mode: self.validate_man_and_creator(
                                                   entry=self.driver_man_new_entry))
 
         driver_creator_entry = Entry(self.window, width=entry_width, textvariable=main.driver_creator_var)
+        driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
         driver_creator_entry['state'] = DISABLED
+
         self.driver_creator_new_entry = Entry(self.window, width=entry_width,
                                               textvariable=main.driver_creator_new_var)
+        self.driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
         main.driver_creator_new_var.trace_add('write',
                                               lambda name, index, mode: self.validate_man_and_creator(
                                                   string_var=main.driver_creator_new_var,
                                                   entry=self.driver_creator_new_entry))
 
         driver_ver_entry = Entry(self.window, width=entry_width, textvariable=main.driver_version_var)
+        driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
         driver_ver_entry['state'] = DISABLED
+
         self.driver_ver_new_entry = Entry(self.window, width=entry_width,
                                           textvariable=main.driver_version_new_var)
+        self.driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
         self.driver_ver_new_entry.bind('<FocusOut>', main.export_panel.update_driver_version)
         main.driver_version_new_var.trace_add('write', self.validate_driver_ver)
+
         driver_ver_orig_entry = Entry(self.window, width=6, textvariable=main.driver_ver_orig)
+        driver_ver_orig_entry.place(x=110, y=version_y + 45, anchor='nw')
         driver_ver_orig_entry['state'] = DISABLED
-        instance_id_label.place(x=127, y=220, anchor='n')
-        man_arrow.place(x=115, y=man_y, anchor='nw')
-        creator_arrow.place(x=115, y=creator_y, anchor='nw')
-        version_arrow.place(x=115, y=version_y, anchor='nw')
-        driver_man_label.place(x=127, y=man_y - 15, anchor='n')
-        driver_creator_label.place(x=127, y=creator_y - 15, anchor='n')
-        driver_ver_label.place(x=127, y=version_y - 15, anchor='n')
-        driver_ver_orig_label.place(x=110, y=version_y + 30, anchor='ne')
-        driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
-        self.driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
-        driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
-        self.driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
-        driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
-        self.driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
-        driver_ver_orig_entry.place(x=110, y=version_y + 30, anchor='nw')
 
     def validate_man_and_creator(self, string_var=None, entry=None):
         if not string_var or not entry:
@@ -2406,7 +2414,7 @@ class C4zPanel:
                     bak_path = bak_files.get(path.with_suffix(''))
                     img_info = re.search(r'^(?:(\d+)_)?(.+?)(?:_(\d+))?$', path.stem).groups()
                     l_label, img_name, r_label = img_info[0], img_info[1], img_info[2]
-                    if not img_name or path.stem in ('device_sm', 'device_lg'):
+                    if not img_name:
                         img_name = path.stem
                     # If XOR left/right size labels exist
                     if bool(l_label) ^ bool(r_label):
@@ -2460,28 +2468,33 @@ class C4zPanel:
                 extras = []
                 standard_icons = []
                 group_dict = get_icon_groups()
+                device_group = defaultdict(list)
+                split_match = {'icons', 'images'}
+                device_names = {'device_sm', 'device_lg'}
                 for group in group_dict:
                     group_list = []
                     # range(start, stop, step)
                     for i in range(len(all_sub_icons) - 1, -1, -1):
                         parts = all_sub_icons[i].rel_path.parts
-                        split_point = next((idx for idx, part in enumerate(parts) if part in {'icons', 'images'}), -1)
-                        if Path(*parts[split_point + 1:]) in group_dict[group]:
+                        split_point = next((idx for idx, part in enumerate(parts) if part in split_match), -1)
+                        if Path(*parts[split_point:]) in group_dict[group]:
+                            if all_sub_icons[i].path.stem in device_names:
+                                device_group[group[0]].append(all_sub_icons.pop(i))
+                                continue
                             group_list.append(all_sub_icons.pop(i))
                     if not group_list:
                         continue
                     standard_icons.append(C4Icon(group_list, name=group[0]))
 
-                # Separate 'device' icons from list
-                device_group = []
+                # Separate any remaining 'device' icons from list
                 for i in range(len(all_sub_icons) - 1, -1, -1):
                     sub_icon = all_sub_icons[i]
-                    if sub_icon.path.parent == new_icon_dir:
-                        if sub_icon.name == 'device_sm':
-                            device_group.append(all_sub_icons.pop(i))
-                        elif sub_icon.name == 'device_lg':
-                            device_group.append(all_sub_icons.pop(i))
-                            continue
+                    if sub_icon.name not in device_names:
+                        continue
+                    if (parent_dir := sub_icon.path.parent) == new_icon_dir:
+                        device_group['device'].append(all_sub_icons.pop(i))
+                    else:
+                        device_group[str(parent_dir.stem)].append(all_sub_icons.pop(i))
 
                 # Divide icons into 'standard' and 'extra'
                 for key in icon_groups:
@@ -2503,10 +2516,10 @@ class C4zPanel:
                     for icon in extras:
                         icon.extra = False
 
-                if device_group:
-                    output.append(C4Icon(device_group))
                 standard_icons.sort(key=lambda c4icon: natural_key(c4icon.name))
                 output.extend(standard_icons)
+                for group_name, group in device_group.items():
+                    output.append(C4Icon(group, name=f'*{group_name}'))
                 extras.sort(key=lambda c4icon: natural_key(c4icon.name))
                 output.extend(extras)
                 self.extra_icons = sum(icon.extra for icon in output)
@@ -2530,10 +2543,12 @@ class C4zPanel:
                     group_name = tag.parent.attributes.get('id')
                     rel_path = tag_value.split('controller://')[1]
                     if 'icons' in rel_path:
-                        rel_path = rel_path.split('icons')[1].lstrip('/\\')
+                        rel_path = Path('icons', rel_path.split('icons')[1].lstrip('/\\'))
                     elif 'images' in rel_path:
-                        rel_path = rel_path.split('images')[1].lstrip('/\\')
-                    icon_groups[(group_name if group_name else tag.parent.name, tag.parent)].add(Path(rel_path))
+                        rel_path = Path('images', rel_path.split('images')[1].lstrip('/\\'))
+                    else:
+                        rel_path = Path(rel_path)
+                    icon_groups[(group_name if group_name else tag.parent.name, tag.parent)].add(rel_path)
 
                 seen_groups = {}
                 duplicates = set()
