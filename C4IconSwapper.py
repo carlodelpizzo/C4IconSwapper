@@ -1381,8 +1381,11 @@ class C4SubIcon:
 
 
 class C4Icon(Icon):
-    def __init__(self, icons: list[C4SubIcon], name=None, replacement_icon=None, extra=False):
-        icons.sort(key=lambda sub_icon: sub_icon.size[0], reverse=True)
+    def __init__(self, icons: list[C4SubIcon] | set[C4SubIcon], name=None, replacement_icon=None, extra=False):
+        if isinstance(icons, set):
+            icons = sorted(icons, key=lambda sub_icon: sub_icon.size[0], reverse=True)
+        else:
+            icons.sort(key=lambda sub_icon: sub_icon.size[0], reverse=True)
         self.display_icon = icons[0]
         super().__init__(path=self.display_icon.path)
         self.tk_icon_sm = None
@@ -2369,7 +2372,7 @@ class C4zPanel:
 
         # Get icons
         if not abort:
-            # TODO: Fix issue with 'device_sm/lg' icon grouping in tv_ir_sony_KDL-32RE400.c4z
+            # TODO: Extract icon name from proxy reference - tv_ir_sony_KDL-32RE400.c4z
             # noinspection PyShadowingNames
             def get_icons(root_directory):
                 if not root_directory:
@@ -2390,9 +2393,9 @@ class C4zPanel:
                     return []
                 self.extra_icons = 0
                 output = []
-                icon_groups = defaultdict(list)
-                both_scheme = deque()
-                all_sub_icons = []
+                icon_groups = defaultdict(set)
+                both_scheme = []
+                all_sub_icons = set()
                 all_paths = [path for directory in directories for path in directory.iterdir()]
                 bak_pattern = re.compile(r'\.bak[^.]*$')
                 bak_files = {
@@ -2420,27 +2423,27 @@ class C4zPanel:
                     if bool(l_label) ^ bool(r_label):
                         if (l_label and int(l_label) == actual_size) or int(r_label) == actual_size:
                             sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
-                            icon_groups[img_name].append(sub_icon)
-                            all_sub_icons.append(sub_icon)
+                            icon_groups[img_name].add(sub_icon)
+                            all_sub_icons.add(sub_icon)
                             continue
                     elif l_label and r_label:
                         r_size = int(r_label)
                         if l_label == r_label and r_size == actual_size:
                             sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
                             both_scheme.append(sub_icon)
-                            all_sub_icons.append(sub_icon)
+                            all_sub_icons.add(sub_icon)
                             continue
                         elif r_size == actual_size:
                             img_name = f'{l_label}_{img_name}'
                         elif int(l_label) == actual_size:
                             img_name = f'{img_name}_{r_label}'
                         sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
-                        icon_groups[img_name].append(sub_icon)
-                        all_sub_icons.append(sub_icon)
+                        icon_groups[img_name].add(sub_icon)
+                        all_sub_icons.add(sub_icon)
                         continue
                     sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
-                    icon_groups[img_name].append(sub_icon)
-                    all_sub_icons.append(sub_icon)
+                    icon_groups[img_name].add(sub_icon)
+                    all_sub_icons.add(sub_icon)
 
                 # Handle icons which have numbers on both sides that match their size
                 for sub_icon in both_scheme:
@@ -2452,63 +2455,66 @@ class C4zPanel:
                     if not found:
                         icon_name = f'{sub_icon.size[0]}_{sub_icon.name}_{sub_icon.size[0]}'
                         sub_icon.name = icon_name
-                        icon_groups[icon_name].append(sub_icon)
+                        icon_groups[icon_name].add(sub_icon)
                     elif found == 'r':
                         icon_name = f'{sub_icon.size[0]}_{sub_icon.name}'
                         sub_icon.name = icon_name
-                        icon_groups[icon_name].append(sub_icon)
+                        icon_groups[icon_name].add(sub_icon)
                     elif found == 'l':
                         icon_name = f'{sub_icon.name}_{sub_icon.size[0]}'
                         sub_icon.name = icon_name
-                        icon_groups[icon_name].append(sub_icon)
+                        icon_groups[icon_name].add(sub_icon)
                     else:
                         warnings.warn(f'Failed to parse icon data: {sub_icon.path}', RuntimeWarning)
 
                 # Use XML data to form icon groups
-                extras = []
-                standard_icons = []
+                extras = set()
+                standard_icons = set()
                 group_dict = get_icon_groups()
-                device_group = defaultdict(list)
+                device_group = defaultdict(set)
                 split_match = {'icons', 'images'}
                 device_names = {'device_sm', 'device_lg'}
                 for group in group_dict:
-                    group_list = []
-                    # range(start, stop, step)
-                    for i in range(len(all_sub_icons) - 1, -1, -1):
-                        parts = all_sub_icons[i].rel_path.parts
+                    group_set = set()
+                    for sub_icon in list(all_sub_icons):
+                        parts = sub_icon.rel_path.parts
                         split_point = next((idx for idx, part in enumerate(parts) if part in split_match), -1)
                         if Path(*parts[split_point:]) in group_dict[group]:
-                            if all_sub_icons[i].path.stem in device_names:
-                                device_group[group[0]].append(all_sub_icons.pop(i))
+                            if sub_icon.path.stem in device_names:
+                                all_sub_icons.remove(sub_icon)
+                                device_group[group[0]].add(sub_icon)
                                 continue
-                            group_list.append(all_sub_icons.pop(i))
-                    if not group_list:
+                            all_sub_icons.remove(sub_icon)
+                            group_set.add(sub_icon)
+                    if not group_set:
                         continue
-                    standard_icons.append(C4Icon(group_list, name=group[0]))
+                    standard_icons.add(C4Icon(group_set, name=group[0]))
 
                 # Separate any remaining 'device' icons from list
-                for i in range(len(all_sub_icons) - 1, -1, -1):
-                    sub_icon = all_sub_icons[i]
+                for sub_icon in list(all_sub_icons):
                     if sub_icon.name not in device_names:
                         continue
                     if (parent_dir := sub_icon.path.parent) == new_icon_dir:
-                        device_group['device'].append(all_sub_icons.pop(i))
+                        all_sub_icons.remove(sub_icon)
+                        device_group['device'].add(sub_icon)
                     else:
-                        device_group[str(parent_dir.stem)].append(all_sub_icons.pop(i))
+                        all_sub_icons.remove(sub_icon)
+                        device_group[str(parent_dir.stem)].add(sub_icon)
 
                 # Divide icons into 'standard' and 'extra'
                 for key in icon_groups:
                     extra_flag = True
-                    if not (group_list := [subicon for subicon in icon_groups[key] if subicon in all_sub_icons]):
+                    if not (group_set := [subicon for subicon in icon_groups[key] if subicon in all_sub_icons]):
                         continue
-                    for sub_icon in group_list:
+                    for sub_icon in group_set:
                         if extra_flag and sub_icon.path.parent.name == 'device':
                             extra_flag = False
                     if extra_flag:
-                        extras.append(C4Icon(group_list))
-                        extras[-1].extra = True
+                        new_icon = C4Icon(group_set)
+                        new_icon.extra = True
+                        extras.add(new_icon)
                         continue
-                    standard_icons.append(C4Icon(group_list))
+                    standard_icons.add(C4Icon(group_set))
 
                 # Mark extra icons as standard if no standard icons found
                 if not standard_icons and not device_group and extras:
@@ -2516,12 +2522,10 @@ class C4zPanel:
                     for icon in extras:
                         icon.extra = False
 
-                standard_icons.sort(key=lambda c4icon: natural_key(c4icon.name))
-                output.extend(standard_icons)
+                output.extend(sorted(standard_icons, key=lambda c4icon: natural_key(c4icon.name)))
                 for group_name, group in device_group.items():
                     output.append(C4Icon(group, name=f'*{group_name}'))
-                extras.sort(key=lambda c4icon: natural_key(c4icon.name))
-                output.extend(extras)
+                output.extend(sorted(extras, key=lambda c4icon: natural_key(c4icon.name)))
                 self.extra_icons = sum(icon.extra for icon in output)
                 return output
 
