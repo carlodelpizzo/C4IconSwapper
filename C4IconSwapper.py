@@ -4,6 +4,7 @@ import ctypes
 import filecmp
 import io
 import itertools
+import json
 import os
 import pickle
 import random
@@ -738,6 +739,7 @@ class C4IconSwapper(IPC):
         self.appdata_dir = Path(os.environ['APPDATA']) / 'C4IconSwapper'
         self.recovery_dir = self.appdata_dir / 'Recovery'
         self.global_temp = self.appdata_dir / 'C4IconSwapperTemp'
+        self.settings_file = self.appdata_dir / 'settings.json'
 
         self.appdata_dir.mkdir(exist_ok=True)
 
@@ -803,6 +805,21 @@ class C4IconSwapper(IPC):
         self.thread_lock = threading.Lock()
         self.pending_load_save = False
 
+        # App settings
+        self.settings = {'driver_get_all_imgs': False, 'merge_imgs_on_load': None}
+        if self.settings_file.exists():
+            try:
+                self.settings = json.loads(self.settings_file.read_text())
+            except json.JSONDecodeError:
+                print('Problem with settings file. Reverting to Defaults')
+                self.settings_file.unlink()
+                self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
+        else:
+            self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
+        print(f'Using settings: {self.settings}')
+        self.driver_get_all_imgs = self.settings['driver_get_all_imgs']
+        self.merge_imgs_on_load = self.settings['merge_imgs_on_load']
+
         # Creating blank image for panels
         with Image.open(assets_path / 'blank_img.png') as img:
             self.img_blank = ImageTk.PhotoImage(img.resize((128, 128)))
@@ -812,7 +829,9 @@ class C4IconSwapper(IPC):
         self.c4z_panel = C4zPanel(self)
         self.replacement_panel = ReplacementPanel(self)
         self.export_panel = ExportPanel(self)
-        self.driver_info_win, self.states_win, self.connections_win = None, None, None
+
+        # Popup window variables
+        self.driver_info_win, self.states_win, self.connections_win, self.settings_win = None, None, None, None
 
         # Panel Separators
         self.separator0 = Separator(self.root, orient='vertical')
@@ -838,6 +857,8 @@ class C4IconSwapper(IPC):
         self.file.add_separator()
         self.file.add_command(label='Load Generic Driver', command=self.c4z_panel.load_gen_driver)
         self.file.add_command(label='Load Multi Driver', command=lambda: self.c4z_panel.load_gen_driver(multi=True))
+        self.file.add_separator()
+        self.file.add_command(label='Settings', command=lambda: self.open_edit_win(self.settings_win, 'settings'))
 
         # Edit Menu
         self.edit = Menu(self.menu, tearoff=0)
@@ -940,50 +961,20 @@ class C4IconSwapper(IPC):
         # noinspection PyTypeChecker
         self.root.after(150, self.blink_driver_name_entry)
 
-    def open_edit_win(self, window, win_type: str):
-        if window:
-            window.window.deiconify()
-            window.window.focus()
+    def open_edit_win(self, main_win_var, win_type: str):
+        if main_win_var:
+            main_win_var.window.deiconify()
+            main_win_var.window.focus()
             return
-        if win_type == 'conn':
-            self.connections_win = ConnectionsWin(self)
-        elif win_type == 'driver':
-            self.driver_info_win = DriverInfoWin(self)
-        elif win_type == 'states':
-            self.states_win = StatesWin(self)
-
-    def close_connections_win(self):
-        if self.connections_win is None:
-            return
-        self.connections_win.window.destroy()
-        self.connections_win = None
-
-    def close_driver_info_win(self):
-        if self.driver_info_win is None:
-            return
-        if not self.driver_version_new_var.get():
-            self.driver_version_new_var.set('0')
-        if not self.driver_creator_new_var.get():
-            self.driver_creator_new_var.set('C4IconSwapper')
-        if not self.driver_manufac_new_var.get():
-            self.driver_manufac_new_var.set('C4IconSwapper')
-        if not self.driver_version_new_var.get():
-            if self.driver_version_var.get():
-                self.driver_version_new_var.set(str(int(self.driver_version_var.get()) + 1))
-            else:
-                self.driver_version_new_var.set('1')
-        if (self.export_panel.inc_driver_version.get() and self.driver_version_var.get() and
-                int(self.driver_version_new_var.get()) <= int(self.driver_version_var.get())):
-            self.driver_version_new_var.set(str(int(self.driver_version_var.get()) + 1))
-        self.driver_info_win.window.destroy()
-        self.driver_info_win = None
-
-    def close_states_win(self):
-        if self.states_win is None:
-            return
-        self.states_win.refresh()
-        self.states_win.window.destroy()
-        self.states_win = None
+        match win_type:
+            case 'conn':
+                self.connections_win = ConnectionsWin(self)
+            case 'driver':
+                self.driver_info_win = DriverInfoWin(self)
+            case 'states':
+                self.states_win = StatesWin(self)
+            case 'settings':
+                self.settings_win = SettingsWin(self)
 
     def save_project(self, *_, out_file_str='', scheduled=False):
         if scheduled:
@@ -1286,6 +1277,59 @@ class C4IconSwapper(IPC):
             user32.ShowWindow(self.debug_console, 5)  # Show
 
 
+class SettingsWin:
+    def __init__(self, main: C4IconSwapper):
+        self.main = main
+
+        # Initialize window
+        self.window = Toplevel(main.root)
+        self.window.focus()
+        self.window.protocol('WM_DELETE_WINDOW', self.close)
+        self.window.title('Settings')
+        self.window.geometry('255x240')
+        self.window.geometry(f'+{main.root.winfo_rootx() + main.export_panel.x}+{main.root.winfo_rooty()}')
+        self.window.resizable(False, False)
+
+        self.title = Label(self.window, text='User Settings', font=(label_font, 12, 'bold'))
+        self.title.pack()
+
+        self.settings = {}
+
+        self.driver_get_all_imgs = IntVar(value=self.main.driver_get_all_imgs)
+        self.settings['driver_get_all_imgs'] = self.driver_get_all_imgs
+        self.driver_get_all_imgs.trace_add('write', self.update_setting)
+        self.driver_get_all_imgs_check = Checkbutton(self.window, text='Get ALL images from driver',
+                                                     variable=self.driver_get_all_imgs)
+        self.driver_get_all_imgs_check.pack(anchor='w', padx=10, pady=(6, 0))
+
+        if main.merge_imgs_on_load is not None:
+            self.merge_imgs_on_load = IntVar()
+            self.settings['merge_imgs_on_load'] = self.merge_imgs_on_load
+            self.merge_imgs_on_load.trace_add('write', self.update_setting)
+            self.merge_imgs_on_load_check = Checkbutton(self.window, text='Merge existing replacement images',
+                                                         variable=self.merge_imgs_on_load)
+            self.merge_imgs_on_load_check.pack(anchor='w', padx=10)
+
+    def update_setting(self, *event):
+        variable = event[0]
+        if variable == str(self.driver_get_all_imgs):
+            print(f'Set driver_get_all_imgs to: {bool(self.driver_get_all_imgs.get())}')
+            self.main.settings['driver_get_all_imgs'] = bool(self.driver_get_all_imgs.get())
+        elif variable == str(self.merge_imgs_on_load):
+            print(f'Set merge_imgs_on_load to: {bool(self.merge_imgs_on_load.get())}')
+            self.main.settings['merge_imgs_on_load'] = bool(self.merge_imgs_on_load.get())
+        else:
+            print(f'Updated Settings From: {self.main.settings}')
+            for setting, value in self.settings.items():
+                self.main.settings[setting] = bool(value.get())
+            print(f'To: {self.main.settings}')
+        self.main.settings_file.write_text(json.dumps(self.main.settings, indent='\t'))
+
+    def close(self):
+        self.window.destroy()
+        self.main.settings_win = None
+
+
 class Icon:
     def __init__(self, path: Path, img=None):
         if not path.is_file():
@@ -1462,7 +1506,7 @@ class DriverInfoWin:
         # Initialize window
         self.window = Toplevel(main.root)
         self.window.focus()
-        self.window.protocol('WM_DELETE_WINDOW', main.close_driver_info_win)
+        self.window.protocol('WM_DELETE_WINDOW', self.close)
         self.window.title('Edit Driver Info')
         self.window.geometry('255x240')
         self.window.geometry(f'+{main.root.winfo_rootx() + main.export_panel.x}+{main.root.winfo_rooty()}')
@@ -1556,27 +1600,49 @@ class DriverInfoWin:
 
         self.main.ask_to_save = True
 
+    def close(self):
+        if not self.main.driver_version_new_var.get():
+            self.main.driver_version_new_var.set('0')
+        if not self.main.driver_creator_new_var.get():
+            self.main.driver_creator_new_var.set('C4IconSwapper')
+        if not self.main.driver_manufac_new_var.get():
+            self.main.driver_manufac_new_var.set('C4IconSwapper')
+        if not self.main.driver_version_new_var.get():
+            if self.main.driver_version_var.get():
+                self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
+            else:
+                self.main.driver_version_new_var.set('1')
+        if (self.main.export_panel.inc_driver_version.get() and self.main.driver_version_var.get() and
+                int(self.main.driver_version_new_var.get()) <= int(self.main.driver_version_var.get())):
+            self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
+        self.window.destroy()
+        self.main.driver_info_win = None
+
 
 class ConnectionsWin:
     def __init__(self, main: C4IconSwapper):
         self.main = main
 
         # Initialize window
-        self.window = Toplevel(self.main.root)
+        self.window = Toplevel(main.root)
         self.window.focus()
-        self.window.protocol('WM_DELETE_WINDOW', self.main.close_connections_win)
+        self.window.protocol('WM_DELETE_WINDOW', self.close)
         self.window.title('Edit Driver Connections')
         self.window.geometry('975x250')
         x_spacing, y_spacing = 330, 40
-        self.window.geometry(f'+{self.main.root.winfo_rootx()}+{self.main.root.winfo_rooty()}')
+        self.window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
 
-        self.connections = [ConnectionEntry(self, self.main.connections[
+        self.connections = [ConnectionEntry(self, main.connections[
             (x * 6) + y], x * x_spacing + 15, y * y_spacing + 25) for x, y in itertools.product(range(3), range(6))]
 
     def refresh(self):
         for conn_entry in self.connections:
             conn_entry.refresh()
+
+    def close(self):
+        self.window.destroy()
+        self.main.connections_win = None
 
 
 class Connection:
@@ -1594,7 +1660,7 @@ class Connection:
         if self.original:
             return
         self.main.ask_to_save = True
-        if (conn_obj_in_dict := self.main.taken_conn_ids.get(self.id, None)) and self is conn_obj_in_dict:
+        if (conn_obj_in_dict := self.main.taken_conn_ids.get(self.id)) and self is conn_obj_in_dict:
             self.main.taken_conn_ids.pop(self.id)
         if not self.enabled:
             self.id = -1
@@ -1745,7 +1811,7 @@ class StatesWin:
         # Initialize window
         self.window = Toplevel(main.root)
         self.window.focus()
-        self.window.protocol('WM_DELETE_WINDOW', main.close_states_win)
+        self.window.protocol('WM_DELETE_WINDOW', self.close)
         self.window.title('Edit Driver States')
         self.window.geometry('385x287')
         self.window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
@@ -1798,6 +1864,11 @@ class StatesWin:
                                 break
         self.refresh(bg_only=True)
         self.trace_lockout = False
+
+    def close(self):
+        self.refresh()
+        self.window.destroy()
+        self.main.states_win = None
 
 
 class State:
@@ -2290,6 +2361,7 @@ class C4zPanel:
 
         # Get icons
         if not abort:
+            # TODO: Fix issue with 'device_sm/lg' icon grouping in tv_ir_sony_KDL-32RE400.c4z
             # noinspection PyShadowingNames
             def get_icons(root_directory):
                 if not root_directory:
@@ -2481,8 +2553,7 @@ class C4zPanel:
 
                 return icon_groups
 
-            get_all_images = False  # TODO: Add this as a user setting
-            img_paths = new_driver_path if get_all_images else (new_icon_dir, new_images_dir)
+            img_paths = new_driver_path if self.main.driver_get_all_imgs else (new_icon_dir, new_images_dir)
             if new_icons := get_icons(img_paths):
                 self.icons = new_icons
             else:
@@ -2567,7 +2638,7 @@ class C4zPanel:
         if main.multi_state_driver:
             main.edit.entryconfig(main.states_pos, state=NORMAL)
         elif main.states_win:
-            main.close_states_win()
+            main.states_win.close()
 
         # Update driver prev/next buttons
         visible_icons = len(self.icons) - (self.extra_icons if not self.show_extra_icons.get() else 0)
