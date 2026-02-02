@@ -1041,7 +1041,7 @@ class C4IconSwapper(IPC):
         if save_state.driver_selected:
             with open(saved_driver_path := self.instance_temp / 'saved_driver.c4z', 'wb') as driver_zip:
                 driver_zip.write(save_state.driver_zip)
-            self.c4z_panel.load_c4z(saved_driver_path, force=True)
+            self.c4z_panel.load_c4z(saved_driver_path, force=True, new_thread=False)
             saved_driver_path.unlink()
         else:
             self.export_panel.export_button['state'] = DISABLED
