@@ -437,6 +437,13 @@ class XMLTag:
         parents.append(self.parent)
         return self.parent.get_parents(parents)
 
+    def get_parent(self, parent_name: str):
+        if not self.parent:
+            return None
+        if self.parent.name == parent_name:
+            return self.parent
+        return self.parent.get_parent(parent_name)
+
     def get_children(self) -> list['XMLTag']:
         # noinspection PyTypeChecker
         return [element for element in self.elements if not isinstance(element, str)]
