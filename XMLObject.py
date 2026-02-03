@@ -1,3 +1,4 @@
+from __future__ import annotations
 import copy
 import re
 import warnings
@@ -9,7 +10,7 @@ char_escapes = {'<': '&lt;', '>': '&gt;', '&': '&amp;'}
 
 
 # sub_tag will ignore all tags until it finds a tag with that name, then make that tag the root
-def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list['XMLTag']:
+def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XMLTag]:
     if not xml_path and not xml_string:
         return []
     if xml_path:
@@ -362,7 +363,7 @@ class XMLTag:
             output.append(f'{indent}</{self.name}>')
         return output
 
-    def get_tags(self, name: str) -> list['XMLTag']:
+    def get_tags(self, name: str) -> list[XMLTag]:
         if not self.init_success:
             return []
         output = [self] if name == self.name else []
@@ -371,7 +372,7 @@ class XMLTag:
                 output.extend(tag_list)
         return output
 
-    def get_tags_dict(self, name_set: set[str]) -> dict[str, 'XMLTag']:
+    def get_tags_dict(self, name_set: set[str]) -> dict[str, XMLTag]:
         if not self.init_success:
             return {}
         output_dict = {}
@@ -388,7 +389,7 @@ class XMLTag:
                 break
         return output_dict
 
-    def get_tag(self, name: str, include_self=True) -> 'XMLTag | None':
+    def get_tag(self, name: str, include_self=True) -> XMLTag | None:
         if not self.init_success:
             return None
         if include_self and name == self.name:
@@ -429,7 +430,7 @@ class XMLTag:
         else:
             self.elements.append(element)
 
-    def get_parents(self, parents=None) -> list['XMLTag']:
+    def get_parents(self, parents=None) -> list[XMLTag]:
         if not self.parent:
             return [] if not parents else parents
         if not parents:
@@ -437,14 +438,14 @@ class XMLTag:
         parents.append(self.parent)
         return self.parent.get_parents(parents)
 
-    def get_parent(self, parent_name: str):
+    def get_parent(self, parent_name: str) -> XMLTag | None:
         if not self.parent:
             return None
         if self.parent.name == parent_name:
             return self.parent
         return self.parent.get_parent(parent_name)
 
-    def get_children(self) -> list['XMLTag']:
+    def get_children(self) -> list[XMLTag]:
         # noinspection PyTypeChecker
         return [element for element in self.elements if not isinstance(element, str)]
 
