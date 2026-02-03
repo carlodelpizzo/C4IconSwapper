@@ -625,8 +625,6 @@ class IPC:
             print('Nothing to clean up')
 
 
-# TODO: Prompt during load_c4is and recovery if user wants to merge with or overwrite existing project
-#  Add option to not ask again
 class C4IconSwapper(IPC):
     def __init__(self):
         def exception_window(*args, message_txt=None):
@@ -810,7 +808,10 @@ class C4IconSwapper(IPC):
         self.pending_load_save = False
 
         # App settings
-        self.settings = {'driver_get_all_imgs': False, 'merge_imgs_on_load': None}
+        self.settings = {
+            'driver_get_all_imgs': False,
+            'merge_imgs_on_load': None
+        }
         if self.settings_file.exists():
             try:
                 self.settings = json.loads(self.settings_file.read_text())
@@ -823,6 +824,7 @@ class C4IconSwapper(IPC):
         print(f'Using settings: {self.settings}')
         self.driver_get_all_imgs = self.settings['driver_get_all_imgs']
         self.merge_imgs_on_load = self.settings['merge_imgs_on_load']
+        # TODO: Store all user settings in dict; Do not use class variables
 
         # Creating blank image for panels
         with Image.open(assets_path / 'blank_img.png') as img:
@@ -1009,6 +1011,7 @@ class C4IconSwapper(IPC):
 
     # TODO: Currently does not validate project file. Unsure what behavior is for invalid file.
     # TODO: Add backwards compatibility.
+    # TODO: Add merge functionality
     def load_c4is(self, *_, path_str='', scheduled=False):
         if scheduled:
             self.replacement_panel.multi_threading.wait()
@@ -1131,7 +1134,42 @@ class C4IconSwapper(IPC):
         self.ask_to_save = False
         self.pending_load_save = False
 
-    def do_recovery(self, recover_path: Path):
+    # TODO: Add option to not ask again; Save as user setting
+    def ask_to_merge_dialog(self, result_var):
+        def cancel():
+            result_var.set('cancel')
+            merge_dialog.destroy()
+
+        def do_not_merge():
+            result_var.set('dont')
+            merge_dialog.destroy()
+
+        def do_merge():
+            result_var.set('do')
+            merge_dialog.destroy()
+
+        merge_dialog = Toplevel(self.root)
+        merge_dialog.title('Merge/Overwrite current project?')
+        merge_dialog.geometry('255x80')
+        merge_dialog.geometry(f'+{self.root.winfo_rootx()}+{self.root.winfo_rooty()}')
+        merge_dialog.protocol('WM_DELETE_WINDOW', cancel)
+        merge_dialog.grab_set()
+        merge_dialog.focus()
+        merge_dialog.transient(self.root)
+        merge_dialog.resizable(False, False)
+
+        confirm_label = Label(merge_dialog, text='Would you like to merge the incoming project\n'
+                                                 'with the current project?')
+        confirm_label.place(relx=0.5, anchor='n')
+
+        yes_button = Button(merge_dialog, text='Merge', width='10', command=do_merge)
+        yes_button.place(relx=0.5, rely=1, x=-5, y=-10, anchor='se')
+
+        no_button = Button(merge_dialog, text='Overwrite', width='10', command=do_not_merge)
+        no_button.place(relx=0.5, rely=1, x=5, y=-10, anchor='sw')
+
+    # TODO: Add merge functionality
+    def do_recovery(self, recover_path: Path, merge=False):
         has_driver = False
         if (driver_folder := recover_path / 'driver').is_dir():
             shutil.make_archive(str(driver_folder), 'zip', driver_folder)
@@ -1172,21 +1210,21 @@ class C4IconSwapper(IPC):
         self.edit.entryconfig(self.undo_pos, state=NORMAL)
 
     def ask_to_save_dialog(self, result_var, on_exit=True):
-        def cancel_dialog():
+        def cancel():
             result_var.set('cancel')
-            self.ask_to_save = ask_to_save
+            self.ask_to_save = curr_ask_to_save
             save_dialog.destroy()
 
         def do_not_save():
             result_var.set('dont')
             save_dialog.destroy()
 
-        def do_project_save():
+        def do_save():
             result_var.set('do')
             self.save_project()
             save_dialog.destroy()
 
-        ask_to_save = self.ask_to_save
+        curr_ask_to_save = self.ask_to_save
         save_dialog = Toplevel(self.root)
         save_dialog.title('Save current project?')
         save_dialog.geometry('239x70')
@@ -1195,28 +1233,26 @@ class C4IconSwapper(IPC):
             save_dialog.geometry(f'+{win_x}+{self.root.winfo_rooty()}')
         else:
             save_dialog.geometry(f'+{self.root.winfo_rootx()}+{self.root.winfo_rooty()}')
-        save_dialog.protocol('WM_DELETE_WINDOW', cancel_dialog)
+        save_dialog.protocol('WM_DELETE_WINDOW', cancel)
         save_dialog.grab_set()
         save_dialog.focus()
         save_dialog.transient(self.root)
         save_dialog.resizable(False, False)
 
         confirm_label = Label(save_dialog, text='Would you like to save the current project?')
-        confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
+        confirm_label.place(relx=0.5, rely=0, y=5, anchor='n')
 
-        yes_button = Button(save_dialog, text='Yes', width='10', command=do_project_save)
-        yes_button.grid(row=2, column=0, sticky='e', padx=5)
+        yes_button = Button(save_dialog, text='Yes', width='10', command=do_save)
+        yes_button.place(relx=0.5, rely=1, x=-5, y=-10, anchor='se')
 
         no_button = Button(save_dialog, text='No', width='10', command=do_not_save)
-        no_button.grid(row=2, column=1, sticky='w', padx=5)
+        no_button.place(relx=0.5, rely=1, x=5, y=-10, anchor='sw')
 
         self.ask_to_save = False
-        return save_dialog
 
     def end_program(self, *_):
         if self.ask_to_save:
-            save_dialog_result = StringVar()
-            self.ask_to_save_dialog(save_dialog_result)
+            self.ask_to_save_dialog(save_dialog_result := StringVar())
             self.root.wait_variable(save_dialog_result)
             if save_dialog_result.get() not in ('do', 'dont'):
                 return
@@ -2073,32 +2109,7 @@ class RecoveryWin:
         return warning_dialog
 
     def do_recovery(self):
-        selected = [rec_obj for rec_obj in self.recoverable_projects if rec_obj.recover.get()]
-        if not selected:
-            return
-        # Warn that unselected projects will be deleted
-        if len(selected) != len(self.recoverable_projects):
-            abort_recovery = IntVar()
-            self.warning_dialog(abort_recovery)
-            self.window.wait_variable(abort_recovery)
-            if abort_recovery.get():
-                return
-        own_project = None
-        # Delete projects which were not selected
-        for recovery_obj in [rec_obj for rec_obj in self.recoverable_projects if rec_obj not in selected]:
-            shutil.rmtree(recovery_obj.path)
-        # Flag first project to open in self and start new programs to open any remaining projects
-        for recovery_obj in selected:
-            if not own_project and not self.main.driver_selected:
-                own_project = recovery_obj.path
-                continue
-
-            if self.main.running_as_exe:
-                args = [sys.executable, recovery_obj.path]
-            else:
-                # Path to exe, path to python script, recovery path variable
-                args = [sys.executable, Path(__file__).resolve(), recovery_obj.path]
-
+        def start_new_instance(args):
             # Start debug console hidden
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
@@ -2106,10 +2117,60 @@ class RecoveryWin:
             print('Launching new application to open recovered project')
             subprocess.Popen(args, startupinfo=startupinfo, creationflags=subprocess.CREATE_NEW_CONSOLE, close_fds=True)
 
+        selected = [rec_obj for rec_obj in self.recoverable_projects if rec_obj.recover.get()]
+        if not selected:
+            return
+
+        # Warn that unselected projects will be deleted
+        if len(selected) != len(self.recoverable_projects):
+            self.warning_dialog(abort_recovery := IntVar())
+            self.window.wait_variable(abort_recovery)
+            if abort_recovery.get():
+                return
+
+        own_project = None
+        merge_project = False
+        main_has_imgs = bool(self.main.replacement_panel.img_bank or self.main.replacement_panel.replacement_icon)
+        if (main_has_driver := self.main.driver_selected) and main_has_imgs:
+            # TODO: Dialog asking to open recovered project in new window or overwrite existing project
+            pass
+        elif main_has_imgs != main_has_driver:
+            if main_has_driver:
+                own_project = next((rec_obj for rec_obj in selected if not rec_obj.has_driver), None)
+            else:  # If main has image(s)
+                own_project = next((rec_obj for rec_obj in selected if not rec_obj.num_images), None)
+            if own_project:
+                self.main.ask_to_merge_dialog(merge_dialog_result := StringVar())
+                self.window.wait_variable(merge_dialog_result)
+                if merge_dialog_result.get() in ('do', 'dont'):
+                    if merge_dialog_result.get() == 'do':
+                        merge_project = True
+                    selected.pop(selected.index(own_project))
+                else:
+                    merge_project = None  # Cancels own project load; Open all projects in new windows
+
+        if self.main.running_as_exe:
+            args_template = [sys.executable]
+        else:
+            # Path to exe, path to python script, recovery path variable
+            args_template = [sys.executable, Path(__file__).resolve()]
+
+        # Delete projects which were not selected
+        for recovery_obj in [rec_obj for rec_obj in self.recoverable_projects if rec_obj not in selected]:
+            shutil.rmtree(recovery_obj.path)
+
+        # Flag first project to open in self and start new programs to open any remaining projects
+        for recovery_obj in selected:
+            if not own_project:
+                own_project = recovery_obj.path
+                continue
+            start_new_instance([*args_template, recovery_obj.path])
+
         # Open recovery project
-        if own_project:
+        if own_project and merge_project is not None:
             print('Opening recovered project')
-            self.main.do_recovery(own_project)
+            self.main.do_recovery(own_project, merge=merge_project)
+
         self.window.destroy()
         self.main.root.deiconify()
         self.main.root.focus()
@@ -2122,13 +2183,13 @@ class RecoveryObject:
             return
         self.name = ''
         self.path = instance_path
+        self.has_driver = (xml_path := instance_path / 'driver' / 'driver.xml').is_file()
         self.num_images = 0
         self.mtime = datetime.fromtimestamp(instance_path.stat().st_mtime).strftime("%m/%d %H:%M:%S")
         self.recover = IntVar()
 
-        xml_path = instance_path / 'driver' / 'driver.xml'
         replacement_path = instance_path / 'Replacement Icons'
-        if xml_path.is_file() and (tag := XMLTag(xml_path=xml_path, sub_tag='name')) and (name := tag.value()):
+        if self.has_driver and (tag := XMLTag(xml_path=xml_path, sub_tag='name')) and (name := tag.value()):
             self.name = name
         if replacement_path.is_dir():
             self.num_images = len(os.listdir(replacement_path))
@@ -2235,8 +2296,7 @@ class C4zPanel:
             return
         main = self.main
         if main.ask_to_save:
-            save_dialog_result = StringVar()
-            main.ask_to_save_dialog(save_dialog_result, on_exit=False)
+            main.ask_to_save_dialog(save_dialog_result := StringVar(), on_exit=False)
             main.root.wait_variable(save_dialog_result)
             if save_dialog_result.get() not in ('do', 'dont'):
                 return
@@ -2326,8 +2386,7 @@ class C4zPanel:
     def _load_c4z(self, file_path=None, force=False):
         main = self.main
         if not force and main.ask_to_save:
-            save_dialog_result = StringVar()
-            main.ask_to_save_dialog(save_dialog_result, on_exit=False)
+            main.ask_to_save_dialog(save_dialog_result := StringVar(), on_exit=False)
             main.root.wait_variable(save_dialog_result)
             if save_dialog_result.get() not in ('do', 'dont'):
                 return
