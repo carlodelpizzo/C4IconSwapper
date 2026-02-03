@@ -71,7 +71,6 @@ max_image_pixels = Image.MAX_IMAGE_PIXELS
 # TODO: Organize/Standardize all class inits
 # TODO: Add default Manufacturer, Creator, include backups, and increment driver ver as setting
 # TODO: Add default folder for quick export as setting
-# TODO: Make sure c4z and c4is can be loaded with alternate extensions
 
 
 # Inter-Process Communication (For running multiple instances simultaneously); Port range: (49200-65500)
@@ -1300,7 +1299,7 @@ class SettingsWin:
 
         self.settings = {}
 
-        self.driver_get_all_imgs = IntVar(value=self.main.driver_get_all_imgs)
+        self.driver_get_all_imgs = IntVar(value=bool(main.driver_get_all_imgs))
         self.settings['driver_get_all_imgs'] = self.driver_get_all_imgs
         self.driver_get_all_imgs.trace_add('write', self.update_setting)
         self.driver_get_all_imgs_check = Checkbutton(self.window, text='Get ALL images from driver',
@@ -1308,7 +1307,7 @@ class SettingsWin:
         self.driver_get_all_imgs_check.pack(anchor='w', padx=10, pady=(6, 0))
 
         if main.merge_imgs_on_load is not None:
-            self.merge_imgs_on_load = IntVar()
+            self.merge_imgs_on_load = IntVar(value=bool(main.merge_imgs_on_load))
             self.settings['merge_imgs_on_load'] = self.merge_imgs_on_load
             self.merge_imgs_on_load.trace_add('write', self.update_setting)
             self.merge_imgs_on_load_check = Checkbutton(self.window, text='Merge existing replacement images',
@@ -2167,7 +2166,7 @@ class C4zPanel:
         self.icon_num_label = Label(main.root, text='0 of 0', font=(label_font, 10))
         self.icon_num_label.place(x=108 + self.x, y=180 + self.y, anchor='n')
 
-        self.icon_name_label = Label(main.root, text='icon name', font=(label_font, 10, 'bold'))
+        self.icon_name_label = Label(main.root, text='icon name', font=(label_font, 10, 'bold'), wraplength=220)
         self.icon_name_label.place(x=108 + self.x, y=197 + self.y, anchor='n')
 
         self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
@@ -2372,7 +2371,6 @@ class C4zPanel:
 
         # Get icons
         if not abort:
-            # TODO: Extract icon name from proxy reference - tv_ir_sony_KDL-32RE400.c4z
             # noinspection PyShadowingNames
             def get_icons(root_directory):
                 if not root_directory:
@@ -2470,25 +2468,26 @@ class C4zPanel:
                 # Use XML data to form icon groups
                 extras = set()
                 standard_icons = set()
+                group_dict: dict[tuple[str, XMLTag], set[Path]]
                 group_dict = get_icon_groups()
                 device_group = defaultdict(set)
                 split_match = {'icons', 'images'}
                 device_names = {'device_sm', 'device_lg'}
-                for group in group_dict:
+                for (group_name, _), group in group_dict.items():
                     group_set = set()
                     for sub_icon in list(all_sub_icons):
                         parts = sub_icon.rel_path.parts
                         split_point = next((idx for idx, part in enumerate(parts) if part in split_match), -1)
-                        if Path(*parts[split_point:]) in group_dict[group]:
+                        if Path(*parts[split_point:]) in group:
                             if sub_icon.path.stem in device_names:
                                 all_sub_icons.remove(sub_icon)
-                                device_group[group[0]].add(sub_icon)
+                                device_group[group_name].add(sub_icon)
                                 continue
                             all_sub_icons.remove(sub_icon)
                             group_set.add(sub_icon)
                     if not group_set:
                         continue
-                    standard_icons.add(C4Icon(group_set, name=group[0]))
+                    standard_icons.add(C4Icon(group_set, name=group_name))
 
                 # Separate any remaining 'device' icons from list
                 for sub_icon in list(all_sub_icons):
@@ -2500,6 +2499,8 @@ class C4zPanel:
                     else:
                         all_sub_icons.remove(sub_icon)
                         device_group[str(parent_dir.stem)].add(sub_icon)
+                device_icons = [C4Icon(group, name=f'{group_name}\n(device icon)')
+                                for group_name, group in device_group.items()]
 
                 # Divide icons into 'standard' and 'extra'
                 for key in icon_groups:
@@ -2523,28 +2524,34 @@ class C4zPanel:
                         icon.extra = False
 
                 output.extend(sorted(standard_icons, key=lambda c4icon: natural_key(c4icon.name)))
-                for group_name, group in device_group.items():
-                    output.append(C4Icon(group, name=f'*{group_name}'))
+                output.extend(sorted(device_icons, key=lambda c4icon: natural_key(c4icon.name)))
                 output.extend(sorted(extras, key=lambda c4icon: natural_key(c4icon.name)))
                 self.extra_icons = sum(icon.extra for icon in output)
                 return output
 
             def get_icon_groups():
                 icon_groups = defaultdict(set)
+                proxy_binding_id_dict = defaultdict(str)
                 for tag in main.driver_xml.get_tags('proxy'):
+                    tag_name = tag.attributes.get('name')
+                    if proxybindingid := tag.attributes.get('proxybindingid'):
+                        proxy_binding_id_dict[proxybindingid] = tag_name
                     if sm_img_path := tag.attributes.get('small_image'):
-                        group_name = tag.attributes.get('name')
                         rel_path = Path(sm_img_path)
-                        icon_groups[(group_name if group_name else 'Device Icon', tag.parent)].add(rel_path)
+                        icon_groups[(tag_name if tag_name else 'Device Icon', tag.parent)].add(rel_path)
                     if lg_img_path := tag.attributes.get('large_image'):
-                        group_name = tag.attributes.get('name')
                         rel_path = Path(lg_img_path)
-                        icon_groups[(group_name if group_name else 'Device Icon', tag.parent)].add(rel_path)
+                        icon_groups[(tag_name if tag_name else 'Device Icon', tag.parent)].add(rel_path)
                 for tag in main.driver_xml.get_tags('Icon'):
                     if 'controller://' not in (tag_value := tag.value()):
                         print(f'Could not parse Icon tag value in XML: {tag_value}')
                         continue
                     group_name = tag.parent.attributes.get('id')
+                    if not group_name and (parent_tag := tag.get_parent('navigator_display_option')):
+                        if proxybindingid := parent_tag.attributes.get('proxybindingid'):
+                            if new_group_name := proxy_binding_id_dict.get(proxybindingid):
+                                group_name = new_group_name
+
                     rel_path = tag_value.split('controller://')[1]
                     if 'icons' in rel_path:
                         rel_path = Path('icons', rel_path.split('icons')[1].lstrip('/\\'))
