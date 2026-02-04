@@ -69,8 +69,6 @@ if hasattr(sys, '_MEIPASS'):
 max_image_pixels = Image.MAX_IMAGE_PIXELS
 
 # TODO: Organize/Standardize all class inits
-# TODO: Add default Manufacturer, Creator, include backups, and increment driver ver as setting
-# TODO: Add default folder for quick export as setting
 
 
 # Inter-Process Communication (For running multiple instances simultaneously); Port range: (49200-65500)
@@ -95,16 +93,16 @@ class IPC:
         def establish_self_as_server():
             server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             server.bind(('127.0.0.1', port))  # This is where exception is raised
-            print(f'Is Server: {self.instance_id}')
+            print(f'(IPC) Is Server: {self.instance_id}')
             self.is_server = True
 
             # Delete unused port files
             port_files.pop(port, None)
             for _, file_path in port_files.items():
-                print(f'Trying to delete: {file_path}')
+                print(f'(IPC) Trying to delete: {file_path}')
                 file_path.unlink(missing_ok=True)
             for file_path in invalid_port_files:
-                print(f'Trying to delete: {file_path}')
+                print(f'(IPC) Trying to delete: {file_path}')
                 file_path.unlink(missing_ok=True)
 
             # Start heartbeat thread (Create/update current port file)
@@ -131,7 +129,7 @@ class IPC:
             while True:
                 try:
                     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    print(f'Is Client: {self.instance_id}')
+                    print(f'(IPC) Is Client: {self.instance_id}')
                     client.settimeout(0.05)
                     client.connect(('127.0.0.1', port))
                     msg = f'ID:{self.instance_id}\n' if not self.reestablish else f'RE:{self.instance_id}\n'
@@ -140,40 +138,40 @@ class IPC:
                     response = client.recv(1024).decode('utf-8')
                     if not response:
                         raise OSError('Server Disconnected; Sent Empty Message')
-                    print('From Server:', repr(response))
+                    print('(IPC) From Server:', repr(response))
                     for msg in response.strip().split('\n'):
                         match msg.split(':'):
                             case ['OK', server_id, client_data]:
                                 self.curr_server_id = server_id
-                                print(f'Became Client of Current Server: {server_id}')
+                                print(f'(IPC) Became Client of Current Server: {server_id}')
                                 if self.reestablish:
                                     self.reestablish = False
-                                    print('Reestablishment Ended')
+                                    print('(IPC) Reestablishment Ended')
                                 client_list = client_data.split('|')
                                 self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
-                                print(self.client_dict)
+                                print(f'(IPC) {self.client_dict}')
                                 threading.Thread(target=self.ipc_client_loop, args=[client], daemon=True).start()
                                 return True
                             case ['INSTANCE ID COLLISION']:
                                 if not first_time:
                                     # Hopefully this code should never run
-                                    print('--- Something Went Wrong ---')
-                                    print('Ignored instruction from server to change instance id')
+                                    print('(IPC) --- Something Went Wrong ---')
+                                    print('(IPC) Ignored instruction from server to change instance id')
                                     continue
                                 grace = True
                                 self.instance_id = str(random.randint(111111, 999999))
-                                print('From Server: INSTANCE ID COLLISION')
-                                print(f'New Instance ID: {self.instance_id}')
+                                print('(IPC) From Server: INSTANCE ID COLLISION')
+                                print(f'(IPC) New Instance ID: {self.instance_id}')
                                 break
                             case _:
                                 if grace:
                                     grace = False
-                                    print(f'Server sent invalid response; given grace: {msg}')
+                                    print(f'(IPC) Server sent invalid response; given grace: {msg}')
                                     continue
                                 raise OSError(f'Server sent invalid response: {msg}')
                 except OSError as er:
                     ipc_failures += 1
-                    print(er)
+                    print(f'IPC Error: {er}')
                     print('IPC Initialization Failed')
                     if ipc_failures > 3:
                         if port_files:
@@ -181,13 +179,13 @@ class IPC:
                             invalid_ports.add(port)
                             port = next(next_port, None)
                             if port:
-                                print(f'Trying New Port: {port}')
+                                print(f'(IPC) Trying New Port: {port}')
                                 return False
                         else:
                             invalid_ports.add(port)
                         while port in invalid_ports:
                             port = random.randint(49200, 65500)
-                        print(f'Trying New Port: {port}')
+                        print(f'(IPC) Trying New Port: {port}')
                         return False
 
         port_files = {
@@ -207,21 +205,21 @@ class IPC:
         if port is None:
             if not port_files:
                 port = self.default_port
-                print(f'Using Default Port: {port}')
+                print(f'(IPC) Using Default Port: {port}')
             else:
                 sorted_ports = sorted(port_files, key=lambda p: (abs(p - self.default_port), p))
                 next_port = iter(sorted_ports)
                 port = self.default_port if self.default_port in port_files else next(next_port)
-                print(f'Using Default Port: {port}' if port == self.default_port else f'Using Port: {port}')
+                print(f'(IPC) Using Default Port: {port}' if port == self.default_port else f'Using Port: {port}')
 
         if takeover:
             for _ in range(5):
                 try:
-                    print('Trying Takeover')
+                    print('(IPC) Trying Takeover')
                     establish_self_as_server()
                     return
                 except OSError as e:
-                    print(f'Takeover Failed: {e}')
+                    print(f'(IPC) Takeover Failed: {e}')
                     time.sleep(0.01)
             # If takeover fails, erase client_dict and connect as client
             self.client_dict = {}
@@ -253,37 +251,37 @@ class IPC:
                                     ack_count = 0
                                 client_list = client_data.split('|')
                                 self.client_dict = {k: v for s in client_list for k, v in [s.split('~')]}
-                                print('--- New Client List ---')
-                                print(self.client_dict)
+                                print('(IPC) --- New Client List ---')
+                                print(f'(IPC) {self.client_dict}')
                             case ['ACK']:
                                 ack_count += 1
                                 if ack_count > 1000000:
                                     ack_count = 1000001
-                                    print(f'\rACK (1000000+)', end='', flush=True)
+                                    print(f'\r(IPC) ACK (1000000+)', end='', flush=True)
                                     continue
-                                print(f'\rACK ({ack_count})', end='', flush=True)
+                                print(f'\r(IPC) ACK ({ack_count})', end='', flush=True)
                             case ['MIGRATE', new_port]:
                                 if ack_count:
                                     print('')
-                                print(f'Server instructed migration to port: {new_port}')
+                                print(f'(IPC) Server instructed migration to port: {new_port}')
                                 self.ipc(port=int(new_port))
                                 return
                             case _:
                                 if ack_count:
                                     print('')
                                     ack_count = 0
-                                print(msg)
+                                print(f'(IPC) {msg}')
 
                     time.sleep(1)
             except OSError as e:
                 if ack_count:
                     print('')
-                print(e)
-                print('Current Server Disconnected')
+                print(f'IPC Error: {e}')
+                print('(IPC) Current Server Disconnected')
                 compare_dict = {k: float(v) for k, v in self.client_dict.items()}
                 self.reestablish = True
                 if min(self.client_dict, key=compare_dict.get) == self.instance_id:
-                    print('Selected self as server')
+                    print('(IPC) Selected self as server')
                     del compare_dict
                     self.client_dict.pop(self.instance_id)
                     self.ipc(takeover=True)
@@ -291,7 +289,7 @@ class IPC:
                 del compare_dict
                 client.close()
                 time.sleep(random.uniform(0.75, 1.25))
-                print('Attempting Reconnection as Client')
+                print('(IPC) Attempting Reconnection as Client')
                 self.client_dict.pop(self.instance_id)
                 self.ipc()
                 return
@@ -321,13 +319,13 @@ class IPC:
                     reestablish = self.reestablish
                 # Reestablishment period can range between 4 and 5 seconds because of server timeout
                 if reestablish and time.time() - self.reestablish_start > 4:
-                    print('Reestablishment Period Ended')
+                    print('(IPC) Reestablishment Period Ended')
                     with self.socket_lock:
                         if self.reestablish_ids - self.client_dict.keys():
-                            print('--- Something Went Wrong ---')
-                            print('Client found in reestablish_ids but not client_dict')
-                            print(f'client_dict: {self.client_dict.keys()}')
-                            print(f'reestablish_ids: {self.reestablish_ids}')
+                            print('(IPC) --- Something Went Wrong ---')
+                            print('(IPC) Client found in reestablish_ids but not client_dict')
+                            print(f'(IPC) client_dict: {self.client_dict.keys()}')
+                            print(f'(IPC) reestablish_ids: {self.reestablish_ids}')
                         # Remove clients who are in dict but failed to reestablish
                         delete_items = set()
                         recover_items = set()
@@ -343,11 +341,11 @@ class IPC:
                                 continue
                             delete_items.add(client_path)
                         if delete_items:
-                            print(f'Deleting Clients: {delete_items}')
+                            print(f'(IPC) Deleting Clients: {delete_items}')
                             threading.Thread(target=self.handle_dead_clients, kwargs={'delete': True},
                                              args=[delete_items], daemon=True).start()
                         if recover_items:
-                            print(f'Moving Client Folders to Recovery: {recover_items}')
+                            print(f'(IPC) Moving Client Folders to Recovery: {recover_items}')
                             threading.Thread(target=self.handle_dead_clients, kwargs={'recover': True},
                                              args=[recover_items], daemon=True).start()
                         del delete_items
@@ -355,7 +353,7 @@ class IPC:
                         for cid in self.client_dict.copy():
                             if not (self.global_temp / cid).is_dir():
                                 self.client_dict.pop(cid)
-                        print(self.client_dict if self.client_dict else 'No Clients')
+                        print(f'(IPC) {self.client_dict if self.client_dict else "No Clients"}')
                         self.reestablish_ids.clear()
                         self.reestablish_start = None
                         self.reestablish = False
@@ -367,7 +365,7 @@ class IPC:
                     raise RuntimeError('👻')
 
             except Exception as e:
-                print(f'Server Loop Error: {e}')
+                print(f'(IPC) Server Loop Error: {e}')
 
     def ipc_server_client_loop(self, client):
         self.global_temp: str
@@ -384,7 +382,7 @@ class IPC:
                 if not data:
                     if grace:
                         grace = False
-                        print('Client sent empty message; given grace')
+                        print('(IPC) Client sent empty message; given grace')
                         continue
                     raise OSError('Client disconnected; sent empty message')
                 last_seen_time = time.time()
@@ -394,14 +392,14 @@ class IPC:
                         case ['RE', cid]:
                             client_id = cid
                             client.settimeout(0.5)
-                            print(f'Reestablishing Client: {cid}')
+                            print(f'(IPC) Reestablishing Client: {cid}')
                             with socket_lock:
                                 client_dict = self.client_dict.copy()
                             if client_id in client_dict:
                                 dict_time = client_dict[client_id]
                                 new_client = None
                             else:
-                                print(f'Client not in dictionary tried to reconnect: {client_id}')
+                                print(f'(IPC) Client not in dictionary tried to reconnect: {client_id}')
                                 dict_time = last_seen_time
                                 new_client = (client_id, client)
 
@@ -432,7 +430,7 @@ class IPC:
                                 client_dict = self.client_dict.copy()
                                 reestablish = self.reestablish
                             if client_id in client_dict and (self.global_temp / client_id).exists():
-                                print('ID collision', client_id, 'in', client_dict)
+                                print('(IPC) ID collision', client_id, 'in', client_dict)
                                 client.sendall('INSTANCE ID COLLISION\n'.encode('utf-8'))
                                 continue
 
@@ -452,15 +450,15 @@ class IPC:
                     return
                 if client_id and time.time() - self.last_seen[client_id] < 2:
                     continue
-                print(e)
+                print(f'IPC Error: {e}')
                 if grace:
-                    print('Client given grace')
+                    print('(IPC) Client given grace')
                     grace = False
                     continue
                 if not client_id:
-                    print(f'Failed to establish client id: {client}')
+                    print(f'(IPC) Failed to establish client id: {client}')
                     return
-                print(f'Client {client_id} disconnected')
+                print(f'(IPC) Client {client_id} disconnected')
                 # If client disconnects but leaves folder behind
                 if (self.global_temp / client_id).exists():
                     has_driver = ((client_folder := self.global_temp / client_id) / 'driver').exists()
@@ -470,7 +468,7 @@ class IPC:
                                          args=[{client_folder}], daemon=True).start()
                     else:
                         shutil.rmtree(client_folder)
-                        print(f'Deleted {client_id} folder')
+                        print(f'(IPC) Deleted {client_id} folder')
                 with socket_lock:
                     self.client_dict.pop(client_id)
                     self.socket_dict.pop(client_id)
@@ -493,7 +491,7 @@ class IPC:
                 sleep_time = heartbeat_interval
 
     def ipc_server_conflict_check(self, port: int):
-        print('Doing server conflict check in 4.20 seconds...')
+        print('(IPC) Doing server conflict check in 4.20 seconds...')
         time.sleep(4.20)
         port_files = {
             path_port_int: path
@@ -504,31 +502,31 @@ class IPC:
         }
 
         if port_files:
-            print('Detected possible server conflict')
+            print('(IPC) Detected possible server conflict')
             # Sort ports by which is closest to default port (smaller port number wins tie)
             sorted_ports = sorted(port_files, key=lambda p: (abs(p - self.default_port), p))
             if (new_port := sorted_ports[0]) != port:
-                print(f'Found server conflict')
+                print('(IPC) Found server conflict')
                 with self.socket_lock:
                     if self.socket_dict:
-                        print('Instructing clients to migrate')
+                        print('(IPC) Instructing clients to migrate')
                         for cid, sock in self.socket_dict.items():
                             try:
                                 sock.sendall(f'MIGRATE:{new_port}\n'.encode('utf-8'))
                                 sock.shutdown(socket.SHUT_WR)
                             except OSError as e:
-                                print(f'Broadcast Error with {cid}: {e}')
+                                print(f'(IPC) Broadcast Error with {cid}: {e}')
                     self.is_server = False
                     self.finished_server_init = True
                 time.sleep(1.1)  # Ensure server loop exits
                 (self.appdata_dir / f'PORT~{port}').unlink(missing_ok=True)
-                print(f'Attempting to connect as client on port: {new_port}')
+                print(f'(IPC) Attempting to connect as client on port: {new_port}')
                 self.ipc(port=new_port)
                 return
-            print('Found server conflict; Selected self as valid server')
+            print('(IPC) Found server conflict; Selected self as valid server')
             self.finished_server_init = True
             return
-        print('No conflict found :)')
+        print('(IPC) No conflict found :)')
         self.finished_server_init = True
         time.sleep(2)
         self.global_temp_cleanup()
@@ -536,10 +534,10 @@ class IPC:
     def server_broadcast_id_update(self, new_connection=None, force=False):
         with self.socket_lock:
             if self.reestablish and not force:
-                print('Broadcast canceled due to reestablishment mode')
+                print('(IPC) Broadcast canceled due to reestablishment mode')
                 return
             if not self.client_dict and not new_connection:
-                print('Broadcast canceled due to empty dictionary')
+                print('(IPC) Broadcast canceled due to empty dictionary')
                 return
         resend = True
         while resend:
@@ -551,16 +549,16 @@ class IPC:
                     current_sockets = list(self.socket_dict.items())
                 new_client_list = '|'.join(f'{k}~{v}' for k, v in self.client_dict.items())
             if new_connection:
-                print('--- New Client Established ---')
-                print(f'Client ID: {new_connection[0]}')
+                print('(IPC) --- New Client Established ---')
+                print(f'(IPC) Client ID: {new_connection[0]}')
                 new_connection[1].sendall(f'OK:{self.instance_id}:{new_client_list}\n'.encode('utf-8'))
-            print('--- Broadcast New Client List ---')
-            print(new_client_list)
+            print('(IPC) --- Broadcast New Client List ---')
+            print(f'(IPC) {new_client_list}')
             for cid, sock in current_sockets:
                 try:
                     sock.sendall(f'UPDATE:{new_client_list}\n'.encode('utf-8'))
                 except OSError as e:
-                    print(f'Broadcast Error with {cid}: {e}')
+                    print(f'(IPC) Broadcast Error with {cid}: {e}')
                     with self.socket_lock:
                         self.client_dict.pop(cid)
                         self.socket_dict.pop(cid)
@@ -575,28 +573,28 @@ class IPC:
                 next_num = map(str, itertools.count(len(os.listdir(self.recovery_dir)) + 1))
                 try:
                     path.replace(self.recovery_dir / next(next_num))
-                    print(f'Moved to Recovery: {path}')
+                    print(f'(IPC) Moved to Recovery: {path}')
                 except PermissionError:
-                    print(f'Failed to Move: {path}')
+                    print(f'(IPC) Failed to Move: {path}')
                 except OSError as er:
-                    print(f'OS Error with {path}: {er}')
+                    print(f'(IPC) OS Error with {path}: {er}')
             return
         if delete:
             for path in client_paths:
                 try:
                     if path.is_dir():
                         shutil.rmtree(path)
-                        print(f'Deleted: {path}')
+                        print(f'(IPC) Deleted: {path}')
                         continue
                     path.unlink()
-                    print(f'Deleted: {path}')
+                    print(f'(IPC) Deleted: {path}')
                 except PermissionError:
-                    print(f'Failed to Delete: {path}')
+                    print(f'(IPC) Failed to Delete: {path}')
                 except OSError as er:
-                    print(f'OS Error with {path}: {er}')
+                    print(f'(IPC) OS Error with {path}: {er}')
 
     def global_temp_cleanup(self):
-        print('Starting global temp folder cleanup')
+        print('(IPC) Starting global temp folder cleanup')
         delete_items = set()
         recover_items = set()
         for client_folder in self.global_temp.iterdir():
@@ -613,16 +611,16 @@ class IPC:
             delete_items.add(client_folder)
 
         if delete_items:
-            print(f'Deleting Clients: {delete_items}')
+            print(f'(IPC) Deleting Clients: {delete_items}')
             threading.Thread(target=self.handle_dead_clients, kwargs={'delete': True},
                              args=[delete_items], daemon=True).start()
         if recover_items:
-            print(f'Moving Client Folders to Recovery: {recover_items}')
+            print(f'(IPC) Moving Client Folders to Recovery: {recover_items}')
             threading.Thread(target=self.handle_dead_clients, kwargs={'recover': True},
                              args=[recover_items], daemon=True).start()
 
         if not delete_items and not recover_items:
-            print('Nothing to clean up')
+            print('(IPC) Nothing to clean up')
 
 
 class C4IconSwapper(IPC):
@@ -783,12 +781,46 @@ class C4IconSwapper(IPC):
         show_id_in_title = not self.running_as_exe and not self.is_server
         self.root.title(f'C4 Icon Swapper ({self.instance_id})' if show_id_in_title else 'C4 Icon Swapper')
 
+        # Default App settings
+        self.settings = {
+            'get_all_driver_imgs': False,
+            'merge_imgs_on_load': None,
+            'include_backup_files': True,
+            'inc_driver_ver': True,
+            'driver_manufac': 'C4IconSwapper',
+            'driver_creator': 'C4IconSwapper'
+        }
+        # Read saved user settings from file
+        if self.settings_file.exists():
+            try:
+                if settings_json := json.loads(self.settings_file.read_text()):
+                    print('Found user settings in file')
+                    valid_settings = {setting: settings_json.get(setting, default_val)
+                                      for setting, default_val in self.settings.items()}
+                    self.settings = valid_settings
+                    if valid_settings != settings_json:
+                        self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
+                        print('Discrepancy between settings file and default settings')
+                        if invalid_settings := settings_json.keys() - valid_settings.keys():
+                            print(f'Invalid settings in file: {invalid_settings}')
+                        if missing_settings := self.settings.keys() - settings_json.keys():
+                            print(f'Settings missing from file: {missing_settings}')
+                else:
+                    print('Empty settings file; Reverting to Defaults')
+                    self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
+            except json.JSONDecodeError:
+                print('Problem decoding settings file; Reverting to Defaults')
+                self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
+        else:
+            self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
+        print(f'Using settings: {self.settings}')
+
         # Class variables
         self.driver_xml = None
         self.driver_manufac_var = StringVar()
-        self.driver_manufac_new_var = StringVar(value='C4IconSwapper')
+        self.driver_manufac_new_var = StringVar(value=self.settings['driver_manufac'])
         self.driver_creator_var = StringVar()
-        self.driver_creator_new_var = StringVar(value='C4IconSwapper')
+        self.driver_creator_new_var = StringVar(value=self.settings['driver_creator'])
         self.driver_ver_orig = StringVar()
         self.driver_version_var = StringVar()
         self.driver_version_new_var = StringVar(value='1')
@@ -806,25 +838,6 @@ class C4IconSwapper(IPC):
         self.undo_history = deque(maxlen=100)
         self.thread_lock = threading.Lock()
         self.pending_load_save = False
-
-        # App settings
-        self.settings = {
-            'driver_get_all_imgs': False,
-            'merge_imgs_on_load': None
-        }
-        if self.settings_file.exists():
-            try:
-                self.settings = json.loads(self.settings_file.read_text())
-            except json.JSONDecodeError:
-                print('Problem with settings file. Reverting to Defaults')
-                self.settings_file.unlink()
-                self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
-        else:
-            self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
-        print(f'Using settings: {self.settings}')
-        self.driver_get_all_imgs = self.settings['driver_get_all_imgs']
-        self.merge_imgs_on_load = self.settings['merge_imgs_on_load']
-        # TODO: Store all user settings in dict; Do not use class variables
 
         # Creating blank image for panels
         with Image.open(assets_path / 'blank_img.png') as img:
@@ -914,6 +927,17 @@ class C4IconSwapper(IPC):
         self.c4z_panel.file_entry_field.insert(0, self.restore_entry_string)
         self.c4z_panel.file_entry_field['state'] = 'readonly'
         self.restore_entry_string = ''
+
+    def validate_man_and_creator(self, string_var: StringVar, entry: Entry):
+        if not string_var or not entry:
+            return
+        name_compare = re_valid_chars.sub('', name := string_var.get())
+        if str_diff := len(name) - len(name_compare):
+            cursor_pos = entry.index(INSERT)
+            entry.icursor(cursor_pos - str_diff)
+            string_var.set(name_compare)
+
+        self.ask_to_save = True
 
     def key_release(self, event):
         if event.keysym == 'Right':
@@ -1317,6 +1341,7 @@ class C4IconSwapper(IPC):
             user32.ShowWindow(self.debug_console, 5)  # Show
 
 
+# TODO: Add default folder for quick export as setting
 class SettingsWin:
     def __init__(self, main: C4IconSwapper):
         self.main = main
@@ -1329,35 +1354,78 @@ class SettingsWin:
         self.window.geometry('255x240')
         self.window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
-
-        self.title = Label(self.window, text='User Settings', font=(label_font, 12, 'bold'))
-        self.title.pack()
-
         self.settings = {}
+        self.wait_for_entry_mod = None  # TODO: Figure out how to implement setting mod with entry
 
-        self.driver_get_all_imgs = IntVar(value=bool(main.driver_get_all_imgs))
-        self.settings['driver_get_all_imgs'] = self.driver_get_all_imgs
-        self.driver_get_all_imgs.trace_add('write', self.update_setting)
-        self.driver_get_all_imgs_check = Checkbutton(self.window, text='Get ALL images from driver',
-                                                     variable=self.driver_get_all_imgs)
-        self.driver_get_all_imgs_check.pack(anchor='w', padx=10, pady=(6, 0))
+        self.title = Label(self.window, text='Default Settings', font=(label_font, 12, 'bold'))
+        self.title.place(relx=0.5, y=5, anchor='n')
 
-        if main.merge_imgs_on_load is not None:
-            self.merge_imgs_on_load = IntVar(value=bool(main.merge_imgs_on_load))
+        self.get_all_driver_imgs = IntVar(value=main.settings['get_all_driver_imgs'])
+        self.settings['get_all_driver_imgs'] = self.get_all_driver_imgs
+        self.get_all_driver_imgs.trace_add('write', self.update_setting)
+        get_all_driver_imgs_check = Checkbutton(self.window, text='Get ALL images from driver',
+                                                variable=self.get_all_driver_imgs)
+        get_all_driver_imgs_check.place(x=5, y=30, anchor='nw')
+        y_val = 55
+        self.merge_imgs_on_load = None
+        if merge_settings := main.settings['merge_imgs_on_load'] is not None:
+            self.merge_imgs_on_load = IntVar(value=merge_settings)
             self.settings['merge_imgs_on_load'] = self.merge_imgs_on_load
             self.merge_imgs_on_load.trace_add('write', self.update_setting)
-            self.merge_imgs_on_load_check = Checkbutton(self.window, text='Merge existing replacement images',
-                                                         variable=self.merge_imgs_on_load)
-            self.merge_imgs_on_load_check.pack(anchor='w', padx=10)
+            merge_imgs_on_load_check = Checkbutton(self.window, text='Merge existing replacement images',
+                                                   variable=self.merge_imgs_on_load)
+            merge_imgs_on_load_check.place(x=5, y=y_val, anchor='nw')
+            y_val += 25
+
+        self.include_backup_files = IntVar(value=main.settings['include_backup_files'])
+        self.settings['include_backup_files'] = self.include_backup_files
+        self.include_backup_files.trace_add('write', self.update_setting)
+        include_backup_files_check = Checkbutton(self.window, text='Include .bak files when exporting',
+                                                 variable=self.include_backup_files)
+        include_backup_files_check.place(x=5, y=y_val, anchor='nw')
+
+        y_val += 25
+        self.inc_driver_ver = IntVar(value=main.settings['inc_driver_ver'])
+        self.settings['inc_driver_ver'] = self.inc_driver_ver
+        self.inc_driver_ver.trace_add('write', self.update_setting)
+        inc_driver_ver_check = Checkbutton(self.window, text='Increment driver version on each export',
+                                           variable=self.inc_driver_ver)
+        inc_driver_ver_check.place(x=5, y=y_val, anchor='nw')
+
+        y_val += 30
+        self.driver_manufac = StringVar(value=main.settings['driver_manufac'])
+        self.driver_manufac.trace_add('write', self.update_setting)
+        driver_manufac_label = Label(self.window, text='Driver Manufacturer:')
+        driver_manufac_label.place(x=5, y=y_val, anchor='nw')
+        self.driver_manufac_entry = Entry(self.window, width=19, textvariable=self.driver_manufac)
+        self.driver_manufac_entry.place(x=119, y=y_val+2, anchor='nw')
+
+        y_val += 30
+        self.driver_creator = StringVar(value=main.settings['driver_creator'])
+        self.driver_creator.trace_add('write', self.update_setting)
+        driver_creator_label = Label(self.window, text='Driver Creator:')
+        driver_creator_label.place(x=5, y=y_val, anchor='nw')
+        self.driver_creator_entry = Entry(self.window, width=25, textvariable=self.driver_creator)
+        self.driver_creator_entry.place(x=85, y=y_val+2, anchor='nw')
 
     def update_setting(self, *event):
         variable = event[0]
-        if variable == str(self.driver_get_all_imgs):
-            print(f'Set driver_get_all_imgs to: {bool(self.driver_get_all_imgs.get())}')
-            self.main.settings['driver_get_all_imgs'] = bool(self.driver_get_all_imgs.get())
+        if variable == str(self.get_all_driver_imgs):
+            print(f'Set get_all_driver_imgs to: {bool(self.get_all_driver_imgs.get())}')
+            self.main.settings['get_all_driver_imgs'] = bool(self.get_all_driver_imgs.get())
         elif variable == str(self.merge_imgs_on_load):
             print(f'Set merge_imgs_on_load to: {bool(self.merge_imgs_on_load.get())}')
             self.main.settings['merge_imgs_on_load'] = bool(self.merge_imgs_on_load.get())
+        elif variable == str(self.include_backup_files):
+            print(f'Set include_backup_files to: {bool(self.include_backup_files.get())}')
+            self.main.settings['include_backup_files'] = bool(self.include_backup_files.get())
+        elif variable == str(self.inc_driver_ver):
+            print(f'Set inc_driver_ver to: {bool(self.inc_driver_ver.get())}')
+            self.main.settings['inc_driver_ver'] = bool(self.inc_driver_ver.get())
+        elif variable == str(self.driver_manufac):
+            self.main.validate_man_and_creator(self.driver_manufac, self.driver_manufac_entry)
+        elif variable == str(self.driver_creator):
+            self.main.validate_man_and_creator(self.driver_creator, self.driver_creator_entry)
         else:
             print(f'Updated Settings From: {self.main.settings}')
             for setting, value in self.settings.items():
@@ -1596,7 +1664,8 @@ class DriverInfoWin:
                                           textvariable=main.driver_manufac_new_var)
         self.driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
         main.driver_manufac_new_var.trace_add('write',
-                                              lambda name, index, mode: self.validate_man_and_creator(
+                                              lambda name, index, mode: self.main.validate_man_and_creator(
+                                                  string_var=main.driver_manufac_new_var,
                                                   entry=self.driver_man_new_entry))
 
         driver_creator_entry = Entry(self.window, width=entry_width, textvariable=main.driver_creator_var)
@@ -1607,7 +1676,7 @@ class DriverInfoWin:
                                               textvariable=main.driver_creator_new_var)
         self.driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
         main.driver_creator_new_var.trace_add('write',
-                                              lambda name, index, mode: self.validate_man_and_creator(
+                                              lambda name, index, mode: self.main.validate_man_and_creator(
                                                   string_var=main.driver_creator_new_var,
                                                   entry=self.driver_creator_new_entry))
 
@@ -1624,17 +1693,6 @@ class DriverInfoWin:
         driver_ver_orig_entry = Entry(self.window, width=6, textvariable=main.driver_ver_orig)
         driver_ver_orig_entry.place(x=110, y=version_y + 45, anchor='nw')
         driver_ver_orig_entry['state'] = DISABLED
-
-    def validate_man_and_creator(self, string_var=None, entry=None):
-        if not string_var or not entry:
-            return
-        name_compare = re_valid_chars.sub('', name := string_var.get())
-        if str_diff := len(name) - len(name_compare):
-            cursor_pos = entry.index(INSERT)
-            entry.icursor(cursor_pos - str_diff)
-            string_var.set(name_compare)
-
-        self.main.ask_to_save = True
 
     def validate_driver_ver(self, *_):
         version_compare = re.sub(r'\D', '', ver_str := self.main.driver_version_new_var.get()).lstrip('0')
@@ -2638,7 +2696,7 @@ class C4zPanel:
 
                 return icon_groups
 
-            img_paths = new_driver_path if self.main.driver_get_all_imgs else (new_icon_dir, new_images_dir)
+            img_paths = new_driver_path if main.settings['get_all_driver_imgs'] else (new_icon_dir, new_images_dir)
             if new_icons := get_icons(img_paths):
                 self.icons = new_icons
             else:
@@ -3285,16 +3343,16 @@ class ExportPanel:
         self.driver_name_entry.place(x=145 + self.x, y=190 + self.y, anchor='n')
 
         # Checkboxes
-        self.inc_driver_version = IntVar(value=1)
+        self.include_backups = IntVar(value=main.settings['include_backup_files'])
+        self.include_backups_check = Checkbutton(main.root, text='include backup files',
+                                                 variable=self.include_backups, takefocus=0)
+        self.include_backups_check.place(x=63 + self.x, y=130 + self.y, anchor='w')
+
+        self.inc_driver_version = IntVar(value=main.settings['inc_driver_ver'])
         self.inc_driver_version.trace_add('write', self.update_driver_version)
         self.inc_driver_check = Checkbutton(main.root, text='increment driver version',
                                             variable=self.inc_driver_version, takefocus=0)
         self.inc_driver_check.place(x=63 + self.x, y=150 + self.y, anchor='w')
-
-        self.include_backups = IntVar(value=1)
-        self.include_backups_check = Checkbutton(main.root, text='include backup files',
-                                                 variable=self.include_backups, takefocus=0)
-        self.include_backups_check.place(x=63 + self.x, y=130 + self.y, anchor='w')
 
     def quick_export(self):
         driver_name = self.driver_name_var.get()
