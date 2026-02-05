@@ -683,6 +683,7 @@ class C4IconSwapper(IPC):
         settings_str = ',\n\t'.join([f'{setting}: {val}' for setting, val in self.settings.items()])
         print(f'Using settings: {{\n\t{settings_str}\n}}')
 
+        # TODO: Move these out of init?
         def exception_window(*args, message_txt=None):
             root = Toplevel(self.root)
             root.title('Exception')
