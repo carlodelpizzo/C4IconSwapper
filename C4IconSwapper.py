@@ -634,8 +634,9 @@ class C4IconSwapper(IPC):
         self.inc_driver_ver = IntVar(value=1)
         self.driver_manufac = StringVar(value='C4IconSwapper')
         self.driver_creator = StringVar(value='C4IconSwapper')
+        self.quick_export_dir = StringVar(value=str(Path.cwd()))
 
-        self.setting_ids = {
+        self.setting_name_dict = {
             id(var): setting_name
             for setting_name, var in self.__dict__.items()
             if var is not self.root
@@ -651,7 +652,6 @@ class C4IconSwapper(IPC):
         self.appdata_dir.mkdir(exist_ok=True)
 
         # Read saved user settings from file
-        # TODO: Un-Fuck the entire settings functionality
         if self.settings_file.exists():
             try:
                 if settings_json := json.loads(self.settings_file.read_text()):
@@ -664,7 +664,7 @@ class C4IconSwapper(IPC):
                             continue
                         if val == self.settings[setting]:
                             continue
-                        setattr(self, setting, val)
+                        getattr(self, setting).set(val)
                     if invalid_settings or missing_settings:
                         self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
                         print('Discrepancy between settings file and default settings')
@@ -833,9 +833,9 @@ class C4IconSwapper(IPC):
         # Class variables
         self.driver_xml = None
         self.driver_manufac_var = StringVar()
-        self.driver_manufac_new_var = StringVar(value=self.driver_manufac)
+        self.driver_manufac_new_var = StringVar(value=self.driver_manufac.get())
         self.driver_creator_var = StringVar()
-        self.driver_creator_new_var = StringVar(value=self.driver_creator)
+        self.driver_creator_new_var = StringVar(value=self.driver_creator.get())
         self.driver_ver_orig = StringVar()
         self.driver_version_var = StringVar()
         self.driver_version_new_var = StringVar(value='1')
@@ -1359,15 +1359,14 @@ class C4IconSwapper(IPC):
     def settings(self):
         return {
             setting_name: (
-                (None if (val := var.get()) == -1 else bool(val))
+                (None if (val := var.get()) < 0 else bool(val))
                 if isinstance(var := getattr(self, setting_name), IntVar)
                 else var.get()
             )
-            for setting_name in self.setting_ids.values()
+            for setting_name in self.setting_name_dict.values()
         }
 
 
-# TODO: Add default folder for quick export as setting
 class SettingsWin:
     def __init__(self, main: C4IconSwapper):
         self.main = main
@@ -1377,85 +1376,117 @@ class SettingsWin:
         self.window.focus()
         self.window.protocol('WM_DELETE_WINDOW', self.close)
         self.window.title('Settings')
-        self.window.geometry('255x240')
+        self.window.geometry('255x233')
         self.window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
 
-        self.wait_for_entry_mod = None  # TODO: Figure out how to implement setting mod with entry
+        self.entry_mod_delay_dict = {}
+        self.var_trace_dict = {}
 
         self.title = Label(self.window, text='Default Settings', font=(label_font, 12, 'bold'))
         self.title.place(relx=0.5, y=5, anchor='n')
 
-        self.get_all_driver_imgs = IntVar(value=main.get_all_driver_imgs)
         # noinspection PyTypeChecker
-        self.get_all_driver_imgs.trace_add('write', lambda *_: self.update_setting(self.get_all_driver_imgs,
-                                                                                   main.get_all_driver_imgs))
+        trace = main.get_all_driver_imgs.trace_add('write',
+                                                   lambda *_: self.update_setting(main.get_all_driver_imgs))
+        self.var_trace_dict[id(main.get_all_driver_imgs)] = (main.get_all_driver_imgs, trace)
         get_all_driver_imgs_check = Checkbutton(self.window, text='Get ALL images from driver',
-                                                variable=self.get_all_driver_imgs)
+                                                variable=main.get_all_driver_imgs)
         get_all_driver_imgs_check.place(x=5, y=30, anchor='nw')
+
         y_val = 55
-        self.merge_imgs_on_load = None
-        if merge_settings := main.merge_imgs_on_load is not None:
-            self.merge_imgs_on_load = IntVar(value=merge_settings)
+        if main.merge_imgs_on_load.get() != -1:
+            self.window.geometry('255x255')
             # noinspection PyTypeChecker
-            self.merge_imgs_on_load.trace_add('write', lambda *_: self.update_setting(self.merge_imgs_on_load,
-                                                                                      main.merge_imgs_on_load))
+            trace = main.merge_imgs_on_load.trace_add('write',
+                                                      lambda *_: self.update_setting(main.merge_imgs_on_load))
+            self.var_trace_dict[id(main.merge_imgs_on_load)] = (main.merge_imgs_on_load, trace)
             merge_imgs_on_load_check = Checkbutton(self.window, text='Merge existing replacement images',
-                                                   variable=self.merge_imgs_on_load)
+                                                   variable=main.merge_imgs_on_load)
             merge_imgs_on_load_check.place(x=5, y=y_val, anchor='nw')
             y_val += 25
 
-        self.include_backup_files = IntVar(value=main.include_backup_files)
         # noinspection PyTypeChecker
-        self.include_backup_files.trace_add('write', lambda *_: self.update_setting(self.include_backup_files,
-                                                                                    main.include_backup_files))
+        trace = main.include_backup_files.trace_add('write',
+                                                    lambda *_: self.update_setting(main.include_backup_files))
+        self.var_trace_dict[id(main.include_backup_files)] = (main.include_backup_files, trace)
         include_backup_files_check = Checkbutton(self.window, text='Include .bak files when exporting',
-                                                 variable=self.include_backup_files)
+                                                 variable=main.include_backup_files)
         include_backup_files_check.place(x=5, y=y_val, anchor='nw')
 
         y_val += 25
-        self.inc_driver_ver = IntVar(value=main.inc_driver_ver)
         # noinspection PyTypeChecker
-        self.inc_driver_ver.trace_add('write', lambda *_: self.update_setting(self.inc_driver_ver,
-                                                                              main.inc_driver_ver))
+        trace = main.inc_driver_ver.trace_add('write', lambda *_: self.update_setting(main.inc_driver_ver))
+        self.var_trace_dict[id(main.inc_driver_ver)] = (main.inc_driver_ver, trace)
         inc_driver_ver_check = Checkbutton(self.window, text='Increment driver version on each export',
-                                           variable=self.inc_driver_ver)
+                                           variable=main.inc_driver_ver)
         inc_driver_ver_check.place(x=5, y=y_val, anchor='nw')
 
         y_val += 30
-        self.driver_manufac = StringVar(value=main.driver_manufac)
         driver_manufac_label = Label(self.window, text='Driver Manufacturer:')
         driver_manufac_label.place(x=5, y=y_val, anchor='nw')
-        self.driver_manufac_entry = Entry(self.window, width=19, textvariable=self.driver_manufac)
+        self.driver_manufac_entry = Entry(self.window, width=19, textvariable=main.driver_manufac)
         # noinspection PyTypeChecker
-        self.driver_manufac.trace_add('write', lambda *_: self.update_setting(self.driver_manufac,
-                                                                              main.driver_manufac,
-                                                                              entry=self.driver_manufac_entry))
+        trace = main.driver_manufac.trace_add('write', lambda *_: self.update_setting(main.driver_manufac,
+                                                                                      entry=self.driver_manufac_entry))
+        self.var_trace_dict[id(main.driver_manufac)] = (main.driver_manufac, trace)
         self.driver_manufac_entry.place(x=119, y=y_val+2, anchor='nw')
 
         y_val += 30
-        self.driver_creator = StringVar(value=main.driver_creator)
         driver_creator_label = Label(self.window, text='Driver Creator:')
         driver_creator_label.place(x=5, y=y_val, anchor='nw')
-        self.driver_creator_entry = Entry(self.window, width=25, textvariable=self.driver_creator)
+        self.driver_creator_entry = Entry(self.window, width=25, textvariable=main.driver_creator)
         # noinspection PyTypeChecker
-        self.driver_creator.trace_add('write', lambda *_: self.update_setting(self.driver_creator,
-                                                                              main.driver_creator,
-                                                                              entry=self.driver_creator_entry))
+        trace = main.driver_creator.trace_add('write', lambda *_: self.update_setting(main.driver_creator,
+                                                                                      entry=self.driver_creator_entry))
+        self.var_trace_dict[id(main.driver_creator)] = (main.driver_creator, trace)
         self.driver_creator_entry.place(x=85, y=y_val+2, anchor='nw')
 
-    def update_setting(self, variable, setting_var, *_, entry=None):
-        setting_name = 'NONE'
-        if isinstance(setting_var, bool) or setting_var is None:
-            print(f'Set {setting_name} to: {bool(variable.get())}')
-        elif isinstance(setting_var, str):
-            print(f'Set {setting_name} to: {variable.get()}')
-            self.main.validate_man_and_creator(variable, entry)
-            setattr(self.main, setting_name, variable.get())
+        y_val += 32
+        quick_export_label = Label(self.window, text='Quick Export Directory')
+        quick_export_label.place(relx=0.5, y=y_val, anchor='n')
+        self.quick_export_entry = Entry(self.window, width=27, textvariable=main.quick_export_dir)
+        self.quick_export_entry['state'] = 'readonly'
+        self.quick_export_entry.place(x=5, y=y_val+25, anchor='nw')
+        self.quick_export_button = Button(self.window, text='Browse...', width=8, command=self.select_quick_export_dir)
+        self.quick_export_button.place(x=210, y=y_val+22, anchor='n')
+
+    def update_setting(self, setting_var, *_, entry=None):
+        setting_name = self.main.setting_name_dict[id(setting_var)]
+        if isinstance(setting_var, IntVar):
+            print(f'Set {setting_name} to: {bool(setting_var.get())}')
+        elif isinstance(setting_var, StringVar):
+            self.main.validate_man_and_creator(setting_var, entry)
+            if existing_after_call := self.entry_mod_delay_dict.get(id(setting_var)):
+                self.window.after_cancel(existing_after_call[0])
+            # noinspection PyTypeChecker
+            after_call = self.window.after(2000, lambda: self.string_setting_update(setting_name, setting_var))
+            self.entry_mod_delay_dict[id(setting_var)] = (after_call, setting_name, setting_var)
+            print(self.entry_mod_delay_dict)
+            return
+        else:
+            settings_str = ',\n\t'.join([f'{setting}: {val}' for setting, val in self.main.settings.items()])
+            print(f'New settings: {{\n\t{settings_str}\n}}')
         self.main.settings_file.write_text(json.dumps(self.main.settings, indent='\t'))
-        print(self.main.settings)
+
+    def string_setting_update(self, setting_name, setting_var):
+        print(f'Set {setting_name} to: {setting_var.get()}')
+        self.main.settings_file.write_text(json.dumps(self.main.settings, indent='\t'))
+        self.entry_mod_delay_dict.pop(id(setting_var))
+
+    # TODO: Add print messages and update settings file; update quick export to use setting
+    def select_quick_export_dir(self):
+        folder_path = filedialog.askdirectory(title='Select Quick Export Directory', initialdir=Path.cwd())
+        if folder_path:
+            self.main.quick_export_dir.set(str(Path(folder_path)))
+        self.window.focus()
 
     def close(self):
+        for setting_var, trace in self.var_trace_dict.values():
+            setting_var.trace_remove('write', trace)
+        for value in list(self.entry_mod_delay_dict.values()):
+            self.window.after_cancel(value[0])
+            self.string_setting_update(value[1], value[2])
         self.window.destroy()
         self.main.settings_win = None
 
