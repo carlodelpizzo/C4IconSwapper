@@ -625,15 +625,21 @@ class IPC:
 
 class C4IconSwapper(IPC):
     def __init__(self):
+        self.root = TkinterDnD.Tk()
+
         # Default App settings
-        self.get_all_driver_imgs = False
-        self.merge_imgs_on_load = None
-        self.include_backup_files = True
-        self.inc_driver_ver = True
-        self.driver_manufac = 'C4IconSwapper'
-        self.driver_creator = 'C4IconSwapper'
-        self.settings = {name: var for name, var in self.__dict__.items()}
-        self.setting_names = {var: name for name, var in self.settings.items()}
+        self.get_all_driver_imgs = IntVar(value=0)
+        self.merge_imgs_on_load = IntVar(value=-1)
+        self.include_backup_files = IntVar(value=1)
+        self.inc_driver_ver = IntVar(value=1)
+        self.driver_manufac = StringVar(value='C4IconSwapper')
+        self.driver_creator = StringVar(value='C4IconSwapper')
+
+        self.setting_ids = {
+            id(var): setting_name
+            for setting_name, var in self.__dict__.items()
+            if var is not self.root
+        }
 
         # Common Directories
         self.cur_dir = Path.cwd()
@@ -645,20 +651,26 @@ class C4IconSwapper(IPC):
         self.appdata_dir.mkdir(exist_ok=True)
 
         # Read saved user settings from file
+        # TODO: Un-Fuck the entire settings functionality
         if self.settings_file.exists():
             try:
                 if settings_json := json.loads(self.settings_file.read_text()):
                     print('Found user settings in file')
-                    # TODO: Redo this so that setting dict does not lose pointer to var. update var instead
-                    valid_settings = {setting: settings_json.get(setting, default_val)
-                                      for setting, default_val in self.settings.items()}
-                    self.settings = valid_settings
-                    if valid_settings != settings_json:
+                    invalid_settings = set()
+                    missing_settings = self.settings.keys() - settings_json.keys()
+                    for setting, val in settings_json.items():
+                        if setting not in self.settings:
+                            invalid_settings.add(setting)
+                            continue
+                        if val == self.settings[setting]:
+                            continue
+                        setattr(self, setting, val)
+                    if invalid_settings or missing_settings:
                         self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
                         print('Discrepancy between settings file and default settings')
-                        if invalid_settings := settings_json.keys() - valid_settings.keys():
+                        if invalid_settings:
                             print(f'Invalid settings in file: {invalid_settings}')
-                        if missing_settings := self.settings.keys() - settings_json.keys():
+                        if missing_settings:
                             print(f'Settings missing from file: {missing_settings}')
                 else:
                     print('Empty settings file; Reverting to Defaults')
@@ -668,7 +680,8 @@ class C4IconSwapper(IPC):
                 self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
         else:
             self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
-        print(f'Using settings: {self.settings}')
+        settings_str = ',\n\t'.join([f'{setting}: {val}' for setting, val in self.settings.items()])
+        print(f'Using settings: {{\n\t{settings_str}\n}}')
 
         def exception_window(*args, message_txt=None):
             root = Toplevel(self.root)
@@ -789,7 +802,6 @@ class C4IconSwapper(IPC):
         print(f'Set Instance ID: {self.instance_id}')
 
         # Initialize root window
-        self.root = TkinterDnD.Tk()
         self.root.report_callback_exception, warnings.showwarning = exception_handler, exception_handler
         self.root.geometry('915x287')
         self.root.resizable(False, False)
@@ -1342,6 +1354,17 @@ class C4IconSwapper(IPC):
         else:
             user32.ShowWindow(self.debug_console, 5)  # Show
 
+    @property
+    def settings(self):
+        return {
+            setting_name: (
+                (None if (val := var.get()) == -1 else bool(val))
+                if isinstance(var := getattr(self, setting_name), IntVar)
+                else var.get()
+            )
+            for setting_name in self.setting_ids.values()
+        }
+
 
 # TODO: Add default folder for quick export as setting
 class SettingsWin:
@@ -1356,18 +1379,16 @@ class SettingsWin:
         self.window.geometry('255x240')
         self.window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
-        self.setting_vars = {}
-        self.main_setting_var = {}
+
         self.wait_for_entry_mod = None  # TODO: Figure out how to implement setting mod with entry
 
         self.title = Label(self.window, text='Default Settings', font=(label_font, 12, 'bold'))
         self.title.place(relx=0.5, y=5, anchor='n')
 
         self.get_all_driver_imgs = IntVar(value=main.get_all_driver_imgs)
-        self.main_setting_var[str(self.get_all_driver_imgs)] = main.get_all_driver_imgs
-        self.setting_vars[main.setting_names[main.get_all_driver_imgs]] = self.get_all_driver_imgs
         # noinspection PyTypeChecker
-        self.get_all_driver_imgs.trace_add('write', lambda *_: self.update_setting(self.get_all_driver_imgs))
+        self.get_all_driver_imgs.trace_add('write', lambda *_: self.update_setting(self.get_all_driver_imgs,
+                                                                                   main.get_all_driver_imgs))
         get_all_driver_imgs_check = Checkbutton(self.window, text='Get ALL images from driver',
                                                 variable=self.get_all_driver_imgs)
         get_all_driver_imgs_check.place(x=5, y=30, anchor='nw')
@@ -1375,80 +1396,61 @@ class SettingsWin:
         self.merge_imgs_on_load = None
         if merge_settings := main.merge_imgs_on_load is not None:
             self.merge_imgs_on_load = IntVar(value=merge_settings)
-            self.main_setting_var[str(self.merge_imgs_on_load)] = main.merge_imgs_on_load
-            self.setting_vars[main.setting_names[main.merge_imgs_on_load]] = self.merge_imgs_on_load
             # noinspection PyTypeChecker
-            self.merge_imgs_on_load.trace_add('write', lambda *_: self.update_setting(self.merge_imgs_on_load))
+            self.merge_imgs_on_load.trace_add('write', lambda *_: self.update_setting(self.merge_imgs_on_load,
+                                                                                      main.merge_imgs_on_load))
             merge_imgs_on_load_check = Checkbutton(self.window, text='Merge existing replacement images',
                                                    variable=self.merge_imgs_on_load)
             merge_imgs_on_load_check.place(x=5, y=y_val, anchor='nw')
             y_val += 25
 
         self.include_backup_files = IntVar(value=main.include_backup_files)
-        self.main_setting_var[str(self.include_backup_files)] = main.include_backup_files
-        self.setting_vars[main.setting_names[main.include_backup_files]] = self.include_backup_files
         # noinspection PyTypeChecker
-        self.include_backup_files.trace_add('write', lambda *_: self.update_setting(self.include_backup_files))
+        self.include_backup_files.trace_add('write', lambda *_: self.update_setting(self.include_backup_files,
+                                                                                    main.include_backup_files))
         include_backup_files_check = Checkbutton(self.window, text='Include .bak files when exporting',
                                                  variable=self.include_backup_files)
         include_backup_files_check.place(x=5, y=y_val, anchor='nw')
 
         y_val += 25
         self.inc_driver_ver = IntVar(value=main.inc_driver_ver)
-        self.main_setting_var[str(self.inc_driver_ver)] = main.inc_driver_ver
-        self.setting_vars[main.setting_names[main.inc_driver_ver]] = self.inc_driver_ver
         # noinspection PyTypeChecker
-        self.inc_driver_ver.trace_add('write', lambda *_: self.update_setting(self.inc_driver_ver))
+        self.inc_driver_ver.trace_add('write', lambda *_: self.update_setting(self.inc_driver_ver,
+                                                                              main.inc_driver_ver))
         inc_driver_ver_check = Checkbutton(self.window, text='Increment driver version on each export',
                                            variable=self.inc_driver_ver)
         inc_driver_ver_check.place(x=5, y=y_val, anchor='nw')
 
         y_val += 30
         self.driver_manufac = StringVar(value=main.driver_manufac)
-        self.main_setting_var[str(self.driver_manufac)] = main.driver_manufac
-        self.setting_vars[main.setting_names[main.driver_manufac]] = self.driver_manufac
-        # noinspection PyTypeChecker
-        self.driver_manufac.trace_add('write', lambda *_: self.update_setting(self.driver_manufac))
         driver_manufac_label = Label(self.window, text='Driver Manufacturer:')
         driver_manufac_label.place(x=5, y=y_val, anchor='nw')
         self.driver_manufac_entry = Entry(self.window, width=19, textvariable=self.driver_manufac)
+        # noinspection PyTypeChecker
+        self.driver_manufac.trace_add('write', lambda *_: self.update_setting(self.driver_manufac,
+                                                                              main.driver_manufac,
+                                                                              entry=self.driver_manufac_entry))
         self.driver_manufac_entry.place(x=119, y=y_val+2, anchor='nw')
 
         y_val += 30
         self.driver_creator = StringVar(value=main.driver_creator)
-        self.main_setting_var[str(self.driver_creator)] = main.driver_creator
-        self.setting_vars[main.setting_names[main.driver_creator]] = self.driver_creator
-        # noinspection PyTypeChecker
-        self.driver_creator.trace_add('write', lambda *_: self.update_setting(self.driver_creator))
         driver_creator_label = Label(self.window, text='Driver Creator:')
         driver_creator_label.place(x=5, y=y_val, anchor='nw')
         self.driver_creator_entry = Entry(self.window, width=25, textvariable=self.driver_creator)
+        # noinspection PyTypeChecker
+        self.driver_creator.trace_add('write', lambda *_: self.update_setting(self.driver_creator,
+                                                                              main.driver_creator,
+                                                                              entry=self.driver_creator_entry))
         self.driver_creator_entry.place(x=85, y=y_val+2, anchor='nw')
 
-    def update_setting(self, variable, *_):
-        setting_name = self.main.setting_names[self.main_setting_var[str(variable)]]
-        if variable is self.get_all_driver_imgs:
+    def update_setting(self, variable, setting_var, *_, entry=None):
+        setting_name = 'NONE'
+        if isinstance(setting_var, bool) or setting_var is None:
             print(f'Set {setting_name} to: {bool(variable.get())}')
-            setattr(self.main, setting_name, bool(variable.get()))
-        elif variable is self.merge_imgs_on_load:
-            print(f'Set {setting_name} to: {bool(variable.get())}')
-            setattr(self.main, setting_name, bool(variable.get()))
-        elif variable is self.include_backup_files:
-            print(f'Set {setting_name} to: {bool(variable.get())}')
-            setattr(self.main, setting_name, bool(variable.get()))
-        elif variable is self.inc_driver_ver:
-            print(f'Set {setting_name} to: {bool(self.inc_driver_ver.get())}')
-            setattr(self.main, setting_name, bool(variable.get()))
-        elif variable in (self.driver_manufac, self.driver_creator):
-            self.main.validate_man_and_creator(self.driver_manufac, self.driver_manufac_entry)
-        elif variable is self.driver_creator:
-            self.main.validate_man_and_creator(self.driver_creator, self.driver_creator_entry)
-        else:
-            # print(f'Updated Settings From: {self.main.settings}')
-            # for setting, value in self.setting_vars.items():
-            #     self.main.settings[setting] = bool(value.get())
-            # print(f'To: {self.main.settings}')
-            pass
+        elif isinstance(setting_var, str):
+            print(f'Set {setting_name} to: {variable.get()}')
+            self.main.validate_man_and_creator(variable, entry)
+            setattr(self.main, setting_name, variable.get())
         self.main.settings_file.write_text(json.dumps(self.main.settings, indent='\t'))
         print(self.main.settings)
 
