@@ -637,7 +637,7 @@ class C4IconSwapper(IPC):
 
         # Default App settings
         self.get_all_driver_imgs = IntVar(value=0)
-        self.merge_imgs_on_load = IntVar(value=-1)
+        self.merge_on_load = IntVar(value=-1)  # Default: Ask each time
         self.include_backup_files = IntVar(value=1)
         self.inc_driver_ver = IntVar(value=1)
         self.driver_manufac = StringVar(value='C4IconSwapper')
@@ -706,11 +706,8 @@ class C4IconSwapper(IPC):
 
         # Set Instance ID; Check for existing folders with same ID
         self.instance_id = str(random.randint(111111, 999999))
-        self.instance_temp = self.global_temp / self.instance_id
-        # instance_temp folder created after IPC validation in case id changes
-        while self.instance_temp.is_dir():
+        while (self.global_temp / self.instance_id).is_dir():
             self.instance_id = str(random.randint(111111, 999999))
-            self.instance_temp = self.global_temp / self.instance_id
         print(f'Set Instance ID: {self.instance_id}')
 
         # IPC Variables
@@ -726,7 +723,11 @@ class C4IconSwapper(IPC):
         self.default_port = 61352
         self.ipc(first_time=True)
 
+        # Instance Directories
+        self.instance_temp = self.global_temp / self.instance_id
         self.instance_temp.mkdir()
+        self.replacement_icons_dir = self.instance_temp / 'Replacement Icons'
+        self.replacement_icons_dir.mkdir(exist_ok=True)
 
         # Root window title after IPC since ipc can change instance_id
         show_id_in_title = not self.running_as_exe and not self.is_server
@@ -844,6 +845,21 @@ class C4IconSwapper(IPC):
         self.root.protocol('WM_DELETE_WINDOW', self.end_program)
         self.root.focus_force()
         self.root.mainloop()
+
+    @property
+    def settings(self):
+        return {
+            setting_name: (
+                (None if (val := var.get()) < 0 else bool(val))
+                if isinstance(var := getattr(self, setting_name), IntVar)
+                else var.get()
+            )
+            for setting_name in self.setting_names.values()
+        }
+
+    @property
+    def has_images(self):
+        return self.replacement_panel.replacement_icon or self.replacement_panel.img_bank
 
     def exception_window(self, *args, message_txt=None):
         root = Toplevel(self.root)
@@ -1055,7 +1071,7 @@ class C4IconSwapper(IPC):
     # TODO: Currently does not validate project file. Unsure what behavior is for invalid file.
     # TODO: Add backwards compatibility.
     # TODO: Add merge functionality
-    def load_c4is(self, *_, path_str='', scheduled=False):
+    def load_c4is(self, *_, path_str='', scheduled=False, merge_project=None):
         if scheduled:
             self.replacement_panel.multi_threading.wait()
         elif self.pending_load_save:
@@ -1066,7 +1082,33 @@ class C4IconSwapper(IPC):
             if not path_str:
                 return
 
-        # Start new thread which will wait for images to finish processing before running
+        # Create C4IS object from file
+        with open(path_str, 'rb') as path_str:
+            c4is = pickle.load(path_str)
+        if not isinstance(c4is, C4IS):
+            # TODO: Open dialog informing user of invalid project file
+            raise TypeError(f'Expected type: {C4IS.__name__}')
+        saved_has_imgs = c4is.replacement or c4is.img_bank
+        if not c4is.driver_selected and not saved_has_imgs:
+            # TODO: Open dialog informing user of invalid project file
+            return
+
+        if merge_project is None:
+            merge_project = None if (setting_val := self.merge_on_load.get()) < 0 else bool(setting_val)
+        if merge_project is None and (self.has_images or
+                                      (self.driver_selected and not c4is.driver_selected and saved_has_imgs)):
+            merge_dialog_result = StringVar()
+            self.ask_to_merge_dialog(merge_dialog_result)
+            self.root.wait_variable(merge_dialog_result)
+            match merge_dialog_result.get():
+                case 'do':
+                    merge_project = True
+                case 'dont':
+                    merge_project = False
+                case _:
+                    return
+
+        # If images are currently being processed by replacement panel, start new thread waiting for it to finish
         if not self.replacement_panel.multi_threading.is_set():
             self.pending_load_save = True
             with Image.open(assets_path / 'loading_img.png') as img:
@@ -1074,107 +1116,126 @@ class C4IconSwapper(IPC):
                 self.c4z_panel.c4_icon_label.configure(image=icon)
                 self.c4z_panel.c4_icon_label.image = icon
             threading.Thread(target=self.load_c4is,
-                             kwargs={'path_str': path_str, 'scheduled': True}, daemon=True).start()
+                             kwargs={'path_str': path_str, 'scheduled': True, 'merge_project': merge_project},
+                             daemon=True).start()
             return
 
-        with open(path_str, 'rb') as path_str:
-            save_state = pickle.load(path_str)
-        if not isinstance(save_state, C4IS):
-            raise TypeError(f'Expected type: {C4IS.__name__}')
+        # If saved project has a driver, or it is overwriting current project's driver
+        if c4is.driver_selected or not merge_project:
+            self.c4z_panel.icons = []
+            self.c4z_panel.current_icon = 0
+            self.c4z_panel.c4_icon_label.configure(image=self.img_blank)
+            shutil.rmtree(self.instance_temp / 'driver', ignore_errors=True)
+            if c4is.driver_selected:
+                self.c4z_panel.restore_button['state'] = DISABLED
+                with open(saved_driver_path := self.instance_temp / 'saved_driver.c4z', 'wb') as driver_zip:
+                    driver_zip.write(c4is.driver_zip)
+                self.c4z_panel.load_c4z(saved_driver_path, force=True, new_thread=False)
+                saved_driver_path.unlink()
+            elif not merge_project:
+                self.export_panel.export_button['state'] = DISABLED
+                self.export_panel.export_as_button['state'] = DISABLED
+                self.c4z_panel.icon_name_label.config(text='icon name')
+                self.c4z_panel.icon_num_label.config(text='0 of 0')
+            self.driver_selected = c4is.driver_selected
+            self.driver_xml = c4is.driver_xml
+            self.driver_manufac_var.set(c4is.driver_manufac_var)
+            self.driver_manufac_new_var.set(c4is.driver_manufac_new_var)
+            self.driver_creator_var.set(c4is.driver_creator_var)
+            self.driver_creator_new_var.set(c4is.driver_creator_new_var)
+            self.driver_ver_orig.set(c4is.driver_ver_orig)
+            self.driver_version_var.set(c4is.driver_version_var)
+            self.driver_version_new_var.set(c4is.driver_version_new_var)
+            self.multi_state_driver = c4is.multi_state_driver
+            self.states_orig_names = c4is.states_orig_names
+            if self.multi_state_driver:
+                self.edit.entryconfig(self.states_pos, state=NORMAL)
+            else:
+                self.edit.entryconfig(self.states_pos, state=DISABLED)
 
-        # C4z Panel (and export button)
-        self.c4z_panel.icons = []
-        self.c4z_panel.current_icon = 0
-        self.c4z_panel.c4_icon_label.configure(image=self.img_blank)
-        shutil.rmtree(self.instance_temp / 'driver', ignore_errors=True)
-        self.c4z_panel.restore_button['state'] = DISABLED
-        if save_state.driver_selected:
-            with open(saved_driver_path := self.instance_temp / 'saved_driver.c4z', 'wb') as driver_zip:
-                driver_zip.write(save_state.driver_zip)
-            self.c4z_panel.load_c4z(saved_driver_path, force=True, new_thread=False)
-            saved_driver_path.unlink()
-        else:
-            self.export_panel.export_button['state'] = DISABLED
-            self.export_panel.export_as_button['state'] = DISABLED
-            self.c4z_panel.icon_name_label.config(text='icon name')
-            self.c4z_panel.icon_num_label.config(text='0 of 0')
-        self.driver_selected = save_state.driver_selected
+            # State Panel
+            for i, state in enumerate(c4is.states):
+                self.states[i].original_name = state['original_name']
+                self.states[i].name_var.set(state['name_var'])
 
-        # Root class
-        self.driver_xml = save_state.driver_xml
-        self.driver_manufac_var.set(save_state.driver_manufac_var)
-        self.driver_manufac_new_var.set(save_state.driver_manufac_new_var)
-        self.driver_creator_var.set(save_state.driver_creator_var)
-        self.driver_creator_new_var.set(save_state.driver_creator_new_var)
-        self.driver_ver_orig.set(save_state.driver_ver_orig)
-        self.driver_version_var.set(save_state.driver_version_var)
-        self.driver_version_new_var.set(save_state.driver_version_new_var)
-        self.multi_state_driver = save_state.multi_state_driver
-        self.states_orig_names = save_state.states_orig_names
-        if self.multi_state_driver:
-            self.edit.entryconfig(self.states_pos, state=NORMAL)
-        else:
-            self.edit.entryconfig(self.states_pos, state=DISABLED)
+            # Connection Panel
+            self.taken_conn_ids.clear()
+            for i, conn in enumerate(c4is.connections):
+                self.connections[i].id = conn_id = conn['id']
+                if conn_id >= 0:
+                    self.taken_conn_ids[conn_id] = self.connections[i]
+                self.connections[i].original = conn['original']
+                self.connections[i].delete = conn['delete']
+                self.connections[i].prior_txt = conn['prior_txt']
+                self.connections[i].prior_type = conn['prior_type']
+                self.connections[i].tag = conn['tag']
+                self.connections[i].type.set(conn['type'])
+                self.connections[i].name_entry_var.set(conn['name'])
+                self.connections[i].enabled = conn['state']
 
-        # State Panel
-        for i, state in enumerate(save_state.states):
-            self.states[i].original_name = state['original_name']
-            self.states[i].name_var.set(state['name_var'])
-
-        # Connection Panel
-        self.taken_conn_ids.clear()
-        for i, conn in enumerate(save_state.connections):
-            self.connections[i].id = conn_id = conn['id']
-            if conn_id >= 0:
-                self.taken_conn_ids[conn_id] = self.connections[i]
-            self.connections[i].original = conn['original']
-            self.connections[i].delete = conn['delete']
-            self.connections[i].prior_txt = conn['prior_txt']
-            self.connections[i].prior_type = conn['prior_type']
-            self.connections[i].tag = conn['tag']
-            self.connections[i].type.set(conn['type'])
-            self.connections[i].name_entry_var.set(conn['name'])
-            self.connections[i].enabled = conn['state']
-
-        # Export Panel
-        self.export_panel.driver_name_var.set(save_state.driver_name_var)
-        self.export_panel.inc_driver_version.set(save_state.inc_driver_version)
-        self.export_panel.include_backups.set(save_state.include_backups)
+            # Export Panel
+            self.export_panel.driver_name_var.set(c4is.driver_name_var)
+            self.export_panel.inc_driver_version.set(c4is.inc_driver_version)
+            self.export_panel.include_backups.set(c4is.include_backups)
 
         # Replacement Panel
-        self.replacement_panel.img_bank_lockout_dict = {}
-        replacement_dir = self.replacement_panel.replacement_icons_dir
-        shutil.rmtree(replacement_dir, ignore_errors=True)
-        replacement_dir.mkdir()
-        if save_state.replacement:
-            rp_img = Image.open(io.BytesIO(save_state.replacement))
-            rp_img.save(replacement_dir / 'replacement.png')
-            self.replacement_panel.replacement_icon = (Icon(replacement_dir / 'replacement.png', img=rp_img))
-            rp_img.close()
-            self.replacement_panel.replacement_img_label.configure(
-                image=self.replacement_panel.replacement_icon.tk_icon_lg)
-            self.replacement_panel.replacement_img_label.image = self.replacement_panel.replacement_icon.tk_icon_lg
-        else:
-            self.replacement_panel.replacement_icon = None
-            self.replacement_panel.replacement_img_label.config(image=self.img_blank)
-            self.replacement_panel.replacement_img_label.image = self.img_blank
-        self.replacement_panel.img_bank = []
-        for img_bank_label in self.replacement_panel.img_bank_tk_labels:
-            img_bank_label.configure(image=self.img_bank_blank)
-        next_num = map(str, itertools.count(0))
-        for img in save_state.img_bank:
-            img_path = replacement_dir / f'img_bank{next(next_num)}.png'
-            bank_img = Image.open(io.BytesIO(img))
-            bank_img.save(img_path)
-            self.replacement_panel.img_bank.append(Icon(img_path, img=bank_img))
-            bank_img.close()
-        self.replacement_panel.refresh_img_bank()
-        self.replacement_panel.replace_button['state'] = save_state.replacement_panel['replace']
-        self.replacement_panel.replace_all_button['state'] = save_state.replacement_panel['replace_all']
-        self.replacement_panel.prev_icon_button['state'] = save_state.replacement_panel['prev']
-        self.replacement_panel.next_icon_button['state'] = save_state.replacement_panel['next']
+        if merge_project:  # TODO: Consolidate these if/else branches
+            if c4is.replacement:
+                if self.replacement_panel.replacement_icon:
+                    c4is.img_bank.append(c4is.replacement)
+                else:
+                    rp_img = Image.open(io.BytesIO(c4is.replacement))
+                    next_num = itertools.count(0)
+                    while (rp_path := self.replacement_icons_dir / f'replacement{next(next_num)}.png').exists():
+                        pass
+                    rp_img.save(rp_path)
+                    self.replacement_panel.replacement_icon = (Icon(rp_path, img=rp_img))
+                    rp_img.close()
+                    rp_tk_img = self.replacement_panel.replacement_icon.tk_icon_lg
+                    self.replacement_panel.replacement_img_label.configure(image=rp_tk_img)
+                    self.replacement_panel.replacement_img_label.image = rp_tk_img
+            next_num = itertools.count(len(self.replacement_panel.img_bank) + 1)
+            for img in c4is.img_bank:
+                while (img_path := self.replacement_icons_dir / f'img_bank{next(next_num)}.png').exists():
+                    pass
+                bank_img = Image.open(io.BytesIO(img))
+                bank_img.save(img_path)
+                self.replacement_panel.img_bank.append(Icon(img_path, img=bank_img))
+                bank_img.close()
+            self.replacement_panel.refresh_img_bank()
+            self.replacement_panel.update_buttons()
 
-        self.ask_to_save = False
+        else:
+            self.replacement_panel.img_bank_lockout_dict = {}
+            replacement_dir = self.replacement_icons_dir
+            shutil.rmtree(replacement_dir, ignore_errors=True)
+            replacement_dir.mkdir()
+            if c4is.replacement:
+                rp_img = Image.open(io.BytesIO(c4is.replacement))
+                rp_img.save(replacement_dir / 'replacement.png')
+                self.replacement_panel.replacement_icon = (Icon(replacement_dir / 'replacement.png', img=rp_img))
+                rp_img.close()
+                self.replacement_panel.replacement_img_label.configure(
+                    image=self.replacement_panel.replacement_icon.tk_icon_lg)
+                self.replacement_panel.replacement_img_label.image = self.replacement_panel.replacement_icon.tk_icon_lg
+            else:
+                self.replacement_panel.replacement_icon = None
+                self.replacement_panel.replacement_img_label.config(image=self.img_blank)
+                self.replacement_panel.replacement_img_label.image = self.img_blank
+            self.replacement_panel.img_bank = []
+            for img_bank_label in self.replacement_panel.img_bank_tk_labels:
+                img_bank_label.configure(image=self.img_bank_blank)
+            next_num = itertools.count(0)
+            for img in c4is.img_bank:
+                img_path = replacement_dir / f'img_bank{next(next_num)}.png'
+                bank_img = Image.open(io.BytesIO(img))
+                bank_img.save(img_path)
+                self.replacement_panel.img_bank.append(Icon(img_path, img=bank_img))
+                bank_img.close()
+            self.replacement_panel.refresh_img_bank()
+            self.replacement_panel.update_buttons()
+
+        self.ask_to_save = False if not merge_project else True
         self.pending_load_save = False
 
     # TODO: Add option to not ask again; Save as user setting
@@ -1359,17 +1420,6 @@ class C4IconSwapper(IPC):
         else:
             user32.ShowWindow(self.debug_console, 5)  # Show
 
-    @property
-    def settings(self):
-        return {
-            setting_name: (
-                (None if (val := var.get()) < 0 else bool(val))
-                if isinstance(var := getattr(self, setting_name), IntVar)
-                else var.get()
-            )
-            for setting_name in self.setting_names.values()
-        }
-
 
 class SettingsWin:
     def __init__(self, main: C4IconSwapper):
@@ -1401,14 +1451,14 @@ class SettingsWin:
         get_all_driver_imgs_check.place(x=5, y=30, anchor='nw')
 
         y_val = 55
-        if main.merge_imgs_on_load.get() != -1:
+        if main.merge_on_load.get() != -1:
             self.window.geometry(f'{x}x{y+22}')
             # noinspection PyTypeChecker
-            trace = main.merge_imgs_on_load.trace_add('write',
-                                                      lambda *_: self.update_setting(main.merge_imgs_on_load))
-            self.var_trace_dict[id(main.merge_imgs_on_load)] = (main.merge_imgs_on_load, trace)
+            trace = main.merge_on_load.trace_add('write',
+                                                 lambda *_: self.update_setting(main.merge_on_load))
+            self.var_trace_dict[id(main.merge_on_load)] = (main.merge_on_load, trace)
             merge_imgs_on_load_check = Checkbutton(self.window, text='Merge existing replacement images',
-                                                   variable=main.merge_imgs_on_load)
+                                                   variable=main.merge_on_load)
             merge_imgs_on_load_check.place(x=5, y=y_val, anchor='nw')
             y_val += 25
 
@@ -2278,12 +2328,11 @@ class RecoveryWin:
 
         own_project = None
         merge_project = False
-        main_has_imgs = bool(self.main.replacement_panel.img_bank or self.main.replacement_panel.replacement_icon)
-        if (main_has_driver := self.main.driver_selected) and main_has_imgs:
+        if self.main.driver_selected and self.main.has_images:
             # TODO: Dialog asking to open recovered project in new window or overwrite existing project
             pass
-        elif main_has_imgs != main_has_driver:
-            if main_has_driver:
+        elif self.main.driver_selected != self.main.has_images:
+            if self.main.driver_selected:
                 own_project = next((rec_obj for rec_obj in selected if not rec_obj.has_driver), None)
             else:  # If main has image(s)
                 own_project = next((rec_obj for rec_obj in selected if not rec_obj.num_images), None)
@@ -2531,6 +2580,7 @@ class C4zPanel:
         else:
             self.main.edit.entryconfig(self.main.unrestore_all_pos, state=DISABLED)
 
+    # TODO: Add c4is param to skip redundant things like parsing xml
     def _load_c4z(self, file_path=None, force=False):
         main = self.main
         if not force and main.ask_to_save:
@@ -3042,8 +3092,6 @@ class ReplacementPanel:
         self.img_bank_lockout_dict = {}
         self.multi_threading = threading.Event()
         self.multi_threading.set()
-        self.replacement_icons_dir = main.instance_temp / 'Replacement Icons'
-        self.replacement_icons_dir.mkdir(exist_ok=True)
 
         # Labels
         self.panel_label = Label(main.root, text='Replacement Icons', font=(label_font, 15))
@@ -3126,10 +3174,10 @@ class ReplacementPanel:
 
         # Process image and check if it is already in replacement images folder
         if file_path:
-            new_path = self.replacement_icons_dir / file_path.name
-            next_num = map(str, itertools.count(1))
+            new_path = main.replacement_icons_dir / file_path.name
+            next_num = itertools.count(1)
             while new_path.is_file():
-                new_path = self.replacement_icons_dir / f'{file_path.stem}{next(next_num)}{file_path.suffix}'
+                new_path = main.replacement_icons_dir / f'{file_path.stem}{next(next_num)}{file_path.suffix}'
 
             try:
                 Image.MAX_IMAGE_PIXELS = None  # Temporarily allow very large images to be processed; Trusting user
@@ -3140,7 +3188,7 @@ class ReplacementPanel:
                     img.save(new_path)
                     new_file_size = new_path.stat().st_size
                     # Check if image already in replacement icons directory
-                    for cmp_path in self.replacement_icons_dir.iterdir():
+                    for cmp_path in main.replacement_icons_dir.iterdir():
                         if cmp_path.stat().st_size != new_file_size:
                             continue
                         if cmp_path == new_path or not filecmp.cmp(cmp_path, new_path):
@@ -3288,6 +3336,10 @@ class ReplacementPanel:
 
         if self.main.driver_selected:
             self.main.ask_to_save = True
+
+    def update_buttons(self):  # TODO: Write this function
+        # TODO: Add this function to _process_image (and anywhere else applicable)
+        pass
 
     def refresh_img_bank(self):
         for i, img in zip(range(self.main.img_bank_size), self.img_bank):
@@ -3487,7 +3539,7 @@ class ExportPanel:
             directories = list_all_sub_directories(driver_folder, include_root_dir=True)
             shutil.rmtree(bak_folder, ignore_errors=True)
             bak_folder.mkdir()
-            suffix_num = map(str, itertools.count(0))
+            suffix_num = itertools.count(0)
             for directory in directories:
                 for path in directory.iterdir():
                     if re.search(r'\.bak[^.]*$', path.name):
