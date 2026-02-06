@@ -71,6 +71,11 @@ max_image_pixels = Image.MAX_IMAGE_PIXELS
 # TODO: Organize/Standardize all class inits
 
 
+class PathStringVar(StringVar):
+    def get(self, blank_gives_cwd=False):
+        return str(Path.cwd()) if not (value := super().get()) and blank_gives_cwd else value
+
+
 # Inter-Process Communication (For running multiple instances simultaneously); Port range: (49200-65500)
 # I'm not very happy with separating the IPC functions into their own class, but I think it makes it more readable
 # noinspection PyAttributeOutsideInit
@@ -625,6 +630,9 @@ class IPC:
 
 class C4IconSwapper(IPC):
     def __init__(self):
+        if sys.platform != 'win32':
+            raise OSError('This application only supports Windows')
+
         self.root = TkinterDnD.Tk()
 
         # Default App settings
@@ -634,16 +642,18 @@ class C4IconSwapper(IPC):
         self.inc_driver_ver = IntVar(value=1)
         self.driver_manufac = StringVar(value='C4IconSwapper')
         self.driver_creator = StringVar(value='C4IconSwapper')
-        self.quick_export_dir = StringVar(value=str(Path.cwd()))
+        self.quick_export_dir = PathStringVar()
 
-        self.setting_name_dict = {
-            id(var): setting_name
-            for setting_name, var in self.__dict__.items()
-            if var is not self.root
-        }
+        self.setting_names = {}
+        self.setting_defaults = {}
+        ignore_vars = {id(self.root), id(self.setting_names), id(self.setting_defaults)}
+        for setting_name, var in self.__dict__.items():
+            if (var_id := id(var)) in ignore_vars:
+                continue
+            self.setting_names[var_id] = setting_name
+            self.setting_defaults[setting_name] = var.get()
 
         # Common Directories
-        self.cur_dir = Path.cwd()
         self.appdata_dir = Path(os.environ['APPDATA']) / 'C4IconSwapper'
         self.recovery_dir = self.appdata_dir / 'Recovery'
         self.global_temp = self.appdata_dir / 'C4IconSwapperTemp'
@@ -658,13 +668,13 @@ class C4IconSwapper(IPC):
                     print('Found user settings in file')
                     invalid_settings = set()
                     missing_settings = self.settings.keys() - settings_json.keys()
-                    for setting, val in settings_json.items():
-                        if setting not in self.settings:
-                            invalid_settings.add(setting)
+                    for setting_name, val in settings_json.items():
+                        if setting_name not in self.settings:
+                            invalid_settings.add(setting_name)
                             continue
-                        if val == self.settings[setting]:
+                        if val == self.settings[setting_name]:
                             continue
-                        getattr(self, setting).set(val)
+                        getattr(self, setting_name).set(val)
                     if invalid_settings or missing_settings:
                         self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
                         print('Discrepancy between settings file and default settings')
@@ -683,109 +693,10 @@ class C4IconSwapper(IPC):
         settings_str = ',\n\t'.join([f'{setting}: {val}' for setting, val in self.settings.items()])
         print(f'Using settings: {{\n\t{settings_str}\n}}')
 
-        # TODO: Move these out of init?
-        def exception_window(*args, message_txt=None):
-            root = Toplevel(self.root)
-            root.title('Exception')
-            root.attributes('-toolwindow', True)
-            frame = Frame(root)
-            frame.pack(expand=True, fill='both', padx=10, pady=10)
-
-            h_scroll = Scrollbar(frame, orient='horizontal')
-            h_scroll.pack(side='bottom', fill='x')
-            v_scroll = Scrollbar(frame, orient='vertical')
-            v_scroll.pack(side='right', fill='y')
-
-            text_widget = Text(frame, font=('Consolas', 11), wrap='none')
-            text_widget.pack(side='left', expand=True, fill='both')
-            text_widget.config(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
-            v_scroll.config(command=text_widget.yview)
-            h_scroll.config(command=text_widget.xview)
-
-            # Set window size
-            if message_txt:
-                msg_lines = message_txt.splitlines()
-            elif len(args) > 1 and args[1] is RuntimeWarning:
-                message_txt = f'{args[1].__name__}\nMessage: {args[0]}\n{args[2]}, Line: {args[3]}'
-                msg_lines = message_txt.splitlines()
-            else:
-                msg_lines = (message_txt := '\n'.join(traceback.format_exception(*args))).splitlines()
-
-            text_widget.insert(END, message_txt)
-            width = max(len(line.strip()) for line in msg_lines) + 3
-            height = len(msg_lines) + 2
-            text_widget.config(width=width, height=height)
-
-            # Update window for size check
-            root.update_idletasks()
-
-            # Cap window size
-            screen_width = root.winfo_screenwidth()
-            screen_height = root.winfo_screenheight()
-            max_rel_h_size = 0.75
-            max_rel_v_size = 0.75
-            if root.winfo_width() > screen_width * max_rel_h_size:
-                if root.winfo_height() > screen_height * max_rel_v_size:
-                    root.geometry(f'{int(screen_width * max_rel_h_size)}x{int(screen_height * max_rel_v_size)}')
-                else:
-                    root.geometry(f'{int(screen_width * max_rel_h_size)}x{root.winfo_height()}')
-            elif root.winfo_height() > screen_height * max_rel_v_size:
-                root.geometry(f'{root.winfo_width()}x{int(screen_height * max_rel_v_size)}')
-
-            text_widget.config(state='disabled')
-            root.resizable(False, False)
-            root.grab_set()
-            return
-
-        def exception_handler(*args):
-            if args:
-                if len(args) > 1 and args[1] is RuntimeWarning:
-                    self.warnings.append(f'{args[1].__name__}\nMessage: {args[0]}\n{args[2]}, Line: {args[3]}')
-                else:
-                    self.exceptions.append('\n'.join(traceback.format_exception(*args)))
-                if self.handler_recall_id:
-                    self.root.after_cancel(self.handler_recall_id)
-                # noinspection PyTypeChecker
-                self.handler_recall_id = self.root.after(50, exception_handler)
-                return
-            if not self.warnings and not self.exceptions:
-                return
-            if len(self.warnings) == 1 and not self.exceptions:
-                exception_window(message_txt=self.warnings.pop())
-                return
-            elif len(self.exceptions) == 1 and not self.warnings:
-                exception_window(message_txt=self.exceptions.pop())
-                return
-
-            def get_label(count: int, text: str):
-                if count == 0:
-                    return ''
-                return f'{count} {text}' if count != 1 else f'{count} {text[:-1]}'
-
-            labels = (get_label(len(self.exceptions), 'EXCEPTIONS'),
-                      get_label(len(self.warnings), 'WARNINGS'))
-            header = f'{" & ".join(filter(None, labels))}\n'
-            header += '=' * len(header.strip())
-            msg_body = []
-            if self.exceptions:
-                msg_body.append('\n\n========================\n\n'.join(self.exceptions))
-            if self.warnings:
-                msg_body.append('\n\n========================\n\n'.join(self.warnings))
-            msg_txt = '\n\n==================\n     WARNINGS\n==================\n\n'.join(msg_body)
-
-            self.exceptions.clear()
-            self.warnings.clear()
-            exception_window(message_txt=f'{header}\n\n{msg_txt}')
-
+        # Exception Handler Variables
         self.warnings = deque()
         self.exceptions = deque()
         self.handler_recall_id = None
-
-        if sys.platform != 'win32':
-            print('***************************************************')
-            print('This application is designed to only run on Windows')
-            print('***************************************************')
-            return
 
         self.running_as_exe = getattr(sys, 'frozen', False) or '__compiled__' in globals()
         self.debug_console = None
@@ -796,22 +707,13 @@ class C4IconSwapper(IPC):
         # Set Instance ID; Check for existing folders with same ID
         self.instance_id = str(random.randint(111111, 999999))
         self.instance_temp = self.global_temp / self.instance_id
-        # instance_temp folder created after IPC validation
+        # instance_temp folder created after IPC validation in case id changes
         while self.instance_temp.is_dir():
             self.instance_id = str(random.randint(111111, 999999))
             self.instance_temp = self.global_temp / self.instance_id
         print(f'Set Instance ID: {self.instance_id}')
 
-        # Initialize root window
-        self.root.report_callback_exception, warnings.showwarning = exception_handler, exception_handler
-        self.root.geometry('915x287')
-        self.root.resizable(False, False)
-        self.root.bind('<KeyRelease>', self.key_release)
-        self.root.bind('<Control-s>', self.save_project)
-        self.root.bind('<Control-o>', self.load_c4is)
-        self.root.bind('<Control-z>', self.undo)
-        self.root.bind('<Control-w>', self.end_program)
-
+        # IPC Variables
         self.client_dict = {}
         self.socket_dict = {}
         self.last_seen = {}
@@ -922,17 +824,119 @@ class C4IconSwapper(IPC):
         # Create window icon
         self.root.iconbitmap(default=(assets_path / 'icon.ico'))
 
+        # Load recovered project or prompt user how to handle recovered projects
         if recover_path:
             self.do_recovery(recover_path)
         elif self.recovery_dir.is_dir():
             # noinspection PyTypeChecker
             self.root.after(10, lambda: RecoveryWin(self))
 
-        # Main Loop
+        # Initialize root window
+        self.root.report_callback_exception, warnings.showwarning = self.exception_handler, self.exception_handler
+        self.root.geometry('915x287')
+        self.root.resizable(False, False)
+        self.root.bind('<KeyRelease>', self.key_release)
+        self.root.bind('<Control-s>', self.save_project)
+        self.root.bind('<Control-o>', self.load_c4is)
+        self.root.bind('<Control-z>', self.undo)
+        self.root.bind('<Control-w>', self.end_program)
         self.root.config(menu=self.menu)
         self.root.protocol('WM_DELETE_WINDOW', self.end_program)
         self.root.focus_force()
         self.root.mainloop()
+
+    def exception_window(self, *args, message_txt=None):
+        root = Toplevel(self.root)
+        root.title('Exception')
+        root.attributes('-toolwindow', True)
+        frame = Frame(root)
+        frame.pack(expand=True, fill='both', padx=10, pady=10)
+
+        h_scroll = Scrollbar(frame, orient='horizontal')
+        h_scroll.pack(side='bottom', fill='x')
+        v_scroll = Scrollbar(frame, orient='vertical')
+        v_scroll.pack(side='right', fill='y')
+
+        text_widget = Text(frame, font=('Consolas', 11), wrap='none')
+        text_widget.pack(side='left', expand=True, fill='both')
+        text_widget.config(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
+        v_scroll.config(command=text_widget.yview)
+        h_scroll.config(command=text_widget.xview)
+
+        # Set window size
+        if message_txt:
+            msg_lines = message_txt.splitlines()
+        elif len(args) > 1 and args[1] is RuntimeWarning:
+            message_txt = f'{args[1].__name__}\nMessage: {args[0]}\n{args[2]}, Line: {args[3]}'
+            msg_lines = message_txt.splitlines()
+        else:
+            msg_lines = (message_txt := '\n'.join(traceback.format_exception(*args))).splitlines()
+
+        text_widget.insert(END, message_txt)
+        width = max(len(line.strip()) for line in msg_lines) + 3
+        height = len(msg_lines) + 2
+        text_widget.config(width=width, height=height)
+
+        # Update window for size check
+        root.update_idletasks()
+
+        # Cap window size
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        max_rel_h_size = 0.75
+        max_rel_v_size = 0.75
+        if root.winfo_width() > screen_width * max_rel_h_size:
+            if root.winfo_height() > screen_height * max_rel_v_size:
+                root.geometry(f'{int(screen_width * max_rel_h_size)}x{int(screen_height * max_rel_v_size)}')
+            else:
+                root.geometry(f'{int(screen_width * max_rel_h_size)}x{root.winfo_height()}')
+        elif root.winfo_height() > screen_height * max_rel_v_size:
+            root.geometry(f'{root.winfo_width()}x{int(screen_height * max_rel_v_size)}')
+
+        text_widget.config(state='disabled')
+        root.resizable(False, False)
+        root.grab_set()
+        return
+
+    def exception_handler(self, *args):
+        if args:
+            if len(args) > 1 and args[1] is RuntimeWarning:
+                self.warnings.append(f'{args[1].__name__}\nMessage: {args[0]}\n{args[2]}, Line: {args[3]}')
+            else:
+                self.exceptions.append('\n'.join(traceback.format_exception(*args)))
+            if self.handler_recall_id:
+                self.root.after_cancel(self.handler_recall_id)
+            # noinspection PyTypeChecker
+            self.handler_recall_id = self.root.after(50, self.exception_handler)
+            return
+        if not self.warnings and not self.exceptions:
+            return
+        if len(self.warnings) == 1 and not self.exceptions:
+            self.exception_window(message_txt=self.warnings.pop())
+            return
+        elif len(self.exceptions) == 1 and not self.warnings:
+            self.exception_window(message_txt=self.exceptions.pop())
+            return
+
+        def get_label(count: int, text: str):
+            if count == 0:
+                return ''
+            return f'{count} {text}' if count != 1 else f'{count} {text[:-1]}'
+
+        labels = (get_label(len(self.exceptions), 'EXCEPTIONS'),
+                  get_label(len(self.warnings), 'WARNINGS'))
+        header = f'{" & ".join(filter(None, labels))}\n'
+        header += '=' * len(header.strip())
+        msg_body = []
+        if self.exceptions:
+            msg_body.append('\n\n========================\n\n'.join(self.exceptions))
+        if self.warnings:
+            msg_body.append('\n\n========================\n\n'.join(self.warnings))
+        msg_txt = '\n\n==================\n     WARNINGS\n==================\n\n'.join(msg_body)
+
+        self.exceptions.clear()
+        self.warnings.clear()
+        self.exception_window(message_txt=f'{header}\n\n{msg_txt}')
 
     def restore_entry_text(self):
         if not self.restore_entry_string:
@@ -1363,7 +1367,7 @@ class C4IconSwapper(IPC):
                 if isinstance(var := getattr(self, setting_name), IntVar)
                 else var.get()
             )
-            for setting_name in self.setting_name_dict.values()
+            for setting_name in self.setting_names.values()
         }
 
 
@@ -1376,10 +1380,12 @@ class SettingsWin:
         self.window.focus()
         self.window.protocol('WM_DELETE_WINDOW', self.close)
         self.window.title('Settings')
-        self.window.geometry('255x233')
+        x, y = (255, 273)
+        self.window.geometry(f'{x}x{y}')
         self.window.geometry(f'+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
 
+        self.halt_traces = False
         self.entry_mod_delay_dict = {}
         self.var_trace_dict = {}
 
@@ -1396,7 +1402,7 @@ class SettingsWin:
 
         y_val = 55
         if main.merge_imgs_on_load.get() != -1:
-            self.window.geometry('255x255')
+            self.window.geometry(f'{x}x{y+22}')
             # noinspection PyTypeChecker
             trace = main.merge_imgs_on_load.trace_add('write',
                                                       lambda *_: self.update_setting(main.merge_imgs_on_load))
@@ -1442,17 +1448,34 @@ class SettingsWin:
         self.var_trace_dict[id(main.driver_creator)] = (main.driver_creator, trace)
         self.driver_creator_entry.place(x=85, y=y_val+2, anchor='nw')
 
+        def path_str_update():
+            return ('Same Directory as Application'
+                    if not (var_val := main.quick_export_dir.get())
+                    else var_val)
+
         y_val += 32
         quick_export_label = Label(self.window, text='Quick Export Directory')
         quick_export_label.place(relx=0.5, y=y_val, anchor='n')
-        self.quick_export_entry = Entry(self.window, width=27, textvariable=main.quick_export_dir)
+        self.quick_export_string = StringVar(value=path_str_update())
+        self.quick_export_entry = Entry(self.window, width=27, textvariable=self.quick_export_string)
         self.quick_export_entry['state'] = 'readonly'
+        # noinspection PyTypeChecker
+        trace = main.quick_export_dir.trace_add('write',
+                                                lambda *_: self.quick_export_string.set(path_str_update()))
+        self.var_trace_dict[id(main.quick_export_dir)] = (main.quick_export_dir, trace)
         self.quick_export_entry.place(x=5, y=y_val+25, anchor='nw')
         self.quick_export_button = Button(self.window, text='Browse...', width=8, command=self.select_quick_export_dir)
         self.quick_export_button.place(x=210, y=y_val+22, anchor='n')
 
+        y_val += 70
+        self.restore_defaults_button = Button(self.window, text='Restore Defaults',
+                                              width=15, command=self.restore_defaults)
+        self.restore_defaults_button.place(relx=0.5, y=y_val, anchor='n')
+
     def update_setting(self, setting_var, *_, entry=None):
-        setting_name = self.main.setting_name_dict[id(setting_var)]
+        if self.halt_traces:
+            return
+        setting_name = self.main.setting_names[id(setting_var)]
         if isinstance(setting_var, IntVar):
             print(f'Set {setting_name} to: {bool(setting_var.get())}')
         elif isinstance(setting_var, StringVar):
@@ -1462,7 +1485,6 @@ class SettingsWin:
             # noinspection PyTypeChecker
             after_call = self.window.after(2000, lambda: self.string_setting_update(setting_name, setting_var))
             self.entry_mod_delay_dict[id(setting_var)] = (after_call, setting_name, setting_var)
-            print(self.entry_mod_delay_dict)
             return
         else:
             settings_str = ',\n\t'.join([f'{setting}: {val}' for setting, val in self.main.settings.items()])
@@ -1470,16 +1492,31 @@ class SettingsWin:
         self.main.settings_file.write_text(json.dumps(self.main.settings, indent='\t'))
 
     def string_setting_update(self, setting_name, setting_var):
+        if self.halt_traces:
+            return
         print(f'Set {setting_name} to: {setting_var.get()}')
         self.main.settings_file.write_text(json.dumps(self.main.settings, indent='\t'))
         self.entry_mod_delay_dict.pop(id(setting_var))
 
-    # TODO: Add print messages and update settings file; update quick export to use setting
     def select_quick_export_dir(self):
         folder_path = filedialog.askdirectory(title='Select Quick Export Directory', initialdir=Path.cwd())
         if folder_path:
-            self.main.quick_export_dir.set(str(Path(folder_path)))
+            self.main.quick_export_dir.set(folder_path)
+            self.quick_export_string.set(folder_path)
+            self.main.settings_file.write_text(json.dumps(self.main.settings, indent='\t'))
+            print(f'Set {self.main.setting_names[id(self.main.quick_export_dir)]} to: {folder_path}')
         self.window.focus()
+
+    def restore_defaults(self):
+        self.halt_traces = True
+        for value in list(self.entry_mod_delay_dict.values()):
+            self.window.after_cancel(value[0])
+        for setting_name in self.main.setting_names.values():
+            getattr(self.main, setting_name).set(self.main.setting_defaults[setting_name])
+        self.halt_traces = False
+        self.main.settings_file.write_text(json.dumps(self.main.settings, indent='\t'))
+        settings_str = ',\n\t'.join([f'{setting}: {val}' for setting, val in self.main.settings.items()])
+        print(f'Restored default settings: {{\n\t{settings_str}\n}}')
 
     def close(self):
         for setting_var, trace in self.var_trace_dict.values():
@@ -3408,47 +3445,42 @@ class ExportPanel:
         self.inc_driver_check.place(x=63 + self.x, y=150 + self.y, anchor='w')
 
     def quick_export(self):
-        driver_name = self.driver_name_var.get()
+        overwrite_dialog = None
+        # Overwrite dialog if file already exists
+        if (Path(self.main.quick_export_dir.get(blank_gives_cwd=True)) / f'{self.driver_name_var.get()}.c4z').is_file():
+            def confirm_overwrite():
+                self.abort = False
+                overwrite_dialog.destroy()
 
-        def confirm_overwrite():
-            self.abort = False
-            overwrite_pop_up.destroy()
+            def abort():
+                self.abort = True
+                overwrite_dialog.destroy()
+            overwrite_dialog = Toplevel(self.main.root)
+            overwrite_dialog.title('Overwrite')
+            overwrite_dialog.geometry('239x70')
+            overwrite_dialog.geometry(f'+{self.main.root.winfo_rootx() + self.x}+{self.main.root.winfo_rooty()}')
+            overwrite_dialog.protocol('WM_DELETE_WINDOW', abort)
+            overwrite_dialog.grab_set()
+            overwrite_dialog.focus()
+            overwrite_dialog.transient(self.main.root)
+            overwrite_dialog.resizable(False, False)
 
-        def abort():
-            self.abort = True
-            overwrite_pop_up.destroy()
-
-        # Overwrite file popup
-        if ((main := self.main).cur_dir / f'{driver_name}.c4z').is_file():
-            overwrite_pop_up = Toplevel(main.root)
-            overwrite_pop_up.title('Overwrite')
-            overwrite_pop_up.geometry('239x70')
-            overwrite_pop_up.geometry(f'+{main.root.winfo_rootx() + self.x}+{main.root.winfo_rooty()}')
-            overwrite_pop_up.protocol('WM_DELETE_WINDOW', abort)
-            overwrite_pop_up.grab_set()
-            overwrite_pop_up.focus()
-            overwrite_pop_up.transient(main.root)
-            overwrite_pop_up.resizable(False, False)
-
-            confirm_label = Label(overwrite_pop_up, text='Would you like to overwrite the existing file?')
+            confirm_label = Label(overwrite_dialog, text='Would you like to overwrite the existing file?')
             confirm_label.grid(row=0, column=0, columnspan=2, pady=5)
 
-            yes_button = Button(overwrite_pop_up, text='Yes', width='10', command=confirm_overwrite)
+            yes_button = Button(overwrite_dialog, text='Yes', width='10', command=confirm_overwrite)
             yes_button.grid(row=2, column=0, sticky='e', padx=5)
 
-            no_button = Button(overwrite_pop_up, text='No', width='10', command=abort)
+            no_button = Button(overwrite_dialog, text='No', width='10', command=abort)
             no_button.grid(row=2, column=1, sticky='w', padx=5)
-            self.do_export(quick_export=overwrite_pop_up)
-            return
-        self.do_export(quick_export=True)
+        self.do_export(quick_export=True, overwrite_dialog=overwrite_dialog)
 
     def export_file(self, driver_name='', path=None):
-        main = self.main
         if path is None:
-            path = main.cur_dir / f'{driver_name}.c4z'
+            path = Path(self.main.quick_export_dir.get(blank_gives_cwd=True)) / f'{driver_name}.c4z'
         bak_files_dict = {}
-        bak_folder = main.instance_temp / 'bak_files'
-        driver_folder = main.instance_temp / 'driver'
+        bak_folder = self.main.instance_temp / 'bak_files'
+        driver_folder = self.main.instance_temp / 'driver'
 
         # Backup and move all .bak files if not included
         if not self.include_backups.get():
@@ -3475,11 +3507,12 @@ class ExportPanel:
                 bak_files_dict[file].replace(file)
             shutil.rmtree(bak_folder)
 
-    def do_export(self, quick_export=None):
+    def do_export(self, quick_export=False, overwrite_dialog=None):
         # Wait for confirm overwrite dialog
-        if quick_export and isinstance(quick_export, Toplevel):
-            self.main.root.wait_window(quick_export)
+        if overwrite_dialog and isinstance(overwrite_dialog, Toplevel):
+            self.main.root.wait_window(overwrite_dialog)
         if self.abort:
+            self.abort = False
             return
 
         main = self.main
@@ -3703,7 +3736,7 @@ class ExportPanel:
 
         # Save As Dialog and export file
         if quick_export:
-            out_file_path = main.cur_dir / f'{driver_name}.c4z'
+            out_file_path = Path(self.main.quick_export_dir.get(blank_gives_cwd=True)) / f'{driver_name}.c4z'
             out_file_path.unlink(missing_ok=True)
             self.export_file(path=out_file_path)
         else:
