@@ -827,7 +827,7 @@ class C4IconSwapper(IPC):
         if recover_path:
             self.do_recovery(recover_path)
         elif self.recovery_dir.is_dir():
-            self.root.after(10, RecoveryWin, self)
+            self.root.after(7, RecoveryWin, self)
         # Initialize root window
         self.root.report_callback_exception, warnings.showwarning = self.exception_handler, self.exception_handler
         self.root.geometry('915x287')
@@ -895,15 +895,11 @@ class C4IconSwapper(IPC):
         # Cap window size
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
-        max_rel_h_size = 0.75
-        max_rel_v_size = 0.75
-        if root.winfo_width() > screen_width * max_rel_h_size:
-            if root.winfo_height() > screen_height * max_rel_v_size:
-                root.geometry(f'{int(screen_width * max_rel_h_size)}x{int(screen_height * max_rel_v_size)}')
-            else:
-                root.geometry(f'{int(screen_width * max_rel_h_size)}x{root.winfo_height()}')
-        elif root.winfo_height() > screen_height * max_rel_v_size:
-            root.geometry(f'{root.winfo_width()}x{int(screen_height * max_rel_v_size)}')
+        max_rel_w = 0.75
+        max_rel_h = 0.75
+        w = int(screen_width * max_rel_w) if root.winfo_width() > screen_width * max_rel_w else root.winfo_width()
+        h = int(screen_height * max_rel_h) if root.winfo_height() > screen_height * max_rel_h else root.winfo_height()
+        root.geometry(f'{w}x{h}')
 
         text_widget.config(state='disabled')
         root.resizable(False, False)
@@ -919,7 +915,7 @@ class C4IconSwapper(IPC):
             if self.handler_recall_id:
                 self.root.after_cancel(self.handler_recall_id)
                 self.handler_recall_id = None
-            self.handler_recall_id = self.root.after(50, self.exception_handler, [])
+            self.handler_recall_id = self.root.after(50, self.exception_handler)  # type: ignore
             return
         if not self.warnings and not self.exceptions:
             return
@@ -1017,7 +1013,7 @@ class C4IconSwapper(IPC):
             self.export_panel.driver_name_entry['background'] = light_entry_bg
         else:
             self.export_panel.driver_name_entry['background'] = 'pink'
-        self.root.after(150, self.blink_driver_name_entry, [])
+        self.root.after(150, self.blink_driver_name_entry)  # type: ignore
 
     def open_edit_win(self, main_win_var, win_type: str):
         if main_win_var:
@@ -1086,23 +1082,36 @@ class C4IconSwapper(IPC):
                 return
             self.root.update_idletasks()
 
-        def abort():
+        def abort(reason=None):
             restore_label_img()
-            print('Aborted c4is load because of reasons')
-            # TODO: Open dialog informing user of invalid project file or unsupported version
+            abort_dialog = Toplevel(self.root)
+            abort_dialog.title('Project Load Aborted')
+            abort_dialog.geometry(f'255x65+{self.root.winfo_rootx()}+{self.root.winfo_rooty()}')
+            abort_dialog.grab_set()
+            abort_dialog.focus()
+            abort_dialog.transient(self.root)
+            abort_dialog.resizable(False, False)
+            if reason is None:
+                reason = 'Project load aborted because of an issue'
+            confirm_label = Label(abort_dialog, text=reason, font=(label_font, 12), wraplength=225)
+            confirm_label.pack(fill='both', expand=True)
 
         # Create C4IS object from file
-        with open(path_str, 'rb') as path_str:
-            c4is = pickle.load(path_str)
+        try:
+            with open(path_str, 'rb') as project_file:
+                c4is = pickle.load(project_file)
+        except (pickle.UnpicklingError, EOFError, AttributeError):
+            abort(reason='File corrupted or invalid format')
+            return
         if not isinstance(c4is, C4IS):
-            abort()
+            abort(reason='File contains incompatible data structure')
             return
         saved_has_imgs = c4is.replacement or c4is.img_bank
         if not c4is.driver_selected and not saved_has_imgs:
-            abort()
+            abort(reason='Cannot load an empty project')
             return
-        elif c4is.version <= 1:
-            abort()
+        if c4is.version <= 1:
+            abort(reason='Projects created by versions older than 2.0 are not supported')
             return
 
         if merge_project is None:
@@ -1267,8 +1276,7 @@ class C4IconSwapper(IPC):
 
         merge_dialog = Toplevel(self.root)
         merge_dialog.title('Merge/Overwrite current project?')
-        merge_dialog.geometry('255x111')
-        merge_dialog.geometry(f'+{self.root.winfo_rootx()}+{self.root.winfo_rooty()}')
+        merge_dialog.geometry(f'255x111+{self.root.winfo_rootx()}+{self.root.winfo_rooty()}')
         merge_dialog.protocol('WM_DELETE_WINDOW', cancel)
         merge_dialog.grab_set()
         merge_dialog.focus()
@@ -1345,12 +1353,8 @@ class C4IconSwapper(IPC):
         curr_ask_to_save = self.ask_to_save
         save_dialog = Toplevel(self.root)
         save_dialog.title('Save current project?')
-        save_dialog.geometry('239x70')
-        if on_exit:
-            win_x = self.root.winfo_rootx() + self.root.winfo_width() - 250
-            save_dialog.geometry(f'+{win_x}+{self.root.winfo_rooty()}')
-        else:
-            save_dialog.geometry(f'+{self.root.winfo_rootx()}+{self.root.winfo_rooty()}')
+        x_offset = self.root.winfo_rootx() + self.root.winfo_width() - 250 if on_exit else self.root.winfo_rootx()
+        save_dialog.geometry(f'239x70+{x_offset}+{self.root.winfo_rooty()}')
         save_dialog.protocol('WM_DELETE_WINDOW', cancel)
         save_dialog.grab_set()
         save_dialog.focus()
@@ -1448,7 +1452,7 @@ class SettingsWin:
         self.window.geometry(f'{w}x{h}+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
 
-        self.halt_traces = False
+        self.halt_trace_calls = False
         self.entry_mod_delay_dict = {}
         self.var_trace_dict = {}
 
@@ -1536,7 +1540,7 @@ class SettingsWin:
         self.restore_defaults_button.place(relx=0.5, y=y_val, anchor='n')
 
     def update_setting(self, setting_var, *_, entry=None):
-        if self.halt_traces:
+        if self.halt_trace_calls:
             return
         setting_name = self.main.setting_names[id(setting_var)]
         if isinstance(setting_var, IntVar):
@@ -1555,7 +1559,7 @@ class SettingsWin:
         self.main.settings_file.write_text(json.dumps(self.main.settings, indent='\t'))
 
     def string_setting_update(self, setting_name, setting_var):
-        if self.halt_traces:
+        if self.halt_trace_calls:
             return
         print(f'Set {setting_name} to: {setting_var.get()}')
         self.main.settings_file.write_text(json.dumps(self.main.settings, indent='\t'))
@@ -1571,13 +1575,13 @@ class SettingsWin:
         self.window.focus()
 
     def restore_defaults(self):
-        self.halt_traces = True
+        self.halt_trace_calls = True
         for value in list(self.entry_mod_delay_dict.values()):
             self.window.after_cancel(value[0])
         self.entry_mod_delay_dict.clear()
         for setting_name in self.main.setting_names.values():
             getattr(self.main, setting_name).set(self.main.setting_defaults[setting_name])
-        self.halt_traces = False
+        self.halt_trace_calls = False
         self.main.settings_file.write_text(json.dumps(self.main.settings, indent='\t'))
         settings_str = ',\n\t'.join([f'{setting}: {val}' for setting, val in self.main.settings.items()])
         print(f'Restored default settings: {{\n\t{settings_str}\n}}')
@@ -2269,8 +2273,7 @@ class RecoveryWin:
 
         close_dialog = Toplevel(self.window)
         close_dialog.title('Are you sure?')
-        close_dialog.geometry('239x70')
-        close_dialog.geometry(f'+{self.window.winfo_rootx()}+{self.window.winfo_rooty()}')
+        close_dialog.geometry(f'239x70+{self.window.winfo_rootx()}+{self.window.winfo_rooty()}')
         close_dialog.protocol('WM_DELETE_WINDOW', exit_close_dialog)
         close_dialog.grab_set()
         close_dialog.focus()
@@ -2303,8 +2306,7 @@ class RecoveryWin:
 
         warning_dialog = Toplevel(self.window)
         warning_dialog.title('Warning')
-        warning_dialog.geometry('260x85')
-        warning_dialog.geometry(f'+{self.window.winfo_rootx()}+{self.window.winfo_rooty()}')
+        warning_dialog.geometry(f'260x85+{self.window.winfo_rootx()}+{self.window.winfo_rooty()}')
         warning_dialog.protocol('WM_DELETE_WINDOW', abort_recovery)
         warning_dialog.grab_set()
         warning_dialog.focus()
@@ -2837,7 +2839,7 @@ class C4zPanel:
             main.driver_xml = driver_xml_bak
             self.file_entry_field['state'] = NORMAL
             if self.file_entry_str.get() not in ('Select .c4z file...', 'Invalid driver selected...'):
-                main.restore_entry_after_id = main.root.after(3000, main.restore_entry_text, [])
+                main.restore_entry_after_id = main.root.after(3000, main.restore_entry_text)  # type: ignore
                 main.restore_entry_string = self.file_entry_str.get()
             self.file_entry_str.set('Invalid driver selected...')
             self.file_entry_field['state'] = DISABLED
@@ -3492,8 +3494,7 @@ class ExportPanel:
                 overwrite_dialog.destroy()
             overwrite_dialog = Toplevel(self.main.root)
             overwrite_dialog.title('Overwrite')
-            overwrite_dialog.geometry('239x70')
-            overwrite_dialog.geometry(f'+{self.main.root.winfo_rootx() + self.x}+{self.main.root.winfo_rooty()}')
+            overwrite_dialog.geometry(f'239x70+{self.main.root.winfo_rootx() + self.x}+{self.main.root.winfo_rooty()}')
             overwrite_dialog.protocol('WM_DELETE_WINDOW', abort)
             overwrite_dialog.grab_set()
             overwrite_dialog.focus()
@@ -3559,7 +3560,7 @@ class ExportPanel:
         if not driver_name:
             self.driver_name_entry['background'] = 'pink'
             main.counter = 7
-            main.root.after(150, main.blink_driver_name_entry, [])
+            main.root.after(150, main.blink_driver_name_entry)  # type: ignore
             return
 
         # Multi-state related checks
@@ -3579,23 +3580,22 @@ class ExportPanel:
                     single_invalid_state = False
                     break
             if invalid_states:
-                invalid_states_pop_up = Toplevel(main.root)
+                invalid_states_dialog = Toplevel(main.root)
                 if single_invalid_state:
-                    invalid_states_pop_up.title('Invalid State Found')
+                    invalid_states_dialog.title('Invalid State Found')
                     label_text = 'Cannot Export: Invalid state label'
                 else:
-                    invalid_states_pop_up.title('Invalid States Found')
+                    invalid_states_dialog.title('Invalid States Found')
                     label_text = 'Cannot Export: Invalid state labels'
-                invalid_states_pop_up.geometry('239x70')
-                invalid_states_pop_up.geometry(f'+{main.root.winfo_rootx() + self.x}+{main.root.winfo_rooty()}')
-                invalid_states_pop_up.grab_set()
-                invalid_states_pop_up.focus()
-                invalid_states_pop_up.transient(main.root)
-                invalid_states_pop_up.resizable(False, False)
-                confirm_label = Label(invalid_states_pop_up, text=label_text, justify='center')
+                invalid_states_dialog.geometry(f'239x70+{main.root.winfo_rootx() + self.x}+{main.root.winfo_rooty()}')
+                invalid_states_dialog.grab_set()
+                invalid_states_dialog.focus()
+                invalid_states_dialog.transient(main.root)
+                invalid_states_dialog.resizable(False, False)
+                confirm_label = Label(invalid_states_dialog, text=label_text, justify='center')
                 confirm_label.pack()
-                exit_button = Button(invalid_states_pop_up, text='Cancel', width='10',
-                                     command=invalid_states_pop_up.destroy, justify='center')
+                exit_button = Button(invalid_states_dialog, text='Cancel', width='10',
+                                     command=invalid_states_dialog.destroy, justify='center')
                 exit_button.pack(pady=10)
             if self.abort:
                 self.abort = False
@@ -3675,19 +3675,18 @@ class ExportPanel:
         # Check driver info variables
         if not all([main.driver_version_new_var.get(), main.driver_manufac_new_var.get(),
                     main.driver_creator_new_var.get()]):
-            missing_driver_info_pop_up = Toplevel(main.root)
-            missing_driver_info_pop_up.title('Missing Driver Information')
+            missing_driver_info_dialog = Toplevel(main.root)
+            missing_driver_info_dialog.title('Missing Driver Information')
             label_text = 'Cannot Export: Missing driver info'
-            missing_driver_info_pop_up.geometry('239x70')
-            missing_driver_info_pop_up.geometry(f'+{main.root.winfo_rootx() + self.x}+{main.root.winfo_rooty()}')
-            missing_driver_info_pop_up.grab_set()
-            missing_driver_info_pop_up.focus()
-            missing_driver_info_pop_up.transient(main.root)
-            missing_driver_info_pop_up.resizable(False, False)
-            confirm_label = Label(missing_driver_info_pop_up, text=label_text, justify='center')
+            missing_driver_info_dialog.geometry(f'239x70+{main.root.winfo_rootx() + self.x}+{main.root.winfo_rooty()}')
+            missing_driver_info_dialog.grab_set()
+            missing_driver_info_dialog.focus()
+            missing_driver_info_dialog.transient(main.root)
+            missing_driver_info_dialog.resizable(False, False)
+            confirm_label = Label(missing_driver_info_dialog, text=label_text, justify='center')
             confirm_label.pack()
-            exit_button = Button(missing_driver_info_pop_up, text='Cancel', width='10',
-                                 command=missing_driver_info_pop_up.destroy, justify='center')
+            exit_button = Button(missing_driver_info_dialog, text='Cancel', width='10',
+                                 command=missing_driver_info_dialog.destroy, justify='center')
             exit_button.pack(pady=10)
             return
 
