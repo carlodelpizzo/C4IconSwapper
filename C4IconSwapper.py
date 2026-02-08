@@ -827,8 +827,7 @@ class C4IconSwapper(IPC):
         if recover_path:
             self.do_recovery(recover_path)
         elif self.recovery_dir.is_dir():
-            # noinspection PyTypeChecker
-            self.root.after(10, lambda: RecoveryWin(self))
+            self.root.after(10, RecoveryWin, self)
         # Initialize root window
         self.root.report_callback_exception, warnings.showwarning = self.exception_handler, self.exception_handler
         self.root.geometry('915x287')
@@ -920,8 +919,7 @@ class C4IconSwapper(IPC):
             if self.handler_recall_id:
                 self.root.after_cancel(self.handler_recall_id)
                 self.handler_recall_id = None
-            # noinspection PyTypeChecker
-            self.handler_recall_id = self.root.after(50, self.exception_handler)
+            self.handler_recall_id = self.root.after(50, self.exception_handler, [])
             return
         if not self.warnings and not self.exceptions:
             return
@@ -952,7 +950,7 @@ class C4IconSwapper(IPC):
         self.warnings.clear()
         self.exception_window(message_txt=f'{header}\n\n{msg_txt}')
 
-    def restore_entry_text(self):
+    def restore_entry_text(self, *_):
         if not self.restore_entry_string:
             return
         self.c4z_panel.file_entry_str.set(self.restore_entry_string)
@@ -1011,7 +1009,7 @@ class C4IconSwapper(IPC):
             self.states[i].original_name = state_name
         return True
 
-    def blink_driver_name_entry(self):
+    def blink_driver_name_entry(self, *_):
         if not self.counter:
             return
         self.counter -= 1
@@ -1019,8 +1017,7 @@ class C4IconSwapper(IPC):
             self.export_panel.driver_name_entry['background'] = light_entry_bg
         else:
             self.export_panel.driver_name_entry['background'] = 'pink'
-        # noinspection PyTypeChecker
-        self.root.after(150, self.blink_driver_name_entry)
+        self.root.after(150, self.blink_driver_name_entry, [])
 
     def open_edit_win(self, main_win_var, win_type: str):
         if main_win_var:
@@ -1059,8 +1056,7 @@ class C4IconSwapper(IPC):
             return
 
         with open(out_file_str, 'wb') as output:
-            # noinspection PyTypeChecker
-            pickle.dump(C4IS(self), output)
+            pickle.dump(C4IS(self), output)  # type: ignore
         self.ask_to_save = False
         self.pending_load_save = False
 
@@ -1294,20 +1290,18 @@ class C4IconSwapper(IPC):
         no_button.place(relx=0.5, rely=1, x=10, y=-10, anchor='sw')
 
     def do_recovery(self, recover_path: Path):
-        has_driver = False
         if (driver_folder := recover_path / 'driver').is_dir():
             shutil.make_archive(str(driver_folder), 'zip', driver_folder)
             zip_path = driver_folder.with_suffix('.zip')
             zip_path.replace(recovery_c4z_path := self.instance_temp / 'recovery.c4z')
-            self.c4z_panel.load_c4z(file_path=recovery_c4z_path)
+            self.c4z_panel.load_c4z(file_path=recovery_c4z_path, new_thread=False)
             recovery_c4z_path.unlink()
-            has_driver = True
         if (recovery_icons_path := recover_path / 'Replacement Icons').is_dir():
             for path in recovery_icons_path.iterdir():
                 self.replacement_panel.process_image(file_path=path, new_thread=False)
                 self.root.update()
         shutil.rmtree(recover_path)
-        self.ask_to_save = has_driver
+        self.ask_to_save = True
 
     def undo(self, *_):
         if not self.undo_history:
@@ -1413,8 +1407,7 @@ class C4IconSwapper(IPC):
             self.version_label.place(relx=1.003, rely=rely)
         else:
             self.easter_counter += 1 if increment else -1
-            # noinspection PyTypeChecker
-            self.easter_call_after_id = self.root.after(500, lambda: self.easter(increment=False))
+            self.easter_call_after_id = self.root.after(500, lambda: self.easter(increment=False))  # type: ignore
 
     # noinspection PyUnresolvedReferences
     def toggle_debug_console(self, initialize=False):
@@ -1473,9 +1466,8 @@ class SettingsWin:
         y_val = 55
         if main.merge_on_load.get() != -1:
             self.window.geometry(f'{w}x{h+42}')
-            # noinspection PyTypeChecker
             trace = main.merge_on_load.trace_add('write',
-                                                 lambda *_: self.update_setting(main.merge_on_load))
+                                                 lambda *_: self.update_setting(main.merge_on_load))   # type: ignore
             self.var_trace_dict[id(main.merge_on_load)] = (main.merge_on_load, trace)
             merge_imgs_on_load_check = Checkbutton(self.window, text='Merge new project with\n'
                                                                      'existing project during load',
@@ -1554,8 +1546,7 @@ class SettingsWin:
             if existing_after_call := self.entry_mod_delay_dict.get(id(setting_var)):
                 self.window.after_cancel(existing_after_call[0])
                 self.entry_mod_delay_dict.pop(id(setting_var))
-            # noinspection PyTypeChecker
-            after_call = self.window.after(2000, lambda: self.string_setting_update(setting_name, setting_var))
+            after_call = self.window.after(2000, self.string_setting_update, *(setting_name, setting_var))
             self.entry_mod_delay_dict[id(setting_var)] = (after_call, setting_name, setting_var)
             return
         else:
@@ -2202,7 +2193,7 @@ class StateEntry:
 
 
 class RecoveryWin:
-    def __init__(self, main: C4IconSwapper):
+    def __init__(self, main: C4IconSwapper, *_):
         if not (recovery_dir := main.recovery_dir).is_dir():
             return
         # Delete any non-directories in Recovery folder (Just in case)
@@ -2332,7 +2323,6 @@ class RecoveryWin:
 
         return warning_dialog
 
-    # Function has leftovers from merge project feature, but it only runs at startup when no project is loaded
     def do_recovery(self):
         def start_new_instance(args):
             # Start debug console hidden
@@ -2354,25 +2344,6 @@ class RecoveryWin:
                 return
 
         own_project = None
-        merge_project = False
-        if self.main.driver_selected and self.main.has_images:
-            # TODO: Dialog asking to open recovered project in new window or overwrite existing project
-            pass
-        elif self.main.driver_selected != self.main.has_images:
-            if self.main.driver_selected:
-                own_project = next((rec_obj for rec_obj in selected if not rec_obj.has_driver), None)
-            else:  # If main has image(s)
-                own_project = next((rec_obj for rec_obj in selected if not rec_obj.num_images), None)
-            if own_project:
-                self.main.ask_to_merge_dialog(merge_dialog_result := StringVar())
-                self.window.wait_variable(merge_dialog_result)
-                if merge_dialog_result.get() in ('do', 'dont'):
-                    if merge_dialog_result.get() == 'do':
-                        merge_project = True
-                    selected.pop(selected.index(own_project))
-                else:
-                    merge_project = None  # Cancels own project load; Open all projects in new windows
-
         if self.main.running_as_exe:
             args_template = [sys.executable]
         else:
@@ -2391,7 +2362,7 @@ class RecoveryWin:
             start_new_instance([*args_template, recovery_obj.path])
 
         # Open recovery project
-        if own_project and merge_project is not None:
+        if own_project:
             print('Opening recovered project')
             self.main.do_recovery(own_project)
 
@@ -2866,8 +2837,7 @@ class C4zPanel:
             main.driver_xml = driver_xml_bak
             self.file_entry_field['state'] = NORMAL
             if self.file_entry_str.get() not in ('Select .c4z file...', 'Invalid driver selected...'):
-                # noinspection PyTypeChecker
-                main.restore_entry_after_id = main.root.after(3000, main.restore_entry_text)
+                main.restore_entry_after_id = main.root.after(3000, main.restore_entry_text, [])
                 main.restore_entry_string = self.file_entry_str.get()
             self.file_entry_str.set('Invalid driver selected...')
             self.file_entry_field['state'] = DISABLED
@@ -3079,8 +3049,8 @@ class C4zPanel:
         if self.main.pending_load_save:
             return
         paths = parse_drop_event(event)
-        if c4z_path := next((path for path in paths if path.suffix == '.c4z' and path.is_file()), None):
-            # noinspection PyUnboundLocalVariable
+        c4z_path = next((path for path in paths if path.suffix == '.c4z' and path.is_file()), None)
+        if c4z_path:
             self.load_c4z(file_path=c4z_path)
         self.main.replacement_panel.process_image(file_path=paths)
 
@@ -3589,8 +3559,7 @@ class ExportPanel:
         if not driver_name:
             self.driver_name_entry['background'] = 'pink'
             main.counter = 7
-            # noinspection PyTypeChecker
-            main.root.after(150, main.blink_driver_name_entry)
+            main.root.after(150, main.blink_driver_name_entry, [])
             return
 
         # Multi-state related checks
