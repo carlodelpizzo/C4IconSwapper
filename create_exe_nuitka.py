@@ -34,7 +34,7 @@ def make_exe():
 
 
 # pip install nuitka zstandard ordered-set
-# The program was made in Python 3.11, not sure if other version will work
+# The program was made for Python 3.11, not sure if other version will work
 # Change to True before running; this is to prevent accidental run
 execute = False
 
