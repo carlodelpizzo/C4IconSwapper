@@ -30,7 +30,7 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 
 from XMLObject import XMLObject, XMLTag
 
-version = '2.0dev'  # TODO: Change before release
+version = '2.0dev'  # TODO: Change before release; Update README
 
 label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
 re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9]')
@@ -635,6 +635,7 @@ class C4IconSwapper(IPC):
 
         # Default App settings
         self.get_all_driver_imgs = IntVar(value=0)
+        self.get_all_connections = IntVar(value=0)
         self.merge_on_load = IntVar(value=-1)  # Default: Ask each time
         self.include_backup_files = IntVar(value=1)
         self.inc_driver_ver = IntVar(value=1)
@@ -747,7 +748,7 @@ class C4IconSwapper(IPC):
         self.restore_entry_string = ''
         self.img_bank_size = 4
         self.taken_conn_ids = defaultdict(object)
-        self.connections = [Connection(self) for _ in range(18)]
+        self.connections = [Connection(self)]
         self.states_orig_names = []
         self.states = [State('') for _ in range(13)]
         self.driver_selected = False
@@ -903,7 +904,7 @@ class C4IconSwapper(IPC):
 
         text_widget.config(state='disabled')
         root.resizable(False, False)
-        root.grab_set()
+        root.focus()
         return
 
     def exception_handler(self, *args):
@@ -1448,7 +1449,7 @@ class SettingsWin:
         self.window.focus()
         self.window.protocol('WM_DELETE_WINDOW', self.close)
         self.window.title('Settings')
-        w, h = (255, 273)
+        w, h = (255, 300)
         self.window.geometry(f'{w}x{h}+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
 
@@ -1459,15 +1460,25 @@ class SettingsWin:
         self.title = Label(self.window, text='Default Settings', font=(label_font, 12, 'bold'))
         self.title.place(relx=0.5, y=5, anchor='n')
 
+        y_val = 30
         # noinspection PyTypeChecker
         trace = main.get_all_driver_imgs.trace_add('write',
                                                    lambda *_: self.update_setting(main.get_all_driver_imgs))
         self.var_trace_dict[id(main.get_all_driver_imgs)] = (main.get_all_driver_imgs, trace)
         get_all_driver_imgs_check = Checkbutton(self.window, text='Get ALL images from driver',
                                                 variable=main.get_all_driver_imgs)
-        get_all_driver_imgs_check.place(x=5, y=30, anchor='nw')
+        get_all_driver_imgs_check.place(x=5, y=y_val, anchor='nw')
 
-        y_val = 55
+        y_val += 25
+        # noinspection PyTypeChecker
+        trace = main.get_all_connections.trace_add('write',
+                                                   lambda *_: self.update_setting(main.get_all_connections))
+        self.var_trace_dict[id(main.get_all_connections)] = (main.get_all_connections, trace)
+        get_all_connections_check = Checkbutton(self.window, text='Get ALL connections from driver',
+                                                variable=main.get_all_connections)
+        get_all_connections_check.place(x=5, y=y_val, anchor='nw')
+
+        y_val += 25
         if main.merge_on_load.get() != -1:
             self.window.geometry(f'{w}x{h+42}')
             trace = main.merge_on_load.trace_add('write',
@@ -1879,26 +1890,68 @@ class DriverInfoWin:
         self.main.driver_info_win = None
 
 
-# TODO: Make ConnectionsWin a dynamic, scrollable window; Add option to get ALL connections
 class ConnectionsWin:
     def __init__(self, main: C4IconSwapper):
-        self.main = main
-
         # Initialize window
+        self.main = main
         self.window = Toplevel(main.root)
         self.window.focus()
         self.window.protocol('WM_DELETE_WINDOW', self.close)
         self.window.title('Edit Driver Connections')
-        self.window.geometry(f'975x250+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
+        w, h = (375, 250)
+        self.window.geometry(f'{w}x{h}+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
 
-        x_spacing, y_spacing = 330, 40
-        self.connections = [ConnectionEntry(self, main.connections[
-            (x * 6) + y], x * x_spacing + 15, y * y_spacing + 25) for x, y in itertools.product(range(3), range(6))]
+        self.canvas = Canvas(self.window, highlightthickness=0, borderwidth=0)
+        self.scrollbar = Scrollbar(self.window, orient='vertical', command=self.canvas.yview)
+        self.scrollbar.config(command='')
+        self.scrollbar.pack(side='right', fill='y')
+        self.scrollable_frame = Frame(self.canvas)
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor='nw')
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.canvas.pack(side='left', fill='both', expand=True)
+        self.scroll_bound = False
+
+        self.widget_x = 15
+        self.widget_y_offset = 40
+        self.y_pad = 25
+        self.scroll_pad = 20
+        num_conns = len(main.connections)
+        self.connections = [
+            ConnectionEntry(self, main.connections[i], self.widget_x, i * self.widget_y_offset + self.y_pad)
+            for i in range(num_conns)
+        ]
+
+        scroll_h = (num_conns * self.widget_y_offset) + self.scroll_pad
+        scroll_w = w - self.scroll_pad
+        self.scrollable_frame.config(width=scroll_w, height=scroll_h)
+        self.canvas.configure(scrollregion=(0, 0, scroll_w, scroll_h))
+        self.canvas.pack(side='left', fill='both', expand=True)
+        if num_conns > 6:
+            self.scrollbar.config(command=self.canvas.yview)
+            self.window.bind('<MouseWheel>', lambda e: self.canvas.yview_scroll(int(-1*(e.delta/120)), 'units'))
+            self.scroll_bound = True
 
     def refresh(self):
+        num_conns = len(self.main.connections)
         for conn_entry in self.connections:
-            conn_entry.refresh()
+            conn_entry.destroy()
+        self.connections = [
+            ConnectionEntry(self, self.main.connections[i], self.widget_x, i * self.widget_y_offset + self.y_pad)
+            for i in range(num_conns)
+        ]
+
+        scroll_h = (num_conns * self.widget_y_offset) + self.scroll_pad
+        scroll_w = self.window.winfo_width() - self.scroll_pad
+        self.scrollable_frame.config(width=scroll_w, height=scroll_h)
+        self.canvas.configure(scrollregion=(0, 0, scroll_w, scroll_h))
+        if num_conns > 6 and not self.scroll_bound:
+            self.scrollbar.config(command=self.canvas.yview)
+            self.window.bind('<MouseWheel>', lambda e: self.canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units'))
+            self.scroll_bound = True
+        elif num_conns <= 6 and self.scroll_bound:
+            self.scrollbar.config(command='')
+            self.window.unbind('<MouseWheel>')
 
     def close(self):
         self.window.destroy()
@@ -1912,7 +1965,7 @@ class Connection:
         self.original, self.enabled, self.delete = False, False, False
         self.prior_txt, self.prior_type = '', ''
         self.tag = copy.deepcopy(connection_tag_generic)
-        self.tag.delete = True
+        self.tag.hide = True
         self.name_entry_var = StringVar(value='Connection Name...')
         self.type = StringVar(value='HDMI IN')
 
@@ -1939,46 +1992,43 @@ class ConnectionEntry:
     def __init__(self, parent: ConnectionsWin, conn_obj: Connection, x_pos: int, y_pos: int):
         # Initialize Connection UI Object
         self.main = parent.main
-        self.window = parent.window
+        self.parent = parent
+        self.frame = parent.scrollable_frame
         self.conn_object = conn_obj
         self.x, self.y = x_pos, y_pos
 
         # Entry
         self.name_entry_var = conn_obj.name_entry_var
         self.name_entry_var.trace_add('write', self.name_update)
-        self.name_entry = Entry(self.window, width=20, textvariable=self.name_entry_var)
+        self.name_entry = Entry(self.frame, width=20, textvariable=self.name_entry_var)
         self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
         if not self.conn_object.enabled:
-            self.name_entry['state'] = DISABLED
+            self.name_entry['state'] = 'readonly'
 
         # Dropdown
         self.type = conn_obj.type
-        self.type_menu = OptionMenu(self.window, self.type, *selectable_connections)
+        self.type_menu = OptionMenu(self.frame, self.type, *selectable_connections)
         self.type_menu.place(x=self.x + 160, y=self.y, anchor='w')
         self.type.trace_add('write', self.type_update)
         if not self.conn_object.enabled:
             self.type_menu['state'] = DISABLED
 
         # Buttons
-        self.add_button = Button(self.window, text='Add', width=3, command=self.enable, takefocus=0)
-        if self.conn_object.enabled or self.conn_object.original:
-            self.add_button.place(x=-420, y=-420, anchor='w')
-        else:
+        self.add_button = Button(self.frame, text='Add', width=3, command=self.add, takefocus=0)
+        if not self.conn_object.enabled and not self.conn_object.original:
             self.add_button.place(x=self.x, y=self.y, anchor='w')
         if not self.main.driver_selected:
             self.add_button['state'] = DISABLED
 
-        self.x_button = Button(self.window, text='x', width=1, command=self.disable, takefocus=0)
+        self.x_button = Button(self.frame, text='x', width=1, command=self.delete, takefocus=0)
         if self.conn_object.enabled and not self.conn_object.original:
             self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
-        else:
-            self.x_button.place(x=-420, y=-420, anchor='w')
 
-        self.del_button = Button(self.window, text='Del', width=3, command=self.toggle_delete, takefocus=0)
+        self.del_button = Button(self.frame, text='Del', width=3, command=self.toggle_delete, takefocus=0)
         if self.conn_object.original:
             self.del_button.place(x=self.x, y=self.y, anchor='w')
-        else:
-            self.del_button.place(x=-420, y=-420, anchor='w')
+        elif not conn_obj.enabled:
+            self.name_entry['state'] = DISABLED
 
         if self.conn_object.delete and self.conn_object.original:
             self.del_button['text'] = 'Keep'
@@ -1989,25 +2039,57 @@ class ConnectionEntry:
         self.main.ask_to_save = True
         self.conn_object.update_id()
 
-    def enable(self):
+    def add(self):
         self.main.ask_to_save = True
         self.conn_object.enabled = True
-        self.conn_object.tag.delete = False
+        self.conn_object.tag.hide = False
         self.name_entry['state'] = NORMAL
         self.type_menu['state'] = NORMAL
-        self.add_button.place(x=-420, y=-420, anchor='w')
+        self.add_button.place_forget()
         self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
         self.name_entry['takefocus'] = 1
+        if self.parent.connections[-1] is self:
+            new_conn = Connection(self.main)
+            self.main.connections.append(new_conn)
+            parent_tag = self.main.driver_xml.get_tag('connections')
+            parent_tag.add_element(new_conn.tag)
+            self.parent.connections.append(
+                ConnectionEntry(self.parent, new_conn, self.parent.widget_x,
+                                self.y + self.parent.widget_y_offset + self.parent.y_pad))
+            self.parent.refresh()
 
-    def disable(self):
+    def delete(self):
         self.main.ask_to_save = True
-        self.conn_object.enabled = False
-        self.conn_object.tag.delete = True
-        self.name_entry['state'] = DISABLED
-        self.type_menu['state'] = DISABLED
-        self.add_button.place(x=self.x, y=self.y, anchor='w')
-        self.x_button.place(x=-420, y=-420, anchor='w')
-        self.name_entry['takefocus'] = 0
+        self.parent.connections.pop(i := self.parent.connections.index(self))
+        self.main.connections.pop(i)
+        parent_tag = self.main.driver_xml.get_tag('connections')
+        parent_tag.elements.pop(parent_tag.elements.index(self.conn_object.tag))
+        if conn_obj_in_dict := self.main.taken_conn_ids.get(self.conn_object.id):
+            if self.conn_object is conn_obj_in_dict:
+                self.main.taken_conn_ids.pop(self.conn_object.id)
+        self.destroy()
+        self.parent.refresh()
+        # for i, conn_entry in enumerate(self.parent.connections):
+        #     if conn_entry is not self:
+        #         continue
+        #     if i <= len(self.parent.connections) - 2:
+        #         self.parent.connections.pop(i)
+        #         self.main.connections.pop(i)
+        #         parent_tag = self.main.driver_xml.get_tag('connections')
+        #         parent_tag.elements.pop(parent_tag.elements.index(self.conn_object.tag))
+        #         if conn_obj_in_dict := self.main.taken_conn_ids.get(self.conn_object.id):
+        #             if self.conn_object is conn_obj_in_dict:
+        #                 self.main.taken_conn_ids.pop(self.conn_object.id)
+        #         self.destroy()
+        #         self.parent.refresh()
+        #         return
+        # self.conn_object.enabled = False
+        # self.conn_object.tag.hide = True
+        # self.name_entry['state'] = 'readonly'
+        # self.type_menu['state'] = DISABLED
+        # self.add_button.place(x=self.x, y=self.y, anchor='w')
+        # self.x_button.place_forget()
+        # self.name_entry['takefocus'] = 0
 
     def toggle_delete(self):
         if not self.conn_object.original:
@@ -2015,7 +2097,7 @@ class ConnectionEntry:
         self.main.ask_to_save = True
         if not self.conn_object.delete:
             self.conn_object.delete = True
-            self.conn_object.tag.delete = True
+            self.conn_object.tag.hide = True
             self.conn_object.prior_txt = self.name_entry_var.get()
             self.conn_object.prior_type = self.type.get()
             self.type.set('RIP')
@@ -2027,7 +2109,7 @@ class ConnectionEntry:
             self.del_button.place(x=self.del_button.winfo_x() - 6, y=self.y)
             return
         self.conn_object.delete = False
-        self.conn_object.tag.delete = False
+        self.conn_object.tag.hide = False
         self.name_entry['state'] = NORMAL
         self.name_entry_var.set(self.conn_object.prior_txt)
         self.conn_object.prior_txt = ''
@@ -2052,23 +2134,30 @@ class ConnectionEntry:
             self.name_entry['state'] = DISABLED
 
         if self.conn_object.original:
-            self.add_button.place(x=-420, y=-420, anchor='w')
+            self.add_button.place_forget()
             self.del_button.place(x=self.x, y=self.y, anchor='w')
-            self.x_button.place(x=-420, y=-420, anchor='w')
+            self.x_button.place_forget()
         elif self.conn_object.enabled:
-            self.add_button.place(x=-420, y=-420, anchor='w')
-            self.del_button.place(x=-420, y=-420, anchor='w')
+            self.add_button.place_forget()
+            self.del_button.place_forget()
             self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
         else:
             self.add_button['state'] = NORMAL if self.main.driver_selected else DISABLED
             self.add_button.place(x=self.x, y=self.y, anchor='w')
-            self.del_button.place(x=-420, y=-420, anchor='w')
-            self.x_button.place(x=-420, y=-420, anchor='w')
+            self.del_button.place_forget()
+            self.x_button.place_forget()
 
         if self.conn_object.delete:
             self.del_button['text'] = 'Keep'
             self.del_button['width'] = 4
             self.del_button.place(x=self.x + self.del_button.winfo_x() - 6, y=self.y)
+
+    def destroy(self):
+        self.name_entry.destroy()
+        self.type_menu.destroy()
+        self.add_button.destroy()
+        self.x_button.destroy()
+        self.del_button.destroy()
 
 
 class StatesWin:
@@ -2856,10 +2945,11 @@ class C4zPanel:
 
         # Update C4zPanel entry with driver file path
         self.file_entry_str.set(file_path)
-        if not main.driver_selected:
+        if not main.driver_selected:  # For first driver loaded
             self.file_entry_field['state'] = 'readonly'
             main.export_panel.export_button['state'] = NORMAL
             main.export_panel.export_as_button['state'] = NORMAL
+        main.driver_selected = True
 
         # Update ExportPanel entry with output filename
         orig_file_path = Path(file_path)
@@ -2951,7 +3041,6 @@ class C4zPanel:
             if main.states_win:
                 main.states_win.refresh()
 
-        main.driver_selected = True
         main.ask_to_save = False
 
     def load_c4z(self, file_path=None, force=False, new_thread=True, generic=False, c4is=None):
@@ -3020,32 +3109,35 @@ class C4zPanel:
         main = self.main
 
         # Reinitialize all connections
-        for conn in main.connections:
-            conn.__init__(main)
+        main.connections = []
 
         # Get connections from XML object
+        get_all_conn = self.main.get_all_connections.get()
         connections = [
             tag_dict | {'connection_tag': tag}
             for tag in main.driver_xml.get_tags('connection')
             if len(tag_dict := tag.get_tags_dict({'class', 'classname', 'connectionname', 'id', 'type'})) == 5
-            if tag_dict['classname'].value() in self.valid_connections
+            if get_all_conn or tag_dict['classname'].value() in self.valid_connections
         ]
 
         # Update connection entries up to max number of connections
-        for i, tag_dict in enumerate(connections[:len(main.connections)]):
-            main.connections[i].name_entry_var.set(tag_dict['connectionname'].value())
-            main.connections[i].type.set(tag_dict['classname'].value())
-            main.connections[i].id = int(tag_dict['id'].value())
-            main.connections[i].tag = tag_dict['connection_tag']
-            main.connections[i].original = True
+        for tag_dict in connections:
+            new_conn = (Connection(main))
+            new_conn.name_entry_var.set(tag_dict['connectionname'].value())
+            new_conn.type.set(tag_dict['classname'].value())
+            new_conn.id = int(tag_dict['id'].value())
+            new_conn.tag = tag_dict['connection_tag']
+            new_conn.original = True
+            main.connections.append(new_conn)
 
+        main.connections.append(Connection(main))
         if not (parent_tag := main.driver_xml.get_tag('connections')):
             main.driver_xml.get_tag('devicedata').add_element(
                 parent_tag := XMLTag(xml_string='<connections></connections>'))
-        for conn in main.connections:
-            if conn.original:
-                continue
-            parent_tag.add_element(conn.tag)
+        parent_tag.add_element(main.connections[-1].tag)
+
+        if main.connections_win:
+            main.connections_win.refresh()
 
     def drop_in_c4z(self, event):
         if self.main.pending_load_save:
