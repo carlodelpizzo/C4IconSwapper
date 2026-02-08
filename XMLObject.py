@@ -278,7 +278,7 @@ class XMLTag:
             self.is_comment = first_tag.is_comment
             self.is_CDATA = first_tag.is_CDATA
             self.is_self_closing = first_tag.is_self_closing
-            self.delete = first_tag.delete
+            self.hide = first_tag.hide
             return
         self.name = name
         self.parent = parent
@@ -290,12 +290,12 @@ class XMLTag:
         self.is_comment = is_comment
         self.is_CDATA = is_cdata
         self.is_self_closing = is_self_closing
-        self.delete = False
+        self.hide = False
 
     def get_lines(self, indent='', use_esc_chars=True) -> list[str]:
         if not self.init_success:
             return []
-        if self.delete:
+        if self.hide:
             return []
         if self.is_comment:
             return [f'<!--{self.name}-->']
@@ -344,7 +344,7 @@ class XMLTag:
                     else:
                         output.append(f'{indent}\t{element}\n')
                 continue
-            if element.delete:
+            if element.hide:
                 continue
             output.extend(element.get_lines(indent=f'\t{indent}', use_esc_chars=use_esc_chars))
             output[-1] += '\n'
