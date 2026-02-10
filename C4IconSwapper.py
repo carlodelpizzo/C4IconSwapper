@@ -1,3 +1,4 @@
+from __future__ import annotations
 import contextlib
 import copy
 import ctypes
@@ -17,14 +18,16 @@ import threading
 import time
 import traceback
 import warnings
-from collections import Counter, deque, defaultdict
+from collections import Counter, defaultdict, deque
 from datetime import datetime
 from pathlib import Path
 
 from PIL import Image, ImageTk, UnidentifiedImageError
 from PIL.Image import Resampling
-from tkinter import filedialog, Toplevel, Checkbutton, IntVar, StringVar, Label, Menu, OptionMenu
-from tkinter import DISABLED, NORMAL, END, INSERT, Text, Button, Entry, Frame, Canvas
+from tkinter import filedialog
+from tkinter import DISABLED, END, INSERT, NORMAL
+from tkinter import BooleanVar, IntVar, StringVar
+from tkinter import Button, Canvas, Checkbutton, Entry, Frame, Label, Menu, OptionMenu, Text, Toplevel
 from tkinter.ttk import Scrollbar, Separator
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
@@ -78,7 +81,7 @@ class PathStringVar(StringVar):
 # I'm not very happy with separating the IPC functions into their own class, but I think it makes it more readable
 # noinspection PyAttributeOutsideInit
 class IPC:
-    self: 'C4IconSwapper'
+    self: C4IconSwapper
     root: TkinterDnD.Tk
     instance_id: str
     appdata_dir: Path
@@ -634,11 +637,11 @@ class C4IconSwapper(IPC):
         self.root = TkinterDnD.Tk()
 
         # Default App settings
-        self.get_all_driver_imgs = IntVar(value=0)
-        self.get_all_connections = IntVar(value=0)
+        self.get_all_driver_imgs = BooleanVar()
+        self.get_all_connections = BooleanVar()
         self.merge_on_load = IntVar(value=-1)  # Default: Ask each time
-        self.include_backup_files = IntVar(value=1)
-        self.inc_driver_ver = IntVar(value=1)
+        self.include_backup_files = BooleanVar(value=True)
+        self.inc_driver_ver = BooleanVar(value=True)
         self.driver_manufac = StringVar(value='C4IconSwapper')
         self.driver_creator = StringVar(value='C4IconSwapper')
         self.quick_export_dir = PathStringVar()
@@ -853,10 +856,6 @@ class C4IconSwapper(IPC):
             )
             for setting_name in self.setting_names.values()
         }
-
-    @property
-    def has_images(self):
-        return self.replacement_panel.replacement_icon or self.replacement_panel.img_bank
 
     def exception_window(self, *args, message_txt=None):
         root = Toplevel(self.root)
@@ -1117,7 +1116,8 @@ class C4IconSwapper(IPC):
 
         if merge_project is None:
             merge_project = None if (setting_val := self.merge_on_load.get()) < 0 else bool(setting_val)
-        if merge_project is None and (self.has_images or (self.driver_selected and not c4is.driver_selected)):
+        has_images = self.replacement_panel.replacement_icon or self.replacement_panel.img_bank
+        if merge_project is None and (has_images or (self.driver_selected and not c4is.driver_selected)):
             merge_dialog_result = StringVar()
             self.ask_to_merge_dialog(merge_dialog_result)
             self.root.wait_variable(merge_dialog_result)
@@ -1288,8 +1288,8 @@ class C4IconSwapper(IPC):
                                                  'with the current project?')
         confirm_label.place(relx=0.5, anchor='n')
 
-        dont_ask_again = IntVar(value=0)
-        dont_ask_again_check = Checkbutton(merge_dialog, text="Don't Ask Again", variable=dont_ask_again)
+        dont_ask_again = BooleanVar()
+        dont_ask_again_check = Checkbutton(merge_dialog, text='Remember my choice', variable=dont_ask_again)
         dont_ask_again_check.place(relx=0.5, y=40, anchor='n')
 
         yes_button = Button(merge_dialog, text='Merge', width='10', command=do_merge)
@@ -1449,8 +1449,8 @@ class SettingsWin:
         self.window.focus()
         self.window.protocol('WM_DELETE_WINDOW', self.close)
         self.window.title('Settings')
-        w, h = (255, 300)
-        self.window.geometry(f'{w}x{h}+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
+        self.w, self.h = (255, 300)
+        self.window.geometry(f'{self.w}x{self.h}+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
 
         self.halt_trace_calls = False
@@ -1460,101 +1460,111 @@ class SettingsWin:
         self.title = Label(self.window, text='Default Settings', font=(label_font, 12, 'bold'))
         self.title.place(relx=0.5, y=5, anchor='n')
 
-        y_val = 30
         # noinspection PyTypeChecker
         trace = main.get_all_driver_imgs.trace_add('write',
                                                    lambda *_: self.update_setting(main.get_all_driver_imgs))
         self.var_trace_dict[id(main.get_all_driver_imgs)] = (main.get_all_driver_imgs, trace)
-        get_all_driver_imgs_check = Checkbutton(self.window, text='Get ALL images from driver',
-                                                variable=main.get_all_driver_imgs)
-        get_all_driver_imgs_check.place(x=5, y=y_val, anchor='nw')
+        self.get_all_driver_imgs_check = Checkbutton(self.window, text='Get ALL images from driver',
+                                                     variable=main.get_all_driver_imgs)
 
-        y_val += 25
         # noinspection PyTypeChecker
         trace = main.get_all_connections.trace_add('write',
                                                    lambda *_: self.update_setting(main.get_all_connections))
         self.var_trace_dict[id(main.get_all_connections)] = (main.get_all_connections, trace)
-        get_all_connections_check = Checkbutton(self.window, text='Get ALL connections from driver',
-                                                variable=main.get_all_connections)
-        get_all_connections_check.place(x=5, y=y_val, anchor='nw')
+        self.get_all_connections_check = Checkbutton(self.window, text='Get ALL connections from driver',
+                                                     variable=main.get_all_connections)
 
-        y_val += 25
+        self.merge_imgs_on_load_check = None
         if main.merge_on_load.get() != -1:
-            self.window.geometry(f'{w}x{h+42}')
             trace = main.merge_on_load.trace_add('write',
                                                  lambda *_: self.update_setting(main.merge_on_load))   # type: ignore
             self.var_trace_dict[id(main.merge_on_load)] = (main.merge_on_load, trace)
-            merge_imgs_on_load_check = Checkbutton(self.window, text='Merge new project with\n'
-                                                                     'existing project during load',
-                                                   variable=main.merge_on_load)
-            merge_imgs_on_load_check.place(x=5, y=y_val, anchor='nw')
-            y_val += 42
+            self.merge_imgs_on_load_check = Checkbutton(self.window, text='Merge new project with\n'
+                                                                          'existing project during load',
+                                                        variable=main.merge_on_load)
 
         # noinspection PyTypeChecker
         trace = main.include_backup_files.trace_add('write',
                                                     lambda *_: self.update_setting(main.include_backup_files))
         self.var_trace_dict[id(main.include_backup_files)] = (main.include_backup_files, trace)
-        include_backup_files_check = Checkbutton(self.window, text='Include .bak files when exporting',
-                                                 variable=main.include_backup_files)
-        include_backup_files_check.place(x=5, y=y_val, anchor='nw')
+        self.include_backup_files_check = Checkbutton(self.window, text='Include .bak files when exporting',
+                                                      variable=main.include_backup_files)
 
-        y_val += 25
         # noinspection PyTypeChecker
         trace = main.inc_driver_ver.trace_add('write', lambda *_: self.update_setting(main.inc_driver_ver))
         self.var_trace_dict[id(main.inc_driver_ver)] = (main.inc_driver_ver, trace)
-        inc_driver_ver_check = Checkbutton(self.window, text='Increment driver version on each export',
-                                           variable=main.inc_driver_ver)
-        inc_driver_ver_check.place(x=5, y=y_val, anchor='nw')
+        self.inc_driver_ver_check = Checkbutton(self.window, text='Increment driver version on each export',
+                                                variable=main.inc_driver_ver)
 
-        y_val += 30
-        driver_manufac_label = Label(self.window, text='Driver Manufacturer:')
-        driver_manufac_label.place(x=5, y=y_val, anchor='nw')
+        self.driver_manufac_label = Label(self.window, text='Driver Manufacturer:')
         self.driver_manufac_entry = Entry(self.window, width=19, textvariable=main.driver_manufac)
         # noinspection PyTypeChecker
         trace = main.driver_manufac.trace_add('write', lambda *_: self.update_setting(main.driver_manufac,
                                                                                       entry=self.driver_manufac_entry))
         self.var_trace_dict[id(main.driver_manufac)] = (main.driver_manufac, trace)
-        self.driver_manufac_entry.place(x=119, y=y_val+2, anchor='nw')
 
-        y_val += 30
-        driver_creator_label = Label(self.window, text='Driver Creator:')
-        driver_creator_label.place(x=5, y=y_val, anchor='nw')
+        self.driver_creator_label = Label(self.window, text='Driver Creator:')
         self.driver_creator_entry = Entry(self.window, width=25, textvariable=main.driver_creator)
         # noinspection PyTypeChecker
         trace = main.driver_creator.trace_add('write', lambda *_: self.update_setting(main.driver_creator,
                                                                                       entry=self.driver_creator_entry))
         self.var_trace_dict[id(main.driver_creator)] = (main.driver_creator, trace)
-        self.driver_creator_entry.place(x=85, y=y_val+2, anchor='nw')
 
         def path_str_update():
             return ('Same Directory as Application'
                     if not (var_val := main.quick_export_dir.get())
                     else var_val)
 
-        y_val += 32
-        quick_export_label = Label(self.window, text='Quick Export Directory')
-        quick_export_label.place(relx=0.5, y=y_val, anchor='n')
+        self.quick_export_label = Label(self.window, text='Quick Export Directory')
         self.quick_export_string = StringVar(value=path_str_update())
         self.quick_export_entry = Entry(self.window, width=27, textvariable=self.quick_export_string)
-        self.quick_export_entry['state'] = 'readonly'
+        if not main.quick_export_dir.get():
+            self.quick_export_entry['state'] = DISABLED
+        else:
+            self.quick_export_entry['state'] = 'readonly'
         # noinspection PyTypeChecker
         trace = main.quick_export_dir.trace_add('write',
                                                 lambda *_: self.quick_export_string.set(path_str_update()))
         self.var_trace_dict[id(main.quick_export_dir)] = (main.quick_export_dir, trace)
-        self.quick_export_entry.place(x=5, y=y_val+25, anchor='nw')
         self.quick_export_button = Button(self.window, text='Browse...', width=8, command=self.select_quick_export_dir)
-        self.quick_export_button.place(x=210, y=y_val+22, anchor='n')
 
-        y_val += 70
         self.restore_defaults_button = Button(self.window, text='Restore Defaults',
                                               width=15, command=self.restore_defaults)
+        self.place_tk_objects()
+
+    def place_tk_objects(self):
+        self.window.geometry(f'{self.w}x{self.h}')
+        y_val = 30
+        self.get_all_driver_imgs_check.place(x=5, y=y_val, anchor='nw')
+        y_val += 25
+        self.get_all_connections_check.place(x=5, y=y_val, anchor='nw')
+        y_val += 25
+        if self.merge_imgs_on_load_check:
+            self.window.geometry(f'{self.w}x{self.h + 42}')
+            self.merge_imgs_on_load_check.place(x=5, y=y_val, anchor='nw')
+            y_val += 42
+        self.include_backup_files_check.place(x=5, y=y_val, anchor='nw')
+        y_val += 25
+        self.inc_driver_ver_check.place(x=5, y=y_val, anchor='nw')
+        y_val += 30
+        self.driver_manufac_label.place(x=5, y=y_val, anchor='nw')
+        self.driver_manufac_entry.place(x=119, y=y_val + 2, anchor='nw')
+        y_val += 30
+        self.driver_creator_label.place(x=5, y=y_val, anchor='nw')
+        self.driver_creator_entry.place(x=85, y=y_val + 2, anchor='nw')
+        y_val += 32
+        self.quick_export_label.place(relx=0.5, y=y_val, anchor='n')
+        y_val += 25
+        self.quick_export_entry.place(x=5, y=y_val, anchor='nw')
+        self.quick_export_button.place(x=210, y=y_val - 3, anchor='n')
+        y_val += 45
         self.restore_defaults_button.place(relx=0.5, y=y_val, anchor='n')
 
     def update_setting(self, setting_var, *_, entry=None):
         if self.halt_trace_calls:
             return
         setting_name = self.main.setting_names[id(setting_var)]
-        if isinstance(setting_var, IntVar):
+        if isinstance(setting_var, (IntVar, BooleanVar)):
             print(f'Set {setting_name} to: {bool(setting_var.get())}')
         elif isinstance(setting_var, StringVar):
             self.main.validate_man_and_creator(setting_var, entry)
@@ -1581,6 +1591,7 @@ class SettingsWin:
         if folder_path:
             self.main.quick_export_dir.set(folder_path)
             self.quick_export_string.set(folder_path)
+            self.quick_export_entry['state'] = 'readonly'
             self.main.settings_file.write_text(json.dumps(self.main.settings, indent='\t'))
             print(f'Set {self.main.setting_names[id(self.main.quick_export_dir)]} to: {folder_path}')
         self.window.focus()
@@ -1590,8 +1601,13 @@ class SettingsWin:
         for value in list(self.entry_mod_delay_dict.values()):
             self.window.after_cancel(value[0])
         self.entry_mod_delay_dict.clear()
+        if self.merge_imgs_on_load_check:
+            self.merge_imgs_on_load_check.destroy()
+            self.merge_imgs_on_load_check = None
         for setting_name in self.main.setting_names.values():
             getattr(self.main, setting_name).set(self.main.setting_defaults[setting_name])
+        self.quick_export_entry['state'] = DISABLED
+        self.place_tk_objects()
         self.halt_trace_calls = False
         self.main.settings_file.write_text(json.dumps(self.main.settings, indent='\t'))
         settings_str = ',\n\t'.join([f'{setting}: {val}' for setting, val in self.main.settings.items()])
@@ -2338,7 +2354,7 @@ class RecoveryWin:
                                    f'{project.mtime}', variable=project.recover)
                            for project in self.recoverable_projects]
         if num_of_rec_folders == 1:
-            self.recoverable_projects[-1].recover.set(1)
+            self.recoverable_projects[-1].recover.set(True)
         for check in self.checkboxes:
             check.pack(anchor='w')
             if do_scroll:
@@ -2433,7 +2449,7 @@ class RecoveryWin:
 
         # Warn that unselected projects will be deleted
         if len(selected) != len(self.recoverable_projects):
-            self.warning_dialog(abort_recovery := IntVar())
+            self.warning_dialog(abort_recovery := BooleanVar())
             self.window.wait_variable(abort_recovery)
             if abort_recovery.get():
                 return
@@ -2476,7 +2492,7 @@ class RecoveryObject:
         self.has_driver = (xml_path := instance_path / 'driver' / 'driver.xml').is_file()
         self.num_images = 0
         self.mtime = datetime.fromtimestamp(instance_path.stat().st_mtime).strftime("%m/%d %H:%M:%S")
-        self.recover = IntVar()
+        self.recover = BooleanVar()
 
         replacement_path = instance_path / 'Replacement Icons'
         if self.has_driver and (tag := XMLTag(xml_path=xml_path, sub_tag='name')) and (name := tag.value()):
@@ -2555,7 +2571,7 @@ class C4zPanel:
         self.file_entry_field['state'] = DISABLED
 
         # Checkboxes
-        self.show_extra_icons = IntVar(value=0)
+        self.show_extra_icons = BooleanVar()
         self.show_extra_icons.trace_add('write', self.toggle_extra_icons)
         self.show_extra_icons_check = Checkbutton(main.root, text='show extra icons',
                                                   variable=self.show_extra_icons, takefocus=0)
@@ -2963,7 +2979,7 @@ class C4zPanel:
             main.export_panel.driver_name_var.set('New Driver')
 
         # Update show extra icons checkbox
-        self.show_extra_icons.set(0)
+        self.show_extra_icons.set(False)
         extra_icon_text = 'show extra icons' if not self.extra_icons else f'show extra ({self.extra_icons})'
         self.show_extra_icons_check.config(text=extra_icon_text)
         self.show_extra_icons_check.config(state='disabled' if not self.extra_icons else 'normal')
@@ -3566,12 +3582,12 @@ class ExportPanel:
         self.driver_name_entry.place(x=145 + self.x, y=190 + self.y, anchor='n')
 
         # Checkboxes
-        self.include_backups = IntVar(value=main.settings['include_backup_files'])
+        self.include_backups = BooleanVar(value=main.settings['include_backup_files'])
         self.include_backups_check = Checkbutton(main.root, text='include backup files',
                                                  variable=self.include_backups, takefocus=0)
         self.include_backups_check.place(x=63 + self.x, y=130 + self.y, anchor='w')
 
-        self.inc_driver_version = IntVar(value=main.settings['inc_driver_ver'])
+        self.inc_driver_version = BooleanVar(value=main.settings['inc_driver_ver'])
         self.inc_driver_version.trace_add('write', self.update_driver_version)
         self.inc_driver_check = Checkbutton(main.root, text='increment driver version',
                                             variable=self.inc_driver_version, takefocus=0)
