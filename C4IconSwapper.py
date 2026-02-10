@@ -788,7 +788,7 @@ class C4IconSwapper(IPC):
 
         # File Menu
         self.file = Menu(self.menu, tearoff=0)
-        self.file.add_command(label='Open Project', command=self.load_c4is)
+        self.file.add_command(label='Open Project', command=self.load_project)
         self.file.add_command(label='Save Project', command=self.save_project)
         self.file.add_separator()
         self.file.add_command(label='Open C4z', command=self.c4z_panel.load_c4z)
@@ -836,9 +836,9 @@ class C4IconSwapper(IPC):
         self.root.report_callback_exception, warnings.showwarning = self.exception_handler, self.exception_handler
         self.root.geometry('915x287')
         self.root.resizable(False, False)
-        self.root.bind('<KeyRelease>', self.key_release)
+        self.root.bind('<KeyRelease>', self.on_key_release)
         self.root.bind('<Control-s>', self.save_project)
-        self.root.bind('<Control-o>', self.load_c4is)
+        self.root.bind('<Control-o>', self.load_project)
         self.root.bind('<Control-z>', self.undo)
         self.root.bind('<Control-w>', self.end_program)
         self.root.config(menu=self.menu)
@@ -946,25 +946,7 @@ class C4IconSwapper(IPC):
         self.warnings.clear()
         self.exception_window(message_txt=f'{header}\n\n{msg_txt}')
 
-    def restore_entry_text(self, *_):
-        if not self.restore_entry_string:
-            return
-        self.c4z_panel.file_entry_str.set(self.restore_entry_string)
-        self.c4z_panel.file_entry_field['state'] = 'readonly'
-        self.restore_entry_string = ''
-
-    def validate_man_and_creator(self, string_var: StringVar, entry: Entry):
-        if not string_var or not entry:
-            return
-        name_compare = re_valid_chars.sub('', name := string_var.get())
-        if str_diff := len(name) - len(name_compare):
-            cursor_pos = entry.index(INSERT)
-            entry.icursor(cursor_pos - str_diff)
-            string_var.set(name_compare)
-
-        self.ask_to_save = True
-
-    def key_release(self, event):
+    def on_key_release(self, event):
         if event.keysym == 'Right':
             self.c4z_panel.inc_icon()
         elif event.keysym == 'Left':
@@ -973,6 +955,32 @@ class C4IconSwapper(IPC):
             self.replacement_panel.inc_img_bank()
         elif event.keysym == 'Down':
             self.replacement_panel.inc_img_bank(inc=0)
+
+    def blink_driver_name_entry(self, *_):
+        if not self.counter:
+            return
+        self.counter -= 1
+        if self.export_panel.driver_name_entry['background'] != light_entry_bg:
+            self.export_panel.driver_name_entry['background'] = light_entry_bg
+        else:
+            self.export_panel.driver_name_entry['background'] = 'pink'
+        self.root.after(150, self.blink_driver_name_entry)  # type: ignore
+
+    def restore_entry_text(self, *_):
+        if not self.restore_entry_string:
+            return
+        self.c4z_panel.file_entry_str.set(self.restore_entry_string)
+        self.c4z_panel.file_entry_field['state'] = 'readonly'
+        self.restore_entry_string = ''
+
+    def validate_man_and_creator(self, string_var: StringVar, entry: Entry):
+        name_compare = re_valid_chars.sub('', name := string_var.get())
+        if str_diff := len(name) - len(name_compare):
+            cursor_pos = entry.index(INSERT)
+            entry.icursor(cursor_pos - str_diff)
+            string_var.set(name_compare)
+
+        self.ask_to_save = True
 
     # TODO: Completely overhaul everything related to multistate
     def get_states(self, lua_file):
@@ -1004,16 +1012,6 @@ class C4IconSwapper(IPC):
             self.states[i].name_var.set(state_name)
             self.states[i].original_name = state_name
         return True
-
-    def blink_driver_name_entry(self, *_):
-        if not self.counter:
-            return
-        self.counter -= 1
-        if self.export_panel.driver_name_entry['background'] != light_entry_bg:
-            self.export_panel.driver_name_entry['background'] = light_entry_bg
-        else:
-            self.export_panel.driver_name_entry['background'] = 'pink'
-        self.root.after(150, self.blink_driver_name_entry)  # type: ignore
 
     def open_edit_win(self, main_win_var, win_type: str):
         if main_win_var:
@@ -1056,7 +1054,7 @@ class C4IconSwapper(IPC):
         self.ask_to_save = False
         self.pending_load_save = False
 
-    def load_c4is(self, *_, path_str='', scheduled=False, merge_project=None):
+    def load_project(self, *_, path_str='', scheduled=False, merge_project=None):
         if scheduled:
             self.replacement_panel.multi_threading.wait()
         elif self.pending_load_save:
@@ -1133,7 +1131,7 @@ class C4IconSwapper(IPC):
         # If images are currently being processed by replacement panel, start new thread waiting for it to finish
         if not self.replacement_panel.multi_threading.is_set():
             self.pending_load_save = True
-            threading.Thread(target=self.load_c4is,
+            threading.Thread(target=self.load_project,
                              kwargs={'path_str': path_str, 'scheduled': True, 'merge_project': merge_project},
                              daemon=True).start()
             return
@@ -1253,51 +1251,6 @@ class C4IconSwapper(IPC):
         self.ask_to_save = False if not merge_project else True
         self.pending_load_save = False
 
-    def ask_to_merge_dialog(self, result_var):
-        def cancel():
-            result_var.set('cancel')
-            merge_dialog.destroy()
-
-        def do_not_merge():
-            result_var.set('dont')
-            if dont_ask_again.get():
-                update_settings(False)
-            merge_dialog.destroy()
-
-        def do_merge():
-            result_var.set('do')
-            if dont_ask_again.get():
-                update_settings(True)
-            merge_dialog.destroy()
-
-        def update_settings(val: bool):
-            self.merge_on_load.set(val)
-            print(f'Set {self.setting_names[id(self.merge_on_load)]} to: {val}')
-            self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
-
-        merge_dialog = Toplevel(self.root)
-        merge_dialog.title('Merge/Overwrite current project?')
-        merge_dialog.geometry(f'255x111+{self.root.winfo_rootx()}+{self.root.winfo_rooty()}')
-        merge_dialog.protocol('WM_DELETE_WINDOW', cancel)
-        merge_dialog.grab_set()
-        merge_dialog.focus()
-        merge_dialog.transient(self.root)
-        merge_dialog.resizable(False, False)
-
-        confirm_label = Label(merge_dialog, text='Would you like to merge the incoming project\n'
-                                                 'with the current project?')
-        confirm_label.place(relx=0.5, anchor='n')
-
-        dont_ask_again = BooleanVar()
-        dont_ask_again_check = Checkbutton(merge_dialog, text='Remember my choice', variable=dont_ask_again)
-        dont_ask_again_check.place(relx=0.5, y=40, anchor='n')
-
-        yes_button = Button(merge_dialog, text='Merge', width='10', command=do_merge)
-        yes_button.place(relx=0.5, rely=1, x=-10, y=-10, anchor='se')
-
-        no_button = Button(merge_dialog, text='Overwrite', width='10', command=do_not_merge)
-        no_button.place(relx=0.5, rely=1, x=10, y=-10, anchor='sw')
-
     def do_recovery(self, recover_path: Path):
         if (driver_folder := recover_path / 'driver').is_dir():
             shutil.make_archive(str(driver_folder), 'zip', driver_folder)
@@ -1372,6 +1325,51 @@ class C4IconSwapper(IPC):
         no_button.place(relx=0.5, rely=1, x=5, y=-10, anchor='sw')
 
         self.ask_to_save = False
+
+    def ask_to_merge_dialog(self, result_var):
+        def cancel():
+            result_var.set('cancel')
+            merge_dialog.destroy()
+
+        def do_not_merge():
+            result_var.set('dont')
+            if dont_ask_again.get():
+                update_settings(False)
+            merge_dialog.destroy()
+
+        def do_merge():
+            result_var.set('do')
+            if dont_ask_again.get():
+                update_settings(True)
+            merge_dialog.destroy()
+
+        def update_settings(val: bool):
+            self.merge_on_load.set(val)
+            print(f'Set {self.setting_names[id(self.merge_on_load)]} to: {val}')
+            self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
+
+        merge_dialog = Toplevel(self.root)
+        merge_dialog.title('Merge/Overwrite current project?')
+        merge_dialog.geometry(f'255x111+{self.root.winfo_rootx()}+{self.root.winfo_rooty()}')
+        merge_dialog.protocol('WM_DELETE_WINDOW', cancel)
+        merge_dialog.grab_set()
+        merge_dialog.focus()
+        merge_dialog.transient(self.root)
+        merge_dialog.resizable(False, False)
+
+        confirm_label = Label(merge_dialog, text='Would you like to merge the incoming project\n'
+                                                 'with the current project?')
+        confirm_label.place(relx=0.5, anchor='n')
+
+        dont_ask_again = BooleanVar()
+        dont_ask_again_check = Checkbutton(merge_dialog, text='Remember my choice', variable=dont_ask_again)
+        dont_ask_again_check.place(relx=0.5, y=40, anchor='n')
+
+        yes_button = Button(merge_dialog, text='Merge', width='10', command=do_merge)
+        yes_button.place(relx=0.5, rely=1, x=-10, y=-10, anchor='se')
+
+        no_button = Button(merge_dialog, text='Overwrite', width='10', command=do_not_merge)
+        no_button.place(relx=0.5, rely=1, x=10, y=-10, anchor='sw')
 
     def end_program(self, *_):
         if self.ask_to_save:
@@ -1689,13 +1687,6 @@ class C4Icon(Icon):
             with Image.open(icon.bak_path) as img:
                 self.bak_tk_icon = ImageTk.PhotoImage(img.resize((128, 128), Resampling.BICUBIC))
 
-    def get_tk_img(self):
-        if self.replacement_icon:
-            return self.replacement_icon.tk_icon_lg
-        if self.restore_bak:
-            return self.bak_tk_icon
-        return self.tk_icon_lg
-
     def set_restore(self):
         if self.replacement_icon:
             self.replacement_icon = None
@@ -1704,6 +1695,13 @@ class C4Icon(Icon):
 
     def replace(self, icon: Icon):
         self.replacement_icon = icon
+
+    def get_tk_img(self):
+        if self.replacement_icon:
+            return self.replacement_icon.tk_icon_lg
+        if self.restore_bak:
+            return self.bak_tk_icon
+        return self.tk_icon_lg
 
     def refresh_tk_img(self, bak=False):
         if bak and self.bak:
@@ -2070,9 +2068,39 @@ class ConnectionEntry:
             self.del_button['width'] = 4
             self.del_button.place(x=self.x + self.del_button.winfo_x() - 6, y=self.y)
 
-    def type_update(self, *_):
-        self.main.ask_to_save = True
-        self.conn_object.update_id()
+    def refresh(self):
+        self.name_entry_var.set(self.conn_object.name_entry_var.get())
+        self.type.set(self.conn_object.type.get())
+        self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+        self.type_menu.place(x=self.x + 210, y=self.y, anchor='w')
+        if self.conn_object.enabled:
+            self.type_menu['state'] = NORMAL
+            self.name_entry['state'] = NORMAL
+        else:
+            self.type_menu['state'] = DISABLED
+            if not self.conn_object.original:
+                self.name_entry['state'] = DISABLED
+            else:
+                self.name_entry['state'] = 'readonly'
+
+        if self.conn_object.original:
+            self.add_button.place_forget()
+            self.del_button.place(x=self.x, y=self.y, anchor='w')
+            self.x_button.place_forget()
+        elif self.conn_object.enabled:
+            self.add_button.place_forget()
+            self.del_button.place_forget()
+            self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
+        else:
+            self.add_button['state'] = NORMAL if self.main.driver_selected else DISABLED
+            self.add_button.place(x=self.x, y=self.y, anchor='w')
+            self.del_button.place_forget()
+            self.x_button.place_forget()
+
+        if self.conn_object.delete:
+            self.del_button['text'] = 'Keep'
+            self.del_button['width'] = 4
+            self.del_button.place(x=self.x + self.del_button.winfo_x() - 6, y=self.y)
 
     def add(self):
         self.main.ask_to_save = True
@@ -2138,39 +2166,9 @@ class ConnectionEntry:
     def name_update(self, *_):
         self.main.ask_to_save = True
 
-    def refresh(self):
-        self.name_entry_var.set(self.conn_object.name_entry_var.get())
-        self.type.set(self.conn_object.type.get())
-        self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
-        self.type_menu.place(x=self.x + 210, y=self.y, anchor='w')
-        if self.conn_object.enabled:
-            self.type_menu['state'] = NORMAL
-            self.name_entry['state'] = NORMAL
-        else:
-            self.type_menu['state'] = DISABLED
-            if not self.conn_object.original:
-                self.name_entry['state'] = DISABLED
-            else:
-                self.name_entry['state'] = 'readonly'
-
-        if self.conn_object.original:
-            self.add_button.place_forget()
-            self.del_button.place(x=self.x, y=self.y, anchor='w')
-            self.x_button.place_forget()
-        elif self.conn_object.enabled:
-            self.add_button.place_forget()
-            self.del_button.place_forget()
-            self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
-        else:
-            self.add_button['state'] = NORMAL if self.main.driver_selected else DISABLED
-            self.add_button.place(x=self.x, y=self.y, anchor='w')
-            self.del_button.place_forget()
-            self.x_button.place_forget()
-
-        if self.conn_object.delete:
-            self.del_button['text'] = 'Keep'
-            self.del_button['width'] = 4
-            self.del_button.place(x=self.x + self.del_button.winfo_x() - 6, y=self.y)
+    def type_update(self, *_):
+        self.main.ask_to_save = True
+        self.conn_object.update_id()
 
     def destroy(self):
         self.name_entry.destroy()
@@ -2276,14 +2274,20 @@ class StateEntry:
         if not self.main.multi_state_driver:
             self.name_entry['state'] = DISABLED
 
+    def get(self):
+        return self.name_var.get()
+
+    def refresh(self, bg_only=False):
+        self.name_entry['background'] = self.state_object.bg_color
+        if bg_only:
+            return
+        self.name_var.set(self.state_object.name_var.get())
+
     def on_name_update(self, *_):
         if self.main.states_win:
             if self.main.states_win.trace_lockout:
                 return
             self.main.states_win.validate_states()
-
-    def get(self):
-        return self.name_var.get()
 
     def update_state_name(self):
         name = self.name_var.get()
@@ -2297,12 +2301,6 @@ class StateEntry:
             self.name_entry.icursor(cursor_pos - str_diff)
         self.name_var.set(formatted_name)
         self.state_object.name_var.set(formatted_name)
-
-    def refresh(self, bg_only=False):
-        self.name_entry['background'] = self.state_object.bg_color
-        if bg_only:
-            return
-        self.name_var.set(self.state_object.name_var.get())
 
 
 class RecoveryWin:
@@ -2366,38 +2364,6 @@ class RecoveryWin:
         delete_button = Button(window, text='Delete' if num_of_rec_folders == 1 else 'Delete All',
                                width=10, command=self.close_dialog)
         delete_button.place(relx=0.5, x=4, rely=1, y=-3, anchor='sw')
-
-    def close_dialog(self):
-        def exit_close_dialog():
-            close_dialog.destroy()
-            self.window.deiconify()
-            self.window.focus()
-
-        def do_delete():
-            shutil.rmtree(self.recovery_dir)
-            close_dialog.destroy()
-            self.window.destroy()
-            self.main.root.deiconify()
-            self.main.root.focus()
-
-        close_dialog = Toplevel(self.window)
-        close_dialog.title('Are you sure?')
-        close_dialog.geometry(f'239x70+{self.window.winfo_rootx()}+{self.window.winfo_rooty()}')
-        close_dialog.protocol('WM_DELETE_WINDOW', exit_close_dialog)
-        close_dialog.grab_set()
-        close_dialog.focus()
-        close_dialog.transient(self.window)
-        close_dialog.resizable(False, False)
-
-        label = Label(close_dialog, text='Delete recovered project?' if len(self.recoverable_projects) == 1 else
-                        'Delete all recovered projects?', font=(label_font, 10, 'bold'))
-        label.place(relx=0.5, y=3, anchor='n')
-
-        yes_button = Button(close_dialog, text='Yes', width='10', command=do_delete)
-        yes_button.place(relx=0.5, x=-4, rely=1, y=-8, anchor='se')
-
-        no_button = Button(close_dialog, text='No', width='10', command=exit_close_dialog)
-        no_button.place(relx=0.5, x=4, rely=1, y=-8, anchor='sw')
 
     def warning_dialog(self, dialog_response_var):
         def close_dialog():
@@ -2481,6 +2447,38 @@ class RecoveryWin:
         self.main.root.deiconify()
         self.main.root.focus()
 
+    def close_dialog(self):
+        def exit_close_dialog():
+            close_dialog.destroy()
+            self.window.deiconify()
+            self.window.focus()
+
+        def do_delete():
+            shutil.rmtree(self.recovery_dir)
+            close_dialog.destroy()
+            self.window.destroy()
+            self.main.root.deiconify()
+            self.main.root.focus()
+
+        close_dialog = Toplevel(self.window)
+        close_dialog.title('Are you sure?')
+        close_dialog.geometry(f'239x70+{self.window.winfo_rootx()}+{self.window.winfo_rooty()}')
+        close_dialog.protocol('WM_DELETE_WINDOW', exit_close_dialog)
+        close_dialog.grab_set()
+        close_dialog.focus()
+        close_dialog.transient(self.window)
+        close_dialog.resizable(False, False)
+
+        label = Label(close_dialog, text='Delete recovered project?' if len(self.recoverable_projects) == 1 else
+                        'Delete all recovered projects?', font=(label_font, 10, 'bold'))
+        label.place(relx=0.5, y=3, anchor='n')
+
+        yes_button = Button(close_dialog, text='Yes', width='10', command=do_delete)
+        yes_button.place(relx=0.5, x=-4, rely=1, y=-8, anchor='se')
+
+        no_button = Button(close_dialog, text='No', width='10', command=exit_close_dialog)
+        no_button.place(relx=0.5, x=4, rely=1, y=-8, anchor='sw')
+
 
 class RecoveryObject:
     def __init__(self, instance_path: Path):
@@ -2495,7 +2493,7 @@ class RecoveryObject:
         self.recover = BooleanVar()
 
         replacement_path = instance_path / 'Replacement Icons'
-        if self.has_driver and (tag := XMLTag(xml_path=xml_path, sub_tag='name')) and (name := tag.value()):
+        if self.has_driver and (tag := XMLTag(xml_path=xml_path, sub_tag='name')) and (name := tag.value):
             self.name = name
         if replacement_path.is_dir():
             self.num_images = len(os.listdir(replacement_path))
@@ -2578,25 +2576,6 @@ class C4zPanel:
         self.show_extra_icons_check.place(x=177 + self.x, y=176 + self.y, anchor='nw')
         self.show_extra_icons_check.config(state='disabled')
 
-    def toggle_extra_icons(self, *_):
-        if not self.main.driver_selected or self.main.pending_load_save:
-            return
-        if not (show_extra := self.show_extra_icons.get()):
-            if self.extra_icons:
-                self.show_extra_icons_check.config(text=f'show extra ({self.extra_icons})')
-            current_icon = self.icons[self.current_icon]
-            if current_icon.extra:
-                self.inc_icon()
-        else:
-            self.show_extra_icons_check.config(text='show extra icons')
-
-        self.prev_icon_button['state'] = NORMAL
-        self.next_icon_button['state'] = NORMAL
-        if len(self.icons) - (self.extra_icons if not show_extra else 0) == 1:
-            self.prev_icon_button['state'] = DISABLED
-            self.next_icon_button['state'] = DISABLED
-        self.update_icon()
-
     def load_gen_driver(self, multi=False):
         if self.main.pending_load_save:
             return
@@ -2639,54 +2618,6 @@ class C4zPanel:
             self.main.pending_load_save = False
 
         threading.Thread(target=gen_driver_unpack, daemon=True).start()
-
-    def update_icon(self):
-        if not (icons := self.icons):
-            return
-        if self.current_icon < 0:
-            raise ValueError('Expected positive icon index')
-        if self.current_icon >= len(icons):
-            self.current_icon = self.current_icon % len(icons)
-
-        icon_image = icons[self.current_icon].get_tk_img()
-        self.c4_icon_label.configure(image=icon_image)
-        self.c4_icon_label.image = icon_image
-
-        curr_icon = icons[self.current_icon]
-        self.icon_name_label.config(text=f'{curr_icon.name}')
-        show_extra = self.show_extra_icons.get()
-        visible_icons = len(icons) - (self.extra_icons if not show_extra else 0)
-        current_icon_num = self.current_icon + 1
-        self.icon_num_label.config(text=f'{current_icon_num} of {visible_icons}')
-
-        bak_check = not curr_icon.restore_bak and curr_icon.bak
-        restore_state = NORMAL if (bak_check or curr_icon.replacement_icon) else DISABLED
-        self.restore_button['state'] = restore_state
-
-        def skp(icn):
-            return icn.extra and not self.show_extra_icons.get()
-
-        if restore_state is NORMAL:
-            self.restore_all_button['state'] = NORMAL
-        elif any((icon.replacement_icon or (not icon.restore_bak and icon.bak)) for icon in icons if not skp(icon)):
-            self.restore_all_button['state'] = NORMAL
-        else:
-            self.restore_all_button['state'] = DISABLED
-
-        unrestore_state = DISABLED
-        if restore_state is NORMAL:
-            self.main.edit.entryconfig(self.main.unrestore_pos, state=DISABLED)
-        elif not curr_icon.replacement_icon and (curr_icon.restore_bak and curr_icon.bak):
-            self.main.edit.entryconfig(self.main.unrestore_pos, state=(unrestore_state := NORMAL))
-        else:
-            self.main.edit.entryconfig(self.main.unrestore_pos, state=DISABLED)
-
-        if unrestore_state is NORMAL:
-            self.main.edit.entryconfig(self.main.unrestore_all_pos, state=NORMAL)
-        elif any(not icon.replacement_icon and (icon.restore_bak and icon.bak) for icon in icons if not skp(icon)):
-            self.main.edit.entryconfig(self.main.unrestore_all_pos, state=NORMAL)
-        else:
-            self.main.edit.entryconfig(self.main.unrestore_all_pos, state=DISABLED)
 
     def _load_c4z(self, file_path=None, generic=False, c4is=None):
         main = self.main
@@ -2900,7 +2831,7 @@ class C4zPanel:
                         rel_path = Path(lg_img_path)
                         icon_groups[(tag_name if tag_name else 'Device Icon', tag.parent)].add(rel_path)
                 for tag in main.driver_xml.get_tags('Icon'):
-                    if 'controller://' not in (tag_value := tag.value()):
+                    if 'controller://' not in (tag_value := tag.value):
                         print(f'Could not parse Icon tag value in XML: {tag_value}')
                         continue
                     group_name = tag.parent.attributes.get('id')
@@ -2986,12 +2917,12 @@ class C4zPanel:
 
         # Update XML variables
         if man_tag := main.driver_xml.get_tag('manufacturer'):
-            main.driver_manufac_var.set(man_tag.value())
+            main.driver_manufac_var.set(man_tag.value)
         if creator_tag := main.driver_xml.get_tag('creator'):
-            main.driver_creator_var.set(creator_tag.value())
+            main.driver_creator_var.set(creator_tag.value)
         if version_tag := main.driver_xml.get_tag('version'):
-            main.driver_ver_orig.set(version_tag.value())
-            ver_num = re.search(r'\d*', version_tag.value())[0]
+            main.driver_ver_orig.set(version_tag.value)
+            ver_num = re.search(r'\d*', version_tag.value)[0]
             if ver_num:
                 main.driver_version_var.set(ver_num)
                 ver_num = str(int(ver_num) + 1) if main.export_panel.inc_driver_version.get() else ver_num
@@ -3003,8 +2934,8 @@ class C4zPanel:
             main.original_conn_ids = set()
             for id_tag in id_tags:
                 with contextlib.suppress(ValueError):
-                    if int(id_tag.value()) not in main.original_conn_ids:
-                        main.original_conn_ids.add(int(id_tag.value()))
+                    if int(id_tag.value) not in main.original_conn_ids:
+                        main.original_conn_ids.add(int(id_tag.value))
 
         # Check Lua file for multi-state
         if not c4is:
@@ -3080,6 +3011,15 @@ class C4zPanel:
         self._load_c4z(file_path=file_path, generic=generic, c4is=c4is)
         self.main.pending_load_save = False
 
+    def drop_in_c4z(self, event):
+        if self.main.pending_load_save:
+            return
+        paths = parse_drop_event(event)
+        c4z_path = next((path for path in paths if path.suffix == '.c4z' and path.is_file()), None)
+        if c4z_path:
+            self.load_c4z(file_path=c4z_path)
+        self.main.replacement_panel.process_image(file_path=paths)
+
     def restore(self, do_all=False):
         if self.main.pending_load_save:
             return
@@ -3107,6 +3047,25 @@ class C4zPanel:
         self.update_icon()
         self.main.ask_to_save = True
 
+    def toggle_extra_icons(self, *_):
+        if not self.main.driver_selected or self.main.pending_load_save:
+            return
+        if not (show_extra := self.show_extra_icons.get()):
+            if self.extra_icons:
+                self.show_extra_icons_check.config(text=f'show extra ({self.extra_icons})')
+            current_icon = self.icons[self.current_icon]
+            if current_icon.extra:
+                self.inc_icon()
+        else:
+            self.show_extra_icons_check.config(text='show extra icons')
+
+        self.prev_icon_button['state'] = NORMAL
+        self.next_icon_button['state'] = NORMAL
+        if len(self.icons) - (self.extra_icons if not show_extra else 0) == 1:
+            self.prev_icon_button['state'] = DISABLED
+            self.next_icon_button['state'] = DISABLED
+        self.update_icon()
+
     def inc_icon(self, inc=1, validate=True):
         if not self.main.driver_selected or not inc or self.main.pending_load_save:
             return
@@ -3125,6 +3084,54 @@ class C4zPanel:
 
         self.update_icon()
 
+    def update_icon(self):
+        if not (icons := self.icons):
+            return
+        if self.current_icon < 0:
+            raise ValueError('Expected positive icon index')
+        if self.current_icon >= len(icons):
+            self.current_icon = self.current_icon % len(icons)
+
+        icon_image = icons[self.current_icon].get_tk_img()
+        self.c4_icon_label.configure(image=icon_image)
+        self.c4_icon_label.image = icon_image
+
+        curr_icon = icons[self.current_icon]
+        self.icon_name_label.config(text=f'{curr_icon.name}')
+        show_extra = self.show_extra_icons.get()
+        visible_icons = len(icons) - (self.extra_icons if not show_extra else 0)
+        current_icon_num = self.current_icon + 1
+        self.icon_num_label.config(text=f'{current_icon_num} of {visible_icons}')
+
+        bak_check = not curr_icon.restore_bak and curr_icon.bak
+        restore_state = NORMAL if (bak_check or curr_icon.replacement_icon) else DISABLED
+        self.restore_button['state'] = restore_state
+
+        def skp(icn):
+            return icn.extra and not self.show_extra_icons.get()
+
+        if restore_state is NORMAL:
+            self.restore_all_button['state'] = NORMAL
+        elif any((icon.replacement_icon or (not icon.restore_bak and icon.bak)) for icon in icons if not skp(icon)):
+            self.restore_all_button['state'] = NORMAL
+        else:
+            self.restore_all_button['state'] = DISABLED
+
+        unrestore_state = DISABLED
+        if restore_state is NORMAL:
+            self.main.edit.entryconfig(self.main.unrestore_pos, state=DISABLED)
+        elif not curr_icon.replacement_icon and (curr_icon.restore_bak and curr_icon.bak):
+            self.main.edit.entryconfig(self.main.unrestore_pos, state=(unrestore_state := NORMAL))
+        else:
+            self.main.edit.entryconfig(self.main.unrestore_pos, state=DISABLED)
+
+        if unrestore_state is NORMAL:
+            self.main.edit.entryconfig(self.main.unrestore_all_pos, state=NORMAL)
+        elif any(not icon.replacement_icon and (icon.restore_bak and icon.bak) for icon in icons if not skp(icon)):
+            self.main.edit.entryconfig(self.main.unrestore_all_pos, state=NORMAL)
+        else:
+            self.main.edit.entryconfig(self.main.unrestore_all_pos, state=DISABLED)
+
     def get_connections(self):
         main = self.main
 
@@ -3137,15 +3144,15 @@ class C4zPanel:
             tag_dict | {'connection_tag': tag}
             for tag in main.driver_xml.get_tags('connection')
             if len(tag_dict := tag.get_tags_dict({'class', 'classname', 'connectionname', 'id', 'type'})) == 5
-            if get_all_conn or tag_dict['classname'].value() in self.valid_connections
+            if get_all_conn or tag_dict['classname'].value in self.valid_connections
         ]
 
         # Update connection entries up to max number of connections
         for tag_dict in connections:
             new_conn = (Connection(main))
-            new_conn.name_entry_var.set(tag_dict['connectionname'].value())
-            new_conn.type.set(tag_dict['classname'].value())
-            new_conn.id = int(tag_dict['id'].value())
+            new_conn.name_entry_var.set(tag_dict['connectionname'].value)
+            new_conn.type.set(tag_dict['classname'].value)
+            new_conn.id = int(tag_dict['id'].value)
             new_conn.tag = tag_dict['connection_tag']
             new_conn.original = True
             main.connections.append(new_conn)
@@ -3158,15 +3165,6 @@ class C4zPanel:
 
         if main.connections_win:
             main.connections_win.refresh(hard=True)
-
-    def drop_in_c4z(self, event):
-        if self.main.pending_load_save:
-            return
-        paths = parse_drop_event(event)
-        c4z_path = next((path for path in paths if path.suffix == '.c4z' and path.is_file()), None)
-        if c4z_path:
-            self.load_c4z(file_path=c4z_path)
-        self.main.replacement_panel.process_image(file_path=paths)
 
     def right_click_menu(self, event):
         context_menu = Menu(self.main.root, tearoff=0)
@@ -3755,25 +3753,25 @@ class ExportPanel:
                     new_name = state_name_changes[orig_name]
                     new_lower = new_name.lower()
                     for item_tag in driver_xml.get_tags('item'):
-                        if orig_name == item_tag.value():
+                        if orig_name == item_tag.value:
                             item_tag.set_value(new_name)
                             break
-                        if orig_lower == item_tag.value():
+                        if orig_lower == item_tag.value:
                             item_tag.set_value(new_lower)
                             break
                     for name_tag in driver_xml.get_tags('name'):
-                        if orig_name == name_tag.value() or name_tag.value().endswith(orig_name):
-                            name_tag.set_value(name_tag.value().replace(orig_name, new_name))
+                        if orig_name == name_tag.value or name_tag.value.endswith(orig_name):
+                            name_tag.set_value(name_tag.value.replace(orig_name, new_name))
                             break
-                        if orig_lower == name_tag.value() or name_tag.value().endswith(orig_lower):
-                            name_tag.set_value(name_tag.value().replace(orig_lower, new_lower))
+                        if orig_lower == name_tag.value or name_tag.value.endswith(orig_lower):
+                            name_tag.set_value(name_tag.value.replace(orig_lower, new_lower))
                             break
                     for description_tag in driver_xml.get_tags('description'):
-                        if f'{orig_name} ' in description_tag.value():
-                            description_tag.set_value(description_tag.value().replace(orig_name, new_name))
+                        if f'{orig_name} ' in description_tag.value:
+                            description_tag.set_value(description_tag.value.replace(orig_name, new_name))
                             break
-                        if f'{orig_lower} ' in description_tag.value():
-                            description_tag.set_value(description_tag.value().replace(orig_lower, new_lower))
+                        if f'{orig_lower} ' in description_tag.value:
+                            description_tag.set_value(description_tag.value.replace(orig_lower, new_lower))
                             break
                     for state_tag in driver_xml.get_tags('state'):
                         if state_tag.attributes['id']:
@@ -3805,9 +3803,6 @@ class ExportPanel:
         # Confirm all connections have non-conflicting ids
         for conn in main.connections:
             conn.update_id()
-
-        # Set restore point for XML object
-        driver_xml.set_restore_point()
 
         # Backup driver files
         driver_bak_folder = main.instance_temp / 'driver_bak'
@@ -3841,9 +3836,9 @@ class ExportPanel:
                 attribute[1] = driver_name
         for icon_tag in driver_xml.get_tags('Icon'):
             # Not OS specific; related to controller directories
-            if result := re.search('driver/(.*)/icons', icon_tag.value()):
+            if result := re.search('driver/(.*)/icons', icon_tag.value):
                 result = result[1]
-                icon_tag.set_value(icon_tag.value().replace(result, driver_name))
+                icon_tag.set_value(icon_tag.value.replace(result, driver_name))
 
         # Backup XML file and write new XML
         xml_path = main.instance_temp / 'driver' / 'driver.xml'
@@ -3896,7 +3891,6 @@ class ExportPanel:
         main.driver_version_var.set(main.driver_version_new_var.get())
         if self.inc_driver_version.get():
             main.driver_version_new_var.set(str(int(main.driver_version_new_var.get()) + 1))
-        driver_xml.restore()
         shutil.rmtree(main.instance_temp / 'driver')
         driver_bak_folder.replace(main.instance_temp / 'driver')
 
