@@ -292,6 +292,32 @@ class XMLTag:
         self.is_self_closing = is_self_closing
         self.hide = False
 
+    @property
+    def value(self):
+        return '' if not self.init_success else next((el for el in self.elements if isinstance(el, str)), '')
+
+    @property
+    def children(self) -> list[XMLTag]:
+        # noinspection PyTypeChecker
+        return [element for element in self.elements if not isinstance(element, str)]
+
+    def get_value(self) -> str:
+        return self.value
+
+    def set_value(self, new_value: str):
+        for i, element in enumerate(self.elements):
+            if type(element) is str:
+                self.elements[i] = new_value
+                break
+
+    def add_element(self, element, index=None):
+        if not isinstance(element, (str, XMLTag)):
+            raise TypeError
+        if index:
+            self.elements.insert(index, element)
+        else:
+            self.elements.append(element)
+
     def get_lines(self, indent='', use_esc_chars=True) -> list[str]:
         if not self.init_success:
             return []
@@ -406,30 +432,6 @@ class XMLTag:
                     return matching_tag
         return None
 
-    def value(self) -> str:
-        if not self.init_success:
-            return ''
-        for element in self.elements:
-            if type(element) is str:
-                return element
-        return ''
-
-    get_value = value
-
-    def set_value(self, new_value: str):
-        for i, element in enumerate(self.elements):
-            if type(element) is str:
-                self.elements[i] = new_value
-                break
-
-    def add_element(self, element, index=None):
-        if not isinstance(element, (str, XMLTag)):
-            raise TypeError
-        if index:
-            self.elements.insert(index, element)
-        else:
-            self.elements.append(element)
-
     def get_parents(self, parents=None) -> list[XMLTag]:
         if not self.parent:
             return [] if not parents else parents
@@ -445,10 +447,6 @@ class XMLTag:
             return self.parent
         return self.parent.get_parent(parent_name)
 
-    def get_children(self) -> list[XMLTag]:
-        # noinspection PyTypeChecker
-        return [element for element in self.elements if not isinstance(element, str)]
-
     def __bool__(self):
         return self.init_success
 
@@ -456,7 +454,6 @@ class XMLTag:
 # Allows multiple root tags
 class XMLObject:
     def __init__(self, xml_path: str | Path = None, xml_string=''):
-        self.restore_point = None
         self.tags = parse_xml(xml_path=xml_path, xml_string=xml_string)
         self.root = next((tag for tag in self.tags if not (tag.is_prolog or tag.is_comment or tag.is_CDATA)), None)
 
@@ -481,17 +478,6 @@ class XMLObject:
             if output := tag.get_tag(name):
                 return output
         return None
-
-    def set_restore_point(self):
-        self.restore_point = copy.deepcopy(self)
-
-    def restore(self, keep_restore_point=False):
-        if not self.restore_point:
-            return
-        self.tags = self.restore_point.tags
-        if keep_restore_point:
-            return
-        self.restore_point = None
 
     def __bool__(self):
         return bool(self.tags)
