@@ -1,5 +1,4 @@
 from __future__ import annotations
-import copy
 import re
 import warnings
 from pathlib import Path
