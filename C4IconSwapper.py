@@ -53,20 +53,22 @@ connection_tag_generic = XMLTag(xml_string="""
     </classes>
 </connection>
 """)
-valid_connections = ('HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI', 'STEREO', 'DIGITAL_OPTICAL')
+video_connections = ('HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI')
+audio_connections = ('STEREO', 'DIGITAL_OPTICAL')
 selectable_connections = tuple(
     f'{connection_type} {suffix}'
-    for connection_type in valid_connections
+    for connection_type in (*video_connections, *audio_connections)
     for suffix in ('IN', 'OUT')
 ) + ('IR_OUT',)
-valid_connections = {*valid_connections, *selectable_connections}
-conn_id_type = {'HDMI IN': (2000, '5'), 'COMPOSITE IN': (2000, '5'), 'VGA IN': (2000, '5'),
-                 'COMPONENT IN': (2000, '5'), 'DVI IN': (2000, '5'),
-                 'HDMI OUT': (1900, '5'), 'COMPOSITE OUT': (1900, '5'), 'VGA OUT': (1900, '5'),
-                 'COMPONENT OUT': (1900, '5'), 'DVI OUT': (1900, '5'),
-                 'STEREO IN': (4000, '6'), 'DIGITAL_OPTICAL IN': (4000, '6'),
-                 'STEREO OUT': (3900, '6'), 'DIGITAL_OPTICAL OUT': (3900, '6'),
-                 'IR_OUT': (1, '1')}
+valid_connections = {*video_connections, *audio_connections, *selectable_connections}
+conn_id_type_ref = {video_connections: (2000, 1900, '5'), audio_connections: (4000, 3900, '6')}
+conn_id_type = {
+    f'{connection_type} {suffix}': (in_id if suffix == 'IN' else out_id, type_val)
+    for connections, (in_id, out_id, type_val) in conn_id_type_ref.items()
+    for connection_type in connections
+    for suffix in ('IN', 'OUT')
+}
+conn_id_type['IR_OUT'] = (1, '1')
 
 assets_path = Path(__file__).resolve().parent / 'assets'  # For Nuitka or venv
 if hasattr(sys, '_MEIPASS'):
