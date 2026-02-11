@@ -53,9 +53,13 @@ connection_tag_generic = XMLTag(xml_string="""
     </classes>
 </connection>
 """)
-selectable_connections = ('HDMI IN', 'HDMI OUT', 'COMPOSITE IN', 'COMPOSITE OUT', 'VGA IN', 'VGA OUT', 'COMPONENT IN',
-                          'COMPONENT OUT', 'DVI IN', 'DVI OUT', 'STEREO IN', 'STEREO OUT', 'DIGITAL_OPTICAL IN',
-                          'DIGITAL_OPTICAL OUT', 'IR_OUT')
+valid_connections = ('HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI', 'STEREO', 'DIGITAL_OPTICAL')
+selectable_connections = tuple(
+    f'{connection_type} {suffix}'
+    for connection_type in valid_connections
+    for suffix in ('IN', 'OUT')
+) + ('IR_OUT',)
+valid_connections = {*valid_connections, *selectable_connections}
 conn_id_type = {'HDMI IN': (2000, '5'), 'COMPOSITE IN': (2000, '5'), 'VGA IN': (2000, '5'),
                  'COMPONENT IN': (2000, '5'), 'DVI IN': (2000, '5'),
                  'HDMI OUT': (1900, '5'), 'COMPOSITE OUT': (1900, '5'), 'VGA OUT': (1900, '5'),
@@ -637,14 +641,14 @@ class C4IconSwapper(IPC):
         self.root = TkinterDnD.Tk()
 
         # Default App settings
-        self.get_all_driver_imgs = BooleanVar()
-        self.get_all_connections = BooleanVar()
-        self.merge_on_load = IntVar(value=-1)  # Default: Ask each time
-        self.include_backup_files = BooleanVar(value=True)
-        self.inc_driver_ver = BooleanVar(value=True)
-        self.driver_manufac = StringVar(value='C4IconSwapper')
-        self.driver_creator = StringVar(value='C4IconSwapper')
-        self.quick_export_dir = PathStringVar()
+        self.def_get_all_driver_imgs = BooleanVar()
+        self.def_get_all_connections = BooleanVar()
+        self.def_merge_on_load = IntVar(value=-1)  # Default: Ask each time
+        self.def_include_backup_files = BooleanVar(value=True)
+        self.def_inc_driver_version = BooleanVar(value=True)
+        self.def_driver_manufacturer = StringVar(value='C4IconSwapper')
+        self.def_driver_creator = StringVar(value='C4IconSwapper')
+        self.def_quick_export_dir = PathStringVar()
 
         self.setting_names = {}
         self.setting_defaults = {}
@@ -738,9 +742,9 @@ class C4IconSwapper(IPC):
         # Class variables
         self.driver_xml = None
         self.driver_manufac_var = StringVar()
-        self.driver_manufac_new_var = StringVar(value=self.driver_manufac.get())
+        self.driver_manufac_new_var = StringVar(value=self.def_driver_manufacturer.get())
         self.driver_creator_var = StringVar()
-        self.driver_creator_new_var = StringVar(value=self.driver_creator.get())
+        self.driver_creator_new_var = StringVar(value=self.def_driver_creator.get())
         self.driver_ver_orig = StringVar()
         self.driver_version_var = StringVar()
         self.driver_version_new_var = StringVar(value='1')
@@ -979,8 +983,32 @@ class C4IconSwapper(IPC):
             cursor_pos = entry.index(INSERT)
             entry.icursor(cursor_pos - str_diff)
             string_var.set(name_compare)
-
+            return
         self.ask_to_save = True
+
+    def validate_driver_ver(self, *_):
+        version_compare = re.sub(r'\D', '', ver_str := self.driver_version_new_var.get()).lstrip('0')
+        if str_diff := len(ver_str) - len(version_compare):
+            cursor_pos = self.driver_info_win.driver_ver_new_entry.index(INSERT)
+            self.driver_info_win.driver_ver_new_entry.icursor(cursor_pos - str_diff)
+            self.driver_version_new_var.set(version_compare)
+            return
+        self.ask_to_save = True
+
+    def update_driver_version(self, *_):
+        # if not self.driver_version_new_var.get():
+        #     self.driver_version_new_var.set('1')
+        #     self.ask_to_save = True
+        if not self.export_panel.inc_driver_version.get():
+            return
+        try:
+            curr_ver = int(self.driver_version_var.get())
+            new_ver = int(self.driver_version_new_var.get())
+        except ValueError:
+            return
+        if curr_ver >= new_ver:
+            self.ask_to_save = True
+            self.driver_version_new_var.set(str(curr_ver + 1))
 
     # TODO: Completely overhaul everything related to multistate
     def get_states(self, lua_file):
@@ -1030,7 +1058,7 @@ class C4IconSwapper(IPC):
 
     def save_project(self, *_, out_file_str='', scheduled=False):
         if scheduled:
-            self.replacement_panel.multi_threading.wait()
+            self.replacement_panel.threading_event.wait()
         elif self.pending_load_save:
             return
 
@@ -1042,7 +1070,7 @@ class C4IconSwapper(IPC):
             if not out_file_str:
                 return
 
-        if not self.replacement_panel.multi_threading.is_set():
+        if not self.replacement_panel.threading_event.is_set():
             with self.thread_lock:
                 self.pending_load_save = True
             threading.Thread(target=self.save_project,
@@ -1056,7 +1084,7 @@ class C4IconSwapper(IPC):
 
     def load_project(self, *_, path_str='', scheduled=False, merge_project=None):
         if scheduled:
-            self.replacement_panel.multi_threading.wait()
+            self.replacement_panel.threading_event.wait()
         elif self.pending_load_save:
             return
 
@@ -1113,7 +1141,7 @@ class C4IconSwapper(IPC):
             return
 
         if merge_project is None:
-            merge_project = None if (setting_val := self.merge_on_load.get()) < 0 else bool(setting_val)
+            merge_project = None if (setting_val := self.def_merge_on_load.get()) < 0 else bool(setting_val)
         has_images = self.replacement_panel.replacement_icon or self.replacement_panel.img_bank
         if merge_project is None and (has_images or (self.driver_selected and not c4is.driver_selected)):
             merge_dialog_result = StringVar()
@@ -1129,7 +1157,7 @@ class C4IconSwapper(IPC):
                     return
 
         # If images are currently being processed by replacement panel, start new thread waiting for it to finish
-        if not self.replacement_panel.multi_threading.is_set():
+        if not self.replacement_panel.threading_event.is_set():
             self.pending_load_save = True
             threading.Thread(target=self.load_project,
                              kwargs={'path_str': path_str, 'scheduled': True, 'merge_project': merge_project},
@@ -1344,8 +1372,8 @@ class C4IconSwapper(IPC):
             merge_dialog.destroy()
 
         def update_settings(val: bool):
-            self.merge_on_load.set(val)
-            print(f'Set {self.setting_names[id(self.merge_on_load)]} to: {val}')
+            self.def_merge_on_load.set(val)
+            print(f'Set {self.setting_names[id(self.def_merge_on_load)]} to: {val}')
             self.settings_file.write_text(json.dumps(self.settings, indent='\t'))
 
         merge_dialog = Toplevel(self.root)
@@ -1426,7 +1454,7 @@ class C4IconSwapper(IPC):
             # Disable X to prevent app crash
             hmenu = user32.GetSystemMenu(self.debug_console, False)
             user32.EnableMenuItem(hmenu, 0xF060, 0x01)  # 0xF060 = X button, 0x01 = Greyed out
-            user32.ShowWindow(self.debug_console, 0)  # Immediately hide console
+            user32.ShowWindow(self.debug_console, 0)  # Hide console
             return
         elif not self.debug_console:
             return
@@ -1459,71 +1487,75 @@ class SettingsWin:
         self.title.place(relx=0.5, y=5, anchor='n')
 
         # noinspection PyTypeChecker
-        trace = main.get_all_driver_imgs.trace_add('write',
-                                                   lambda *_: self.update_setting(main.get_all_driver_imgs))
-        self.var_trace_dict[id(main.get_all_driver_imgs)] = (main.get_all_driver_imgs, trace)
+        trace = main.def_get_all_driver_imgs.trace_add('write',
+                                                       lambda *_: self.update_setting(main.def_get_all_driver_imgs))
+        self.var_trace_dict[id(main.def_get_all_driver_imgs)] = (main.def_get_all_driver_imgs, trace)
         self.get_all_driver_imgs_check = Checkbutton(self.window, text='Get ALL images from driver',
-                                                     variable=main.get_all_driver_imgs)
+                                                     variable=main.def_get_all_driver_imgs)
 
         # noinspection PyTypeChecker
-        trace = main.get_all_connections.trace_add('write',
-                                                   lambda *_: self.update_setting(main.get_all_connections))
-        self.var_trace_dict[id(main.get_all_connections)] = (main.get_all_connections, trace)
+        trace = main.def_get_all_connections.trace_add('write',
+                                                       lambda *_: self.update_setting(main.def_get_all_connections))
+        self.var_trace_dict[id(main.def_get_all_connections)] = (main.def_get_all_connections, trace)
         self.get_all_connections_check = Checkbutton(self.window, text='Get ALL connections from driver',
-                                                     variable=main.get_all_connections)
+                                                     variable=main.def_get_all_connections)
 
         self.merge_imgs_on_load_check = None
-        if main.merge_on_load.get() != -1:
-            trace = main.merge_on_load.trace_add('write',
-                                                 lambda *_: self.update_setting(main.merge_on_load))   # type: ignore
-            self.var_trace_dict[id(main.merge_on_load)] = (main.merge_on_load, trace)
+        if main.def_merge_on_load.get() != -1:
+            # noinspection PyTypeChecker
+            trace = main.def_merge_on_load.trace_add('write',
+                                                     lambda *_: self.update_setting(main.def_merge_on_load))
+            self.var_trace_dict[id(main.def_merge_on_load)] = (main.def_merge_on_load, trace)
             self.merge_imgs_on_load_check = Checkbutton(self.window, text='Merge new project with\n'
                                                                           'existing project during load',
-                                                        variable=main.merge_on_load)
+                                                        variable=main.def_merge_on_load)
 
         # noinspection PyTypeChecker
-        trace = main.include_backup_files.trace_add('write',
-                                                    lambda *_: self.update_setting(main.include_backup_files))
-        self.var_trace_dict[id(main.include_backup_files)] = (main.include_backup_files, trace)
+        trace = main.def_include_backup_files.trace_add('write',
+                                                        lambda *_: self.update_setting(main.def_include_backup_files))
+        self.var_trace_dict[id(main.def_include_backup_files)] = (main.def_include_backup_files, trace)
         self.include_backup_files_check = Checkbutton(self.window, text='Include .bak files when exporting',
-                                                      variable=main.include_backup_files)
+                                                      variable=main.def_include_backup_files)
 
         # noinspection PyTypeChecker
-        trace = main.inc_driver_ver.trace_add('write', lambda *_: self.update_setting(main.inc_driver_ver))
-        self.var_trace_dict[id(main.inc_driver_ver)] = (main.inc_driver_ver, trace)
+        trace = main.def_inc_driver_version.trace_add('write',
+                                                      lambda *_: self.update_setting(main.def_inc_driver_version))
+        self.var_trace_dict[id(main.def_inc_driver_version)] = (main.def_inc_driver_version, trace)
         self.inc_driver_ver_check = Checkbutton(self.window, text='Increment driver version on each export',
-                                                variable=main.inc_driver_ver)
+                                                variable=main.def_inc_driver_version)
 
         self.driver_manufac_label = Label(self.window, text='Driver Manufacturer:')
-        self.driver_manufac_entry = Entry(self.window, width=19, textvariable=main.driver_manufac)
+        self.driver_manufac_entry = Entry(self.window, width=19, textvariable=main.def_driver_manufacturer)
         # noinspection PyTypeChecker
-        trace = main.driver_manufac.trace_add('write', lambda *_: self.update_setting(main.driver_manufac,
+        trace = main.def_driver_manufacturer.trace_add('write',
+                                                       lambda *_: self.update_setting(main.def_driver_manufacturer,
                                                                                       entry=self.driver_manufac_entry))
-        self.var_trace_dict[id(main.driver_manufac)] = (main.driver_manufac, trace)
+        self.var_trace_dict[id(main.def_driver_manufacturer)] = (main.def_driver_manufacturer, trace)
 
         self.driver_creator_label = Label(self.window, text='Driver Creator:')
-        self.driver_creator_entry = Entry(self.window, width=25, textvariable=main.driver_creator)
+        self.driver_creator_entry = Entry(self.window, width=25, textvariable=main.def_driver_creator)
         # noinspection PyTypeChecker
-        trace = main.driver_creator.trace_add('write', lambda *_: self.update_setting(main.driver_creator,
-                                                                                      entry=self.driver_creator_entry))
-        self.var_trace_dict[id(main.driver_creator)] = (main.driver_creator, trace)
+        trace = main.def_driver_creator.trace_add('write',
+                                                  lambda *_: self.update_setting(main.def_driver_creator,
+                                                                                 entry=self.driver_creator_entry))
+        self.var_trace_dict[id(main.def_driver_creator)] = (main.def_driver_creator, trace)
 
         def path_str_update():
             return ('Same Directory as Application'
-                    if not (var_val := main.quick_export_dir.get())
+                    if not (var_val := main.def_quick_export_dir.get())
                     else var_val)
 
         self.quick_export_label = Label(self.window, text='Quick Export Directory')
         self.quick_export_string = StringVar(value=path_str_update())
         self.quick_export_entry = Entry(self.window, width=27, textvariable=self.quick_export_string)
-        if not main.quick_export_dir.get():
+        if not main.def_quick_export_dir.get():
             self.quick_export_entry['state'] = DISABLED
         else:
             self.quick_export_entry['state'] = 'readonly'
         # noinspection PyTypeChecker
-        trace = main.quick_export_dir.trace_add('write',
-                                                lambda *_: self.quick_export_string.set(path_str_update()))
-        self.var_trace_dict[id(main.quick_export_dir)] = (main.quick_export_dir, trace)
+        trace = main.def_quick_export_dir.trace_add('write',
+                                                    lambda *_: self.quick_export_string.set(path_str_update()))
+        self.var_trace_dict[id(main.def_quick_export_dir)] = (main.def_quick_export_dir, trace)
         self.quick_export_button = Button(self.window, text='Browse...', width=8, command=self.select_quick_export_dir)
 
         self.restore_defaults_button = Button(self.window, text='Restore Defaults',
@@ -1587,11 +1619,11 @@ class SettingsWin:
     def select_quick_export_dir(self):
         folder_path = filedialog.askdirectory(title='Select Quick Export Directory', initialdir=Path.cwd())
         if folder_path:
-            self.main.quick_export_dir.set(folder_path)
+            self.main.def_quick_export_dir.set(folder_path)
             self.quick_export_string.set(folder_path)
             self.quick_export_entry['state'] = 'readonly'
             self.main.settings_file.write_text(json.dumps(self.main.settings, indent='\t'))
-            print(f'Set {self.main.setting_names[id(self.main.quick_export_dir)]} to: {folder_path}')
+            print(f'Set {self.main.setting_names[id(self.main.def_quick_export_dir)]} to: {folder_path}')
         self.window.focus()
 
     def restore_defaults(self):
@@ -1687,16 +1719,8 @@ class C4Icon(Icon):
             with Image.open(icon.bak_path) as img:
                 self.bak_tk_icon = ImageTk.PhotoImage(img.resize((128, 128), Resampling.BICUBIC))
 
-    def set_restore(self):
-        if self.replacement_icon:
-            self.replacement_icon = None
-            return
-        self.restore_bak = True if self.bak else False
-
-    def replace(self, icon: Icon):
-        self.replacement_icon = icon
-
-    def get_tk_img(self):
+    @property
+    def tk_img(self):
         if self.replacement_icon:
             return self.replacement_icon.tk_icon_lg
         if self.restore_bak:
@@ -1711,6 +1735,15 @@ class C4Icon(Icon):
             return
         with Image.open(self.path) as img:
             self.tk_icon_lg = ImageTk.PhotoImage(img.resize((128, 128), Resampling.BICUBIC))
+
+    def replace(self, icon: Icon):
+        self.replacement_icon = icon
+
+    def set_restore(self):
+        if self.replacement_icon:
+            self.replacement_icon = None
+            return
+        self.restore_bak = True if self.bak else False
 
     def update_path(self, new_driver_dir: Path):
         for icon in self.icons:
@@ -1736,8 +1769,8 @@ class SubIconWin:
 
         # Labels
         self.sub_icon_label = Label(window, image=main.img_blank)
-        self.sub_icon_label.image = main.img_blank
         self.sub_icon_label.place(relx=0.5, y=10, anchor='n')
+        self.sub_icon_label.image = main.img_blank
         self.sub_icon_label.bind('<Button-3>', self.right_click_menu)
 
         self.name_label = Label(window, text='icon name', font=(label_font, 10, 'bold'))
@@ -1804,12 +1837,6 @@ class DriverInfoWin:
         self.window.geometry(f'255x215+{main.root.winfo_rootx() + main.export_panel.x}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
 
-        # Validate driver version
-        if (main.export_panel.inc_driver_version.get() and
-                main.driver_version_var.get() and main.driver_version_new_var.get() and
-                int(main.driver_version_new_var.get()) <= int(main.driver_version_var.get())):
-            main.driver_version_new_var.set(str(int(main.driver_version_var.get()) + 1))
-
         # Labels
         font_size = 10
         man_y = 20
@@ -1841,6 +1868,7 @@ class DriverInfoWin:
         driver_man_entry = Entry(self.window, width=entry_width, textvariable=main.driver_manufac_var)
         driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
         driver_man_entry['state'] = DISABLED
+
         self.driver_man_new_entry = Entry(self.window, width=entry_width,
                                           textvariable=main.driver_manufac_new_var)
         self.driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
@@ -1868,38 +1896,18 @@ class DriverInfoWin:
         self.driver_ver_new_entry = Entry(self.window, width=entry_width,
                                           textvariable=main.driver_version_new_var)
         self.driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
-        self.driver_ver_new_entry.bind('<FocusOut>', main.export_panel.update_driver_version)
-        main.driver_version_new_var.trace_add('write', self.validate_driver_ver)
+        self.driver_ver_new_entry.bind('<FocusOut>', main.update_driver_version)
+        main.driver_version_new_var.trace_add('write', main.validate_driver_ver)
 
         driver_ver_orig_entry = Entry(self.window, width=6, textvariable=main.driver_ver_orig)
         driver_ver_orig_entry.place(x=110, y=version_y + 45, anchor='nw')
         driver_ver_orig_entry['state'] = DISABLED
 
-    def validate_driver_ver(self, *_):
-        version_compare = re.sub(r'\D', '', ver_str := self.main.driver_version_new_var.get()).lstrip('0')
-
-        if str_diff := len(ver_str) - len(version_compare):
-            cursor_pos = self.driver_ver_new_entry.index(INSERT)
-            self.driver_ver_new_entry.icursor(cursor_pos - str_diff)
-            self.main.driver_version_new_var.set(version_compare)
-
-        self.main.ask_to_save = True
-
     def close(self):
-        if not self.main.driver_version_new_var.get():
-            self.main.driver_version_new_var.set('0')
-        if not self.main.driver_creator_new_var.get():
-            self.main.driver_creator_new_var.set('C4IconSwapper')
-        if not self.main.driver_manufac_new_var.get():
-            self.main.driver_manufac_new_var.set('C4IconSwapper')
-        if not self.main.driver_version_new_var.get():
-            if self.main.driver_version_var.get():
-                self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
-            else:
-                self.main.driver_version_new_var.set('1')
-        if (self.main.export_panel.inc_driver_version.get() and self.main.driver_version_var.get() and
-                int(self.main.driver_version_new_var.get()) <= int(self.main.driver_version_var.get())):
-            self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
+        self.main.validate_man_and_creator(string_var=self.main.driver_manufac_new_var, entry=self.driver_man_new_entry)
+        self.main.validate_man_and_creator(string_var=self.main.driver_creator_new_var,
+                                           entry=self.driver_creator_new_entry)
+        self.main.validate_driver_ver()
         self.window.destroy()
         self.main.driver_info_win = None
 
@@ -2515,18 +2523,19 @@ class C4zPanel:
         self.x, self.y = 5, 20
         self.current_icon, self.extra_icons = 0, 0
         self.icons = []
-        self.valid_connections = ['HDMI', 'COMPOSITE', 'VGA', 'COMPONENT', 'DVI', 'STEREO', 'DIGITAL_OPTICAL',
-                                  *selectable_connections]
 
         self.sub_icon_win = None
 
         # Labels
         self.panel_label = Label(main.root, text='Driver Selection', font=(label_font, 15))
+        self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
 
         self.c4_icon_label = Label(main.root, image=main.img_blank)
-        self.c4_icon_label.image = main.img_blank
         self.c4_icon_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+        self.c4_icon_label.image = main.img_blank
         self.c4_icon_label.bind('<Button-3>', self.right_click_menu)
+        self.c4_icon_label.drop_target_register(DND_FILES)
+        self.c4_icon_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
 
         self.icon_num_label = Label(main.root, text='0 of 0', font=(label_font, 10))
         self.icon_num_label.place(x=108 + self.x, y=180 + self.y, anchor='n')
@@ -2534,31 +2543,27 @@ class C4zPanel:
         self.icon_name_label = Label(main.root, text='icon name', font=(label_font, 10, 'bold'), wraplength=220)
         self.icon_name_label.place(x=108 + self.x, y=197 + self.y, anchor='n')
 
-        self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
-        self.c4_icon_label.drop_target_register(DND_FILES)
-        self.c4_icon_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
-
         # Buttons
         self.open_file_button = Button(main.root, text='Open', width=10, command=self.load_c4z, takefocus=0)
+        self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
+
         self.restore_button = Button(main.root, text='Restore\nOriginal Icon', command=self.restore, takefocus=0)
+        self.restore_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
         self.restore_button['state'] = DISABLED
 
         self.restore_all_button = Button(
             main.root, text='Restore All', command=lambda: self.restore(do_all=True), takefocus=0)
+        self.restore_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
         self.restore_all_button['state'] = DISABLED
 
         self.prev_icon_button = Button(
             main.root, text='Prev', command=lambda: self.inc_icon(inc=-1), width=5, takefocus=0)
+        self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
         self.prev_icon_button['state'] = DISABLED
 
         self.next_icon_button = Button(main.root, text='Next', command=self.inc_icon, width=5, takefocus=0)
-        self.next_icon_button['state'] = DISABLED
-
-        self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
-        self.restore_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
-        self.restore_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
-        self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
         self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
+        self.next_icon_button['state'] = DISABLED
 
         # Entry
         self.file_entry_str = StringVar(value='Select .c4z file...')
@@ -2867,7 +2872,7 @@ class C4zPanel:
 
                 return icon_groups
 
-            img_paths = new_driver_path if main.settings['get_all_driver_imgs'] else (new_icon_dir, new_images_dir)
+            img_paths = new_driver_path if main.def_get_all_driver_imgs.get() else (new_icon_dir, new_images_dir)
             if new_icons := get_icons(img_paths):
                 self.icons = new_icons
             else:
@@ -3092,7 +3097,7 @@ class C4zPanel:
         if self.current_icon >= len(icons):
             self.current_icon = self.current_icon % len(icons)
 
-        icon_image = icons[self.current_icon].get_tk_img()
+        icon_image = icons[self.current_icon].tk_img
         self.c4_icon_label.configure(image=icon_image)
         self.c4_icon_label.image = icon_image
 
@@ -3139,12 +3144,12 @@ class C4zPanel:
         main.connections = []
 
         # Get connections from XML object
-        get_all_conn = self.main.get_all_connections.get()
+        get_all_conn = self.main.def_get_all_connections.get()
         connections = [
             tag_dict | {'connection_tag': tag}
             for tag in main.driver_xml.get_tags('connection')
             if len(tag_dict := tag.get_tags_dict({'class', 'classname', 'connectionname', 'id', 'type'})) == 5
-            if get_all_conn or tag_dict['classname'].value in self.valid_connections
+            if get_all_conn or tag_dict['classname'].value in valid_connections
         ]
 
         # Update connection entries up to max number of connections
@@ -3193,14 +3198,20 @@ class ReplacementPanel:
         self.replacement_icon = None
         self.img_bank, self.img_bank_tk_labels = [], []
         self.img_bank_lockout_dict = {}
-        self.multi_threading = threading.Event()
-        self.multi_threading.set()
-
-        # Labels
-        self.panel_label = Label(main.root, text='Replacement Icons', font=(label_font, 15))
+        self.threading_event = threading.Event()
+        self.threading_event.set()
 
         self.replacement_img_label = Label(main.root, image=main.img_blank)
         self.replacement_img_label.image = main.img_blank
+
+        # Labels
+        self.panel_label = Label(main.root, text='Replacement Icons', font=(label_font, 15))
+        self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
+
+        self.replacement_img_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+        self.replacement_img_label.drop_target_register(DND_FILES)
+        self.replacement_img_label.dnd_bind('<<Drop>>', self.drag_and_drop_image)
+        self.replacement_img_label.bind('<Button-3>', self.right_click_menu)
 
         x_offset = 61
         for i in range(main.img_bank_size):
@@ -3210,35 +3221,27 @@ class ReplacementPanel:
             self.img_bank_tk_labels[-1].bind('<Button-3>', self.right_click_menu)
             self.img_bank_tk_labels[-1].place(x=31 + self.x + x_offset * i, y=176 + self.y, anchor='nw')
             self.img_bank_tk_labels[-1].drop_target_register(DND_FILES)
-            self.img_bank_tk_labels[-1].dnd_bind('<<Drop>>', lambda e, bn=i: self.dnd_image(e, bn))
-
-        self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
-
-        self.replacement_img_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
-        self.replacement_img_label.drop_target_register(DND_FILES)
-        self.replacement_img_label.dnd_bind('<<Drop>>', self.dnd_image)
-        self.replacement_img_label.bind('<Button-3>', self.right_click_menu)
+            self.img_bank_tk_labels[-1].dnd_bind('<<Drop>>', lambda e, bn=i: self.drag_and_drop_image(e, bn))
 
         # Buttons
         self.open_file_button = Button(main.root, text='Open', width=10, command=self.process_image, takefocus=0)
+        self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
 
         self.replace_all_button = Button(main.root, text='Replace All', command=self.replace_all, takefocus=0)
+        self.replace_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
         self.replace_all_button['state'] = DISABLED
 
         self.replace_button = Button(main.root, text='Replace\nCurrent Icon', command=self.replace_icon, takefocus=0)
+        self.replace_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
         self.replace_button['state'] = DISABLED
 
         self.prev_icon_button = Button(main.root, text='Prev', command=lambda: self.inc_img_bank(inc=0),
                                        width=5, takefocus=0)
+        self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
         self.prev_icon_button['state'] = DISABLED
 
         self.next_icon_button = Button(main.root, text='Next', command=self.inc_img_bank, width=5, takefocus=0)
         self.next_icon_button['state'] = DISABLED
-
-        self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
-        self.replace_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
-        self.replace_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
-        self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
         self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
 
         # Entry
@@ -3246,11 +3249,11 @@ class ReplacementPanel:
         self.file_entry_field = Entry(main.root, width=25, textvariable=self.file_entry_str, takefocus=0)
         self.file_entry_field.place(x=108 + self.x, y=21 + self.y, anchor='n')
         self.file_entry_field.drop_target_register(DND_FILES)
-        self.file_entry_field.dnd_bind('<<Drop>>', self.dnd_image)
+        self.file_entry_field.dnd_bind('<<Drop>>', self.drag_and_drop_image)
         self.file_entry_field['state'] = DISABLED
 
     def _process_image(self, file_path: Path | str | list | tuple = None, bank_index=None, threaded=False):
-        if not threaded and not self.multi_threading.is_set():
+        if not threaded and not self.threading_event.is_set():
             return
         if not file_path:
             if bank_index is None:
@@ -3404,9 +3407,15 @@ class ReplacementPanel:
             return
 
         with self.main.thread_lock:
-            self.multi_threading.clear()
+            self.threading_event.clear()
             self._process_image(file_path=file_path, bank_index=bank_index, threaded=True)
-            self.multi_threading.set()
+            self.threading_event.set()
+
+    def drag_and_drop_image(self, event, bank_num: int | None = None):
+        paths = parse_drop_event(event)
+        if not paths:
+            return
+        self.process_image(file_path=paths, bank_index=bank_num)
 
     def add_to_img_bank(self, img: Icon, bank_index=None):
         if img in self.img_bank:
@@ -3426,13 +3435,18 @@ class ReplacementPanel:
         if self.main.driver_selected:
             self.main.ask_to_save = True
 
-    def update_buttons(self):
-        replace_button_state = NORMAL if self.main.driver_selected and self.replacement_icon else DISABLED
-        next_button_state = NORMAL if len(self.img_bank) > self.main.img_bank_size else DISABLED
-        self.replace_button['state'] = replace_button_state
-        self.replace_all_button['state'] = replace_button_state
-        self.next_icon_button['state'] = next_button_state
-        self.prev_icon_button['state'] = next_button_state
+    def select_img_bank(self, event, bank_num: int):
+        if not self.threading_event.is_set():
+            return
+        if not self.img_bank or len(self.img_bank) <= bank_num or not event:
+            return
+        # Debounce stack selection
+        debounce_val = 0.25
+        bank_key = f'bank{bank_num}'
+        if (last_time := self.img_bank_lockout_dict.get(bank_key)) and time.time() - last_time < debounce_val:
+            return
+        self.img_bank_lockout_dict[bank_key] = time.time()
+        self._process_image(bank_index=bank_num)
 
     def refresh_img_bank(self):
         for i, img in zip(range(self.main.img_bank_size), self.img_bank):
@@ -3440,7 +3454,7 @@ class ReplacementPanel:
             self.img_bank_tk_labels[i].image = img.tk_icon_sm
 
     def inc_img_bank(self, inc=-1):
-        if not self.multi_threading.is_set():
+        if not self.threading_event.is_set():
             return
         if len(self.img_bank) <= self.main.img_bank_size:
             return
@@ -3453,7 +3467,7 @@ class ReplacementPanel:
         self.refresh_img_bank()
 
     def replace_icon(self, update_undo_history=True, c4_icn_index=None):
-        if not self.multi_threading.is_set():
+        if not self.threading_event.is_set():
             return
         c4z_panel = self.main.c4z_panel
         if c4_icn_index is None:
@@ -3470,7 +3484,7 @@ class ReplacementPanel:
         self.main.ask_to_save = True
 
     def replace_all(self):
-        if not self.multi_threading.is_set():
+        if not self.threading_event.is_set():
             return
         self.main.update_undo_history()
         show_extra = self.main.c4z_panel.show_extra_icons.get()
@@ -3478,25 +3492,6 @@ class ReplacementPanel:
             if icon.extra and not show_extra:
                 continue
             self.replace_icon(update_undo_history=False, c4_icn_index=i)
-
-    def select_img_bank(self, event, bank_num: int):
-        if not self.multi_threading.is_set():
-            return
-        if not self.img_bank or len(self.img_bank) <= bank_num or not event:
-            return
-        # Debounce stack selection
-        debounce_val = 0.25
-        bank_key = f'bank{bank_num}'
-        if (last_time := self.img_bank_lockout_dict.get(bank_key)) and time.time() - last_time < debounce_val:
-            return
-        self.img_bank_lockout_dict[bank_key] = time.time()
-        self._process_image(bank_index=bank_num)
-
-    def dnd_image(self, event, bank_num: int | None = None):
-        paths = parse_drop_event(event)
-        if not paths:
-            return
-        self.process_image(file_path=paths, bank_index=bank_num)
 
     def right_click_menu(self, event):
         # Assume call from replacement label
@@ -3549,6 +3544,14 @@ class ReplacementPanel:
             self.img_bank_tk_labels[label_index].image = self.main.img_bank_blank
         self.refresh_img_bank()
 
+    def update_buttons(self):
+        replace_button_state = NORMAL if self.main.driver_selected and self.replacement_icon else DISABLED
+        next_button_state = NORMAL if len(self.img_bank) > self.main.img_bank_size else DISABLED
+        self.replace_button['state'] = replace_button_state
+        self.replace_all_button['state'] = replace_button_state
+        self.next_icon_button['state'] = next_button_state
+        self.prev_icon_button['state'] = next_button_state
+
 
 class ExportPanel:
     def __init__(self, main: C4IconSwapper):
@@ -3566,9 +3569,9 @@ class ExportPanel:
 
         # Buttons
         self.export_as_button = Button(main.root, text='Export As...', width=20, command=self.do_export, takefocus=0)
+        self.export_as_button.place(x=145 + self.x, y=250 + self.y, anchor='n')
         self.export_as_button['state'] = DISABLED
 
-        self.export_as_button.place(x=145 + self.x, y=250 + self.y, anchor='n')
         self.export_button = Button(main.root, text='Quick Export', width=20, command=self.quick_export, takefocus=0)
         self.export_button.place(x=145 + self.x, y=220 + self.y, anchor='n')
         self.export_button['state'] = DISABLED
@@ -3580,23 +3583,28 @@ class ExportPanel:
         self.driver_name_entry.place(x=145 + self.x, y=190 + self.y, anchor='n')
 
         # Checkboxes
-        self.include_backups = BooleanVar(value=main.settings['include_backup_files'])
+        self.include_backups = BooleanVar(value=main.def_include_backup_files.get())
         self.include_backups_check = Checkbutton(main.root, text='include backup files',
                                                  variable=self.include_backups, takefocus=0)
         self.include_backups_check.place(x=63 + self.x, y=130 + self.y, anchor='w')
 
-        self.inc_driver_version = BooleanVar(value=main.settings['inc_driver_ver'])
-        self.inc_driver_version.trace_add('write', self.update_driver_version)
+        self.inc_driver_version = BooleanVar(value=main.def_inc_driver_version.get())
+        self.inc_driver_version.trace_add('write', self.main.update_driver_version)
         self.inc_driver_check = Checkbutton(main.root, text='increment driver version',
                                             variable=self.inc_driver_version, takefocus=0)
         self.inc_driver_check.place(x=63 + self.x, y=150 + self.y, anchor='w')
 
     def quick_export(self):
+        # Check for empty driver info variables
+        if self.missing_driver_info_check():
+            return
         overwrite_dialog = None
         # Overwrite dialog if file already exists
-        if (Path(self.main.quick_export_dir.get(blank_gives_cwd=True)) / f'{self.driver_name_var.get()}.c4z').is_file():
+        file_path = Path(self.main.def_quick_export_dir.get(blank_gives_cwd=True)) / f'{self.driver_name_var.get()}.c4z'
+        if file_path.is_file():
             def confirm_overwrite():
                 self.abort = False
+                file_path.unlink()
                 overwrite_dialog.destroy()
 
             def abort():
@@ -3619,41 +3627,9 @@ class ExportPanel:
 
             no_button = Button(overwrite_dialog, text='No', width='10', command=abort)
             no_button.grid(row=2, column=1, sticky='w', padx=5)
-        self.do_export(quick_export=True, overwrite_dialog=overwrite_dialog)
+        self.do_export(quick_export=file_path, overwrite_dialog=overwrite_dialog)
 
-    def export_file(self, driver_name='', path=None):
-        if path is None:
-            path = Path(self.main.quick_export_dir.get(blank_gives_cwd=True)) / f'{driver_name}.c4z'
-        bak_files_dict = {}
-        bak_folder = self.main.instance_temp / 'bak_files'
-        driver_folder = self.main.instance_temp / 'driver'
-
-        # Backup and move all .bak files if not included
-        if not self.include_backups.get():
-            directories = list_all_sub_directories(driver_folder, include_root_dir=True)
-            shutil.rmtree(bak_folder, ignore_errors=True)
-            bak_folder.mkdir()
-            suffix_num = itertools.count(0)
-            for directory in directories:
-                for path in directory.iterdir():
-                    if re.search(r'\.bak[^.]*$', path.name):
-                        # Sequential suffix used to avoid same name collisions
-                        new_path = bak_folder / f'{path.name}{next(suffix_num)}'
-                        bak_files_dict[path] = new_path
-                        path.replace(new_path)
-
-        # Create .c4z file
-        shutil.make_archive(str(driver_folder), 'zip', driver_folder)
-        zip_path = driver_folder.with_suffix('.zip')
-        zip_path.replace(path)
-
-        # Restore .bak files
-        if not self.include_backups.get():
-            for file in bak_files_dict:
-                bak_files_dict[file].replace(file)
-            shutil.rmtree(bak_folder)
-
-    def do_export(self, quick_export=False, overwrite_dialog=None):
+    def do_export(self, quick_export=None, overwrite_dialog=None):
         # Wait for confirm overwrite dialog
         if overwrite_dialog and isinstance(overwrite_dialog, Toplevel):
             self.main.root.wait_window(overwrite_dialog)
@@ -3671,6 +3647,10 @@ class ExportPanel:
             self.driver_name_entry['background'] = 'pink'
             main.counter = 7
             main.root.after(150, main.blink_driver_name_entry)  # type: ignore
+            return
+
+        # Check for empty driver info variables
+        if self.missing_driver_info_check():
             return
 
         # Multi-state related checks
@@ -3782,24 +3762,6 @@ class ExportPanel:
                                 state_tag.attributes['id'] = new_lower
                                 break
 
-        # Check driver info variables
-        if not all([main.driver_version_new_var.get(), main.driver_manufac_new_var.get(),
-                    main.driver_creator_new_var.get()]):
-            missing_driver_info_dialog = Toplevel(main.root)
-            missing_driver_info_dialog.title('Missing Driver Information')
-            label_text = 'Cannot Export: Missing driver info'
-            missing_driver_info_dialog.geometry(f'239x70+{main.root.winfo_rootx() + self.x}+{main.root.winfo_rooty()}')
-            missing_driver_info_dialog.grab_set()
-            missing_driver_info_dialog.focus()
-            missing_driver_info_dialog.transient(main.root)
-            missing_driver_info_dialog.resizable(False, False)
-            confirm_label = Label(missing_driver_info_dialog, text=label_text, justify='center')
-            confirm_label.pack()
-            exit_button = Button(missing_driver_info_dialog, text='Cancel', width='10',
-                                 command=missing_driver_info_dialog.destroy, justify='center')
-            exit_button.pack(pady=10)
-            return
-
         # Confirm all connections have non-conflicting ids
         for conn in main.connections:
             conn.update_id()
@@ -3824,10 +3786,8 @@ class ExportPanel:
         # Update XML with new driver name
         driver_xml.get_tag('name').set_value(driver_name)
         modified_datestamp = str(datetime.now().strftime('%m/%d/%Y %H:%M'))
-        if (self.inc_driver_version.get() and
-                int(main.driver_version_var.get()) >= int(main.driver_version_new_var.get())):
-            main.driver_version_new_var.set(str(int(main.driver_version_var.get()) + 1))
-        driver_xml.get_tag('version').set_value(main.driver_version_new_var.get())
+        driver_xml.get_tag('version').set_value(new_ver := main.driver_version_new_var.get())
+        main.driver_version_var.set(new_ver)
         driver_xml.get_tag('modified').set_value(modified_datestamp)
         driver_xml.get_tag('creator').set_value(main.driver_creator_new_var.get())
         driver_xml.get_tag('manufacturer').set_value(main.driver_manufac_new_var.get())
@@ -3874,10 +3834,9 @@ class ExportPanel:
         shutil.rmtree(bak_folder)
 
         # Save As Dialog and export file
+        out_file_path = None
         if quick_export:
-            out_file_path = Path(self.main.quick_export_dir.get(blank_gives_cwd=True)) / f'{driver_name}.c4z'
-            out_file_path.unlink(missing_ok=True)
-            self.export_file(path=out_file_path)
+            out_file_path = quick_export
         else:
             out_file_str = filedialog.asksaveasfilename(initialfile=f'{driver_name}.c4z',
                                                         filetypes=[('Control4 Drivers', '*.c4z'), ('All Files', '*.*')],
@@ -3885,12 +3844,28 @@ class ExportPanel:
             if out_file_str:
                 out_file_path = Path(out_file_str)
                 out_file_path.unlink(missing_ok=True)
-                self.export_file(path=out_file_path)
 
-        # Restore original files
-        main.driver_version_var.set(main.driver_version_new_var.get())
+        if not out_file_path:
+            return
+
+        driver_folder = self.main.instance_temp / 'driver'
+        # Delete all .bak files if not included
+        if not self.include_backups.get():
+            for directory in list_all_sub_directories(driver_folder, include_root_dir=True):
+                for path in directory.iterdir():
+                    if re.search(r'\.bak[^.]*$', path.name) and path.is_file():
+                        path.unlink()
+
+        # Create .c4z file
+        shutil.make_archive(str(driver_folder), 'zip', driver_folder)
+        zip_path = driver_folder.with_suffix('.zip')
+        zip_path.replace(out_file_path)
+
+        # Increment driver version if applicable
         if self.inc_driver_version.get():
             main.driver_version_new_var.set(str(int(main.driver_version_new_var.get()) + 1))
+
+        # Restore original driver folder
         shutil.rmtree(main.instance_temp / 'driver')
         driver_bak_folder.replace(main.instance_temp / 'driver')
 
@@ -3901,19 +3876,32 @@ class ExportPanel:
             cursor_pos = self.driver_name_entry.index(INSERT)
             self.driver_name_entry.icursor(cursor_pos - str_diff)
             self.driver_name_var.set(driver_name_cmp)
+            return
 
         self.main.ask_to_save = True
 
-    def update_driver_version(self, *_):
-        self.main.ask_to_save = True
-        # Update driver version if 'increment driver' is selected and new version value is <= last version value
-        if not self.inc_driver_version.get():
-            return
-        if not self.main.driver_version_new_var.get() or not self.main.driver_version_var.get():
-            return
-
-        if int(self.main.driver_version_var.get()) >= int(self.main.driver_version_new_var.get()):
-            self.main.driver_version_new_var.set(str(int(self.main.driver_version_var.get()) + 1))
+    def missing_driver_info_check(self):
+        def open_driver_info():
+            missing_driver_info_dialog.destroy()
+            main.open_edit_win(main.driver_info_win, 'driver')
+        main = self.main
+        if not all([main.driver_version_new_var.get(), main.driver_manufac_new_var.get(),
+                    main.driver_creator_new_var.get()]):
+            missing_driver_info_dialog = Toplevel(main.root)
+            missing_driver_info_dialog.title('Missing Driver Information')
+            label_text = 'Cannot Export: Missing driver info'
+            missing_driver_info_dialog.geometry(f'239x70+{main.root.winfo_rootx() + self.x}+{main.root.winfo_rooty()}')
+            missing_driver_info_dialog.grab_set()
+            missing_driver_info_dialog.focus()
+            missing_driver_info_dialog.transient(main.root)
+            missing_driver_info_dialog.resizable(False, False)
+            confirm_label = Label(missing_driver_info_dialog, text=label_text, justify='center')
+            confirm_label.pack()
+            exit_button = Button(missing_driver_info_dialog, text='Cancel', width='10',
+                                 command=open_driver_info, justify='center')
+            exit_button.pack(pady=10)
+            return True
+        return False
 
 
 class C4IS:
