@@ -914,8 +914,12 @@ class C4IconSwapper(IPC):
 
     def exception_handler(self, *args):
         if args:
-            if len(args) > 1 and args[1] is RuntimeWarning:
-                self.warnings.append(f'{args[1].__name__}\nMessage: {args[0]}\n{args[2]}, Line: {args[3]}')
+            if len(args) >= 4:
+                exc_msg, exc_type, file, line = args[:4]
+                if issubclass(exc_type, Warning):
+                    self.warnings.append(f'{exc_type.__name__}\nMessage: {exc_msg}\n{file}, Line: {line}')
+                else:
+                    self.exceptions.append(''.join(traceback.format_exception(*args[:3])))
             else:
                 self.exceptions.append('\n'.join(traceback.format_exception(*args)))
             if self.handler_recall_id:
@@ -2950,7 +2954,7 @@ class C4zPanel:
             main.multi_state_driver = False
             main.edit.entryconfig(main.states_pos, state=DISABLED)
             if (lua_path := main.instance_temp / 'driver' / 'driver.lua').is_file():
-                with open(lua_path, errors='ignore') as driver_lua_file:
+                with open(lua_path, errors='replace', encoding='utf-8') as driver_lua_file:
                     driver_lua = driver_lua_file.read()
                     if main.get_states(driver_lua):
                         main.multi_state_driver = True
@@ -3709,7 +3713,7 @@ class ExportPanel:
 
                 # Read Lua file
                 modified_lua_lines = []
-                with open(lua_path, errors='ignore') as driver_lua_file:
+                with open(lua_path, errors='replace', encoding='utf-8') as driver_lua_file:
                     driver_lua_lines = driver_lua_file.readlines()
                 for line in driver_lua_lines:
                     new_line = line
@@ -3732,7 +3736,7 @@ class ExportPanel:
                     modified_lua_lines.append(new_line)
                 # Backup Lua file and write modified version
                 lua_path.replace(lua_path.with_suffix('.bak'))
-                with open(lua_path, 'w', errors='ignore') as driver_lua_file:
+                with open(lua_path, 'w', errors='replace', encoding='utf-8') as driver_lua_file:
                     driver_lua_file.writelines(modified_lua_lines)
 
             # Do multi-state related changes in XML
@@ -3815,7 +3819,7 @@ class ExportPanel:
         # Backup XML file and write new XML
         xml_path = main.instance_temp / 'driver' / 'driver.xml'
         xml_path.replace(xml_path.with_suffix('.bak'))
-        with open(xml_path, 'w', errors='ignore') as out_file:
+        with open(xml_path, 'w', errors='replace', encoding='utf-8') as out_file:
             out_file.writelines(driver_xml.get_lines())
 
         # Make icon changes

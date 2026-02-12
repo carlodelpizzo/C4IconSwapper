@@ -7,6 +7,7 @@ from collections import deque
 
 # TODO: handle strings on outside of tags e.g. <tag1>string1<tag2></tag2>string2</tag1>
 char_escapes = {'<': '&lt;', '>': '&gt;', '&': '&amp;'}
+re_attributes = re.compile(r'([\w:]+)\s*=\s*([\'"])(.*?)\2')
 
 
 # sub_tag will ignore all tags until it finds a tag with that name, then make that tag the root
@@ -14,7 +15,7 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
     if not xml_path and not xml_string:
         return []
     if xml_path:
-        with open(xml_path, errors='ignore') as xml_file:
+        with open(xml_path, errors='replace', encoding='utf-8') as xml_file:
             xml_string = xml_file.read()
 
     tags = []
@@ -55,12 +56,12 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
                         continue
                     if data.endswith('/'):
                         self_closing = True
-                    data_no_attr = re.sub(r'([\w:]+)=([\'"])(.*?)\2', '', data)
+                    data_no_attr = re_attributes.sub('', data)
                     if '=' in data_no_attr:
                         tag_start = None
                         tag_end = i + 1
                         continue
-                    attributes = {k: (v, q) for k, q, v in re.findall(r'([\w:]+)=([\'"])(.*?)\2', data)}
+                    attributes = {k: (v, q) for k, q, v in re_attributes.findall(data)}
                     data = data[:data.index(' ')]
                 elif data.endswith('/'):
                     if (data := data[:-1]) != sub_tag:
@@ -129,10 +130,10 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
         if data.startswith('?'):
             if not data.endswith('?'):
                 continue
-            data_no_attr = re.sub(r'([\w:]+)=([\'"])(.*?)\2', '', data)
+            data_no_attr = re_attributes.sub('', data)
             if '=' in data_no_attr:
                 continue
-            attributes = {k: (v, q) for k, q, v in re.findall(r'([\w:]+)=([\'"])(.*?)\2', data)}
+            attributes = {k: (v, q) for k, q, v in re_attributes.findall(data)}
             if tag_stack:
                 tag_stack[-1].elements.append(XMLTag(name=data[1:-1], parent=tag_stack[-1], attributes=attributes,
                                                      is_prolog=True, leading_comments=comments))
@@ -146,10 +147,10 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
 
         # Parse tag attributes
         if ' ' in data:
-            data_no_attr = re.sub(r'([\w:]+)=([\'"])(.*?)\2', '', data)
+            data_no_attr = re_attributes.sub('', data)
             if '=' in data_no_attr:
                 continue
-            attributes = {k: (v, q) for k, q, v in re.findall(r'([\w:]+)=([\'"])(.*?)\2', data)}
+            attributes = {k: (v, q) for k, q, v in re_attributes.findall(data)}
 
         # Handle self-closing tags
         if data.endswith('/'):
@@ -487,6 +488,6 @@ class XMLObject:
         return bool(self.tags)
 
 
-if __name__ == '__main__':
-    with open('xdriver.xml', 'w', errors='ignore') as out_file:
-        out_file.writelines(XMLObject(xml_path='driver.xml').get_lines())
+# if __name__ == '__main__':
+#     with open('xdriver.xml', 'w', errors='ignore', encoding='utf-8') as out_file:
+#         out_file.writelines(XMLObject(xml_path='driver.xml').get_lines())
