@@ -194,7 +194,7 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
                 pop_list = []
                 for element in tag_stack[-1].elements:
                     for comment in comments:
-                        if type(element) is str and f'<!--{comment.name}-->' in element:
+                        if isinstance(element, str) and f'<!--{comment.name}-->' in element:
                             pop_list.append(comments.index(comment))
                 for x in sorted(pop_list, reverse=True):
                     comments.pop(x)
@@ -308,7 +308,7 @@ class XMLTag:
 
     def set_value(self, new_value: str):
         for i, element in enumerate(self.elements):
-            if type(element) is str:
+            if isinstance(element, str):
                 self.elements[i] = new_value
                 break
 
@@ -391,7 +391,7 @@ class XMLTag:
             return []
         output = [self] if name == self.name else []
         for element in self.elements:
-            if type(element) is XMLTag and (tag_list := element.get_tags(name)):
+            if isinstance(element, XMLTag) and (tag_list := element.get_tags(name)):
                 output.extend(tag_list)
         return output
 
