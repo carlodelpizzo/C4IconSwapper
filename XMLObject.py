@@ -30,7 +30,7 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
     sub_tag_found = False
 
     # Begin Parsing
-    for i in (x for x, char in enumerate(xml_string) if char in ('<', '>')):
+    for i in (char_i for char_i, char in enumerate(xml_string) if char in ('<', '>')):
         if xml_string[i] == '<':
             if tag_start:
                 continue  # Continue if '<' found inside comment or attribute
@@ -60,7 +60,7 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
                         tag_start = None
                         tag_end = i + 1
                         continue
-                    attributes = {k: v for k, _, v in re.findall(r'([\w:]+)=([\'"])(.*?)\2', data)}
+                    attributes = {k: (v, q) for k, q, v in re.findall(r'([\w:]+)=([\'"])(.*?)\2', data)}
                     data = data[:data.index(' ')]
                 elif data.endswith('/'):
                     if (data := data[:-1]) != sub_tag:
@@ -129,10 +129,10 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
         if data.startswith('?'):
             if not data.endswith('?'):
                 continue
-            attr_pairs = re.findall(r'([\w:]+)="([^"]*)"', data)
-            if len(attr_pairs) != len(re.findall(r'(\w+)="([^"]*)', data)):
+            data_no_attr = re.sub(r'([\w:]+)=([\'"])(.*?)\2', '', data)
+            if '=' in data_no_attr:
                 continue
-            attributes = {k: v for k, v in attr_pairs}
+            attributes = {k: (v, q) for k, q, v in re.findall(r'([\w:]+)=([\'"])(.*?)\2', data)}
             if tag_stack:
                 tag_stack[-1].elements.append(XMLTag(name=data[1:-1], parent=tag_stack[-1], attributes=attributes,
                                                      is_prolog=True, leading_comments=comments))
@@ -149,7 +149,7 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
             data_no_attr = re.sub(r'([\w:]+)=([\'"])(.*?)\2', '', data)
             if '=' in data_no_attr:
                 continue
-            attributes = {k: v for k, _, v in re.findall(r'([\w:]+)=([\'"])(.*?)\2', data)}
+            attributes = {k: (v, q) for k, q, v in re.findall(r'([\w:]+)=([\'"])(.*?)\2', data)}
 
         # Handle self-closing tags
         if data.endswith('/'):
@@ -284,7 +284,11 @@ class XMLTag:
             return
         self.name = name
         self.parent = parent
-        self.attributes = {} if not attributes else attributes
+        self.attributes = {}
+        self.attr_q = {}
+        for k, (v, q) in attributes.items():
+            self.attributes[k] = v
+            self.attr_q[k] = q
         self.elements = [] if not elements else elements
         self.leading_comments = [] if not leading_comments else leading_comments
         self.trailing_comments = [] if not trailing_comments else trailing_comments
@@ -333,10 +337,12 @@ class XMLTag:
             return prolog if as_string else [prolog]
 
         if use_esc_chars:
-            attributes = ' '.join([f'{attribute}="{re.sub(r"[<>&]", lambda m: char_escapes[m.group(0)], value)}"'
-                                   for attribute, value in self.attributes.items()])
+            attributes = ' '.join([
+                f'{k}={self.attr_q[k]}{re.sub(r"[<>&]", lambda m: char_escapes[m.group(0)], v)}{self.attr_q[k]}'
+                for k, v in self.attributes.items()
+            ])
         else:
-            attributes = ' '.join([f'{attribute}="{value}"' for attribute, value in self.attributes.items()])
+            attributes = ' '.join([f'{k}={self.attr_q[k]}{v}{self.attr_q[k]}' for k, v in self.attributes.items()])
 
         output = []
         if self.leading_comments:
@@ -478,3 +484,8 @@ class XMLObject:
 
     def __bool__(self):
         return bool(self.tags)
+
+
+if __name__ == '__main__':
+    with open('xdriver.xml', 'w', errors='ignore') as out_file:
+        out_file.writelines(XMLObject(xml_path='driver.xml').get_lines())
