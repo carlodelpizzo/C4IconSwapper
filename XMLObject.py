@@ -286,9 +286,10 @@ class XMLTag:
         self.parent = parent
         self.attributes = {}
         self.attr_q = {}
-        for k, (v, q) in attributes.items():
-            self.attributes[k] = v
-            self.attr_q[k] = q
+        if attributes:
+            for k, (v, q) in attributes.items():
+                self.attributes[k] = v
+                self.attr_q[k] = q
         self.elements = [] if not elements else elements
         self.leading_comments = [] if not leading_comments else leading_comments
         self.trailing_comments = [] if not trailing_comments else trailing_comments
@@ -353,9 +354,9 @@ class XMLTag:
             return ''.join(output) if as_string else output
         if self.is_self_closing:
             if attributes:
-                output.append(f'{indent}<{self.name} {attributes}/>')
+                output.append(f'{indent}<{self.name} {attributes} />')
             else:
-                output.append(f'{indent}<{self.name}/>')
+                output.append(f'{indent}<{self.name} />')
             return ''.join(output) if as_string else output
         else:
             output.append(f'{indent}<{self.name} {attributes}'.rstrip())
