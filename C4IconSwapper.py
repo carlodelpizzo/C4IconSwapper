@@ -756,7 +756,7 @@ class C4IconSwapper(IPC):
         self.restore_entry_after_id = None
         self.restore_entry_string = ''
         self.img_bank_size = 4
-        self.taken_conn_ids = defaultdict(object)
+        self.taken_conn_ids = {}
         self.connections = [Connection(self)]
         self.states_orig_names = []
         self.states = [State('') for _ in range(13)]
@@ -2025,6 +2025,7 @@ class Connection:
         new_id = conn_id_type[new_type][0]
         while new_id in self.main.taken_conn_ids:
             new_id += 1
+        print(new_id)
         self.main.taken_conn_ids[new_id] = self
         self.id = new_id
         self.tag.get_tag('type').set_value(conn_id_type[new_type][1])
@@ -3144,6 +3145,7 @@ class C4zPanel:
 
         # Reinitialize all connections
         main.connections = []
+        main.taken_conn_ids.clear()
 
         # Get connections from XML object
         get_all_conn = self.main.def_get_all_connections.get()
@@ -3163,6 +3165,11 @@ class C4zPanel:
             new_conn.tag = tag_dict['connection_tag']
             new_conn.original = True
             main.connections.append(new_conn)
+            main.taken_conn_ids[new_conn.id] = new_conn.tag
+
+        for id_val in {int(tag.value) for tag in main.driver_xml.get_tags('id') if tag.value.isdigit()}:
+            if id_val not in main.taken_conn_ids:
+                main.taken_conn_ids[id_val] = object()
 
         main.connections.append(Connection(main))
         if not (parent_tag := main.driver_xml.get_tag('connections')):
@@ -3770,10 +3777,13 @@ class ExportPanel:
 
         # Backup driver files
         driver_bak_folder = main.instance_temp / 'driver_bak'
+        shutil.rmtree(driver_bak_folder, ignore_errors=True)
         shutil.copytree(main.instance_temp / 'driver', driver_bak_folder)
 
         # Update connections XML data
         for conn in main.connections:
+            if conn.original:
+                continue
             conn.tag.get_tag('connectionname').set_value(conn.name_entry_var.get())
             conn.tag.get_tag('classname').set_value(conn_type := conn.type.get())
             if 'IN' in conn_type:
