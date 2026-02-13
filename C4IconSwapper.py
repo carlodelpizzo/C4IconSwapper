@@ -957,14 +957,15 @@ class C4IconSwapper(IPC):
         self.exception_window(message_txt=f'{header}\n\n{msg_txt}')
 
     def on_key_release(self, event):
-        if event.keysym == 'Right':
-            self.c4z_panel.inc_icon()
-        elif event.keysym == 'Left':
-            self.c4z_panel.inc_icon(inc=-1)
-        elif event.keysym == 'Up':
-            self.replacement_panel.inc_img_bank()
-        elif event.keysym == 'Down':
-            self.replacement_panel.inc_img_bank(inc=0)
+        match event.keysym:
+            case 'Right':
+                self.c4z_panel.inc_icon()
+            case 'Left':
+                self.c4z_panel.inc_icon(inc=-1)
+            case 'Up':
+                self.replacement_panel.inc_img_bank()
+            case 'Down':
+                self.replacement_panel.inc_img_bank(inc=0)
 
     def blink_driver_name_entry(self, *_):
         if not self.counter:
@@ -2263,8 +2264,11 @@ class State:
     def __init__(self, name: str):
         self.original_name = name
         self.name_var = StringVar(value=name)
-        background = light_entry_bg
-        self.bg_color = background
+        self.bg_color = light_entry_bg
+
+    @property
+    def name(self):
+        return self.name_var.get()
 
 
 class StateEntry:
@@ -2281,22 +2285,22 @@ class StateEntry:
         self.name_label.place(x=self.x + 35, y=self.y, anchor='e')
 
         # Entry
-        self.name_var = StringVar(value=state_obj.name_var.get())
-        self.name_var.trace_add('write', self.on_name_update)
-        self.name_entry = Entry(self.window, width=20, textvariable=self.name_var)
+        self.name_entry_var = StringVar(value=state_obj.name)
+        self.name_entry_var.trace_add('write', self.on_name_update)
+        self.name_entry = Entry(self.window, width=20, textvariable=self.name_entry_var)
         self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
         self.name_entry['background'] = state_obj.bg_color
         if not self.main.multi_state_driver:
             self.name_entry['state'] = DISABLED
 
     def get(self):
-        return self.name_var.get()
+        return self.name_entry_var.get()
 
     def refresh(self, bg_only=False):
         self.name_entry['background'] = self.state_object.bg_color
         if bg_only:
             return
-        self.name_var.set(self.state_object.name_var.get())
+        self.name_entry_var.set(self.state_object.name)
 
     def on_name_update(self, *_):
         if self.main.states_win:
@@ -2305,16 +2309,16 @@ class StateEntry:
             self.main.states_win.validate_states()
 
     def update_state_name(self):
-        name = self.name_var.get()
+        name = self.name_entry_var.get()
         # Substitute non-alphanumeric chars with ''
         formatted_name = re.sub(r'[^a-zA-Z0-9]', '', name).capitalize()
         if not formatted_name:
-            self.name_var.set('')
+            self.name_entry_var.set('')
             return
         if str_diff := len(name) - len(formatted_name):
             cursor_pos = self.name_entry.index(INSERT)
             self.name_entry.icursor(cursor_pos - str_diff)
-        self.name_var.set(formatted_name)
+        self.name_entry_var.set(formatted_name)
         self.state_object.name_var.set(formatted_name)
 
 
@@ -3708,8 +3712,8 @@ class ExportPanel:
             state_name_changes = {}
             if (lua_path := main.instance_temp / 'driver' / 'driver.lua').is_file():
                 for state in main.states:
-                    if state.original_name != state.name_var.get():
-                        state_name_changes[state.original_name] = state.name_var.get()
+                    if state.original_name != state.name:
+                        state_name_changes[state.original_name] = state.name
 
                 # Read Lua file
                 modified_lua_lines = []
@@ -3941,7 +3945,7 @@ class C4IS:
         self.driver_selected = main.driver_selected
 
         # State Panel
-        self.states = [{'original_name': state.original_name, 'name_var': state.name_var.get()}
+        self.states = [{'original_name': state.original_name, 'name_var': state.name}
                        for state in main.states]
 
         # Connection Panel
