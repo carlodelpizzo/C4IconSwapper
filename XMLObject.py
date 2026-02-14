@@ -486,8 +486,3 @@ class XMLObject:
 
     def __bool__(self):
         return bool(self.tags)
-
-
-# if __name__ == '__main__':
-#     with open('xdriver.xml', 'w', errors='ignore', encoding='utf-8') as out_file:
-#         out_file.writelines(XMLObject(xml_path='driver.xml').get_lines())
