@@ -1089,6 +1089,7 @@ class C4IconSwapper(IPC):
         self.ask_to_save = False
         self.pending_load_save = False
 
+    # NOTE: Merging projects does not prevent duplicate replacement images
     def load_project(self, *_, path_str='', scheduled=False, merge_project=None):
         if scheduled:
             self.replacement_panel.threading_event.wait()
@@ -1108,12 +1109,11 @@ class C4IconSwapper(IPC):
             self.c4z_panel.c4_icon_label.image = icon
             self.root.update_idletasks()
 
-        def restore_label_img(silent=False):
+        def restore_label_img(update_idletasks=True):
             self.c4z_panel.c4_icon_label.configure(image=curr_label_img)
             self.c4z_panel.c4_icon_label.image = curr_label_img
-            if silent:
-                return
-            self.root.update_idletasks()
+            if update_idletasks:
+                self.root.update_idletasks()
 
         def abort(reason=None):
             restore_label_img()
@@ -1181,7 +1181,8 @@ class C4IconSwapper(IPC):
                 self.c4z_panel.restore_button['state'] = DISABLED
                 with open(saved_driver_path := self.instance_temp / 'saved_driver.c4z', 'wb') as driver_zip:
                     driver_zip.write(c4is.driver_zip)
-                self.c4z_panel.load_c4z(saved_driver_path, force=True, new_thread=False, c4is=c4is)
+                self.c4z_panel.load_c4z(saved_driver_path, c4is=c4is, bypass_ask_save=True, new_thread=False,
+                                        force=scheduled)
                 saved_driver_path.unlink()
             elif not merge_project:
                 self.export_panel.export_button['state'] = DISABLED
@@ -1264,7 +1265,7 @@ class C4IconSwapper(IPC):
             for img_bank_label in self.replacement_panel.img_bank_tk_labels:
                 img_bank_label.configure(image=self.img_bank_blank)
         elif existing_driver and not c4is.driver_selected:
-            restore_label_img(silent=True)
+            restore_label_img(update_idletasks=True)
         if c4is.replacement:
             if merge_project and self.replacement_panel.replacement_icon:
                 c4is.img_bank.append(c4is.replacement)
@@ -1283,6 +1284,9 @@ class C4IconSwapper(IPC):
         self.replacement_panel.refresh_img_bank()
         self.replacement_panel.update_buttons()
 
+        if not c4is.driver_selected:
+            restore_label_img()
+
         self.ask_to_save = False if not merge_project else True
         self.pending_load_save = False
 
@@ -1291,7 +1295,7 @@ class C4IconSwapper(IPC):
             shutil.make_archive(str(driver_folder), 'zip', driver_folder)
             zip_path = driver_folder.with_suffix('.zip')
             zip_path.replace(recovery_c4z_path := self.instance_temp / 'recovery.c4z')
-            self.c4z_panel.load_c4z(file_path=recovery_c4z_path, new_thread=False)
+            self.c4z_panel.load_c4z(file_path=recovery_c4z_path, bypass_ask_save=True, new_thread=False)
             recovery_c4z_path.unlink()
         if (recovery_icons_path := recover_path / 'Replacement Icons').is_dir():
             for path in recovery_icons_path.iterdir():
@@ -2626,7 +2630,8 @@ class C4zPanel:
                 img_path.replace(device_icon_dir / img_path.name)
 
             shutil.make_archive(str(unpacking_dir / 'driver'), 'zip', instance_driver_path)
-            self.load_c4z(file_path=unpacking_dir / 'driver.zip', new_thread=False, force=True, generic=True)
+            self.load_c4z(file_path=unpacking_dir / 'driver.zip', generic=True, bypass_ask_save=True,
+                          new_thread=False, force=True)
             shutil.rmtree(unpacking_dir)
 
             main.export_panel.driver_name_var.set('New Driver')
@@ -3010,18 +3015,18 @@ class C4zPanel:
 
         main.ask_to_save = False
 
-    def load_c4z(self, file_path=None, force=False, new_thread=True, generic=False, c4is=None):
-        if new_thread and self.main.pending_load_save:
+    def load_c4z(self, file_path=None, generic=False, c4is=None, bypass_ask_save=False, new_thread=True, force=False):
+        if not force and self.main.pending_load_save:
             return
-        if not force and new_thread and self.main.ask_to_save:
+        if not bypass_ask_save and self.main.ask_to_save:
             self.main.ask_to_save_dialog(save_dialog_result := StringVar(), on_exit=False)
             self.main.root.wait_variable(save_dialog_result)
             if save_dialog_result.get() not in ('do', 'dont'):
                 return
         self.main.pending_load_save = True
         if new_thread:
-            threading.Thread(target=self.load_c4z, kwargs={'file_path': file_path, 'new_thread': False,
-                                                           'generic': generic, 'c4is': c4is},
+            threading.Thread(target=self.load_c4z, kwargs={'file_path': file_path, 'generic': generic, 'c4is': c4is,
+                                                           'bypass_ask_save': True, 'new_thread': False, 'force': True},
                              daemon=True).start()
             return
         self._load_c4z(file_path=file_path, generic=generic, c4is=c4is)
@@ -3419,13 +3424,18 @@ class ReplacementPanel:
             main.ask_to_save = True
 
     def process_image(self, file_path: Path | str | list | tuple = None, bank_index=None, new_thread=True):
+        if self.open_file_button.config('relief')[-1] == 'sunken':
+            return
         if new_thread:
             threading.Thread(target=self.process_image,
                              kwargs={'file_path': file_path, 'bank_index': bank_index, 'new_thread': False},
                              daemon=True).start()
             return
 
+        if not self.threading_event.is_set():
+            self.open_file_button.config(relief='sunken')
         with self.main.thread_lock:
+            self.open_file_button.config(relief='raised')
             self.threading_event.clear()
             self._process_image(file_path=file_path, bank_index=bank_index, threaded=True)
             self.threading_event.set()
