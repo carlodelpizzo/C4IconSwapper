@@ -2544,9 +2544,9 @@ class C4zPanel:
         self.c4_icon_label = Label(main.root, image=main.img_blank)
         self.c4_icon_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
         self.c4_icon_label.image = main.img_blank
-        self.c4_icon_label.bind('<Button-3>', self.right_click_menu)
         self.c4_icon_label.drop_target_register(DND_FILES)
         self.c4_icon_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
+        self.c4_icon_label.bind('<Button-3>', self.right_click_menu)
 
         self.icon_num_label = Label(main.root, text='0 of 0', font=(label_font, 10))
         self.icon_num_label.place(x=108 + self.x, y=180 + self.y, anchor='n')
@@ -3218,27 +3218,27 @@ class ReplacementPanel:
         self.threading_event = threading.Event()
         self.threading_event.set()
 
-        self.replacement_img_label = Label(main.root, image=main.img_blank)
-        self.replacement_img_label.image = main.img_blank
-
         # Labels
         self.panel_label = Label(main.root, text='Replacement Icons', font=(label_font, 15))
         self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
 
+        self.replacement_img_label = Label(main.root, image=main.img_blank)
         self.replacement_img_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
+        self.replacement_img_label.image = main.img_blank
         self.replacement_img_label.drop_target_register(DND_FILES)
         self.replacement_img_label.dnd_bind('<<Drop>>', self.drag_and_drop_image)
         self.replacement_img_label.bind('<Button-3>', self.right_click_menu)
 
         x_offset = 61
         for i in range(main.img_bank_size):
-            self.img_bank_tk_labels.append(Label(main.root, image=main.img_bank_blank))
-            self.img_bank_tk_labels[-1].image = main.img_bank_blank
-            self.img_bank_tk_labels[-1].bind('<Button-1>', lambda e, bn=i: self.select_img_bank(e, bn))
-            self.img_bank_tk_labels[-1].bind('<Button-3>', self.right_click_menu)
-            self.img_bank_tk_labels[-1].place(x=31 + self.x + x_offset * i, y=176 + self.y, anchor='nw')
-            self.img_bank_tk_labels[-1].drop_target_register(DND_FILES)
-            self.img_bank_tk_labels[-1].dnd_bind('<<Drop>>', lambda e, bn=i: self.drag_and_drop_image(e, bn))
+            bank_label = Label(main.root, image=main.img_bank_blank)
+            bank_label.place(x=31 + self.x + x_offset * i, y=176 + self.y, anchor='nw')
+            bank_label.image = main.img_bank_blank
+            bank_label.drop_target_register(DND_FILES)
+            bank_label.dnd_bind('<<Drop>>', lambda e, bn=i: self.drag_and_drop_image(e, bn))
+            bank_label.bind('<Button-1>', lambda e, bn=i: self.select_img_bank(e, bn))
+            bank_label.bind('<Button-3>', self.right_click_menu)
+            self.img_bank_tk_labels.append(bank_label)
 
         # Buttons
         self.open_file_button = Button(main.root, text='Open', width=10, command=self.process_image, takefocus=0)
@@ -3357,6 +3357,8 @@ class ReplacementPanel:
                             self.refresh_img_bank()
                             return
                         else:  # If image is dropped on replacement
+                            if existing_replacement and self.replacement_icon.path == cmp_path:
+                                return
                             existing_icon = next((icon for icon in self.img_bank if icon.path == cmp_path))
                             bank_index = self.img_bank.index(existing_icon)
                             if existing_replacement:
