@@ -11,10 +11,12 @@ import shutil
 import time
 from datetime import datetime
 
-from tkinter import Tk, filedialog, Toplevel, Checkbutton, IntVar, StringVar, Label, Menu, OptionMenu
-from tkinter import DISABLED, NORMAL, END, INSERT, Button, Entry
+from PIL import Image, ImageTk
+from tkinter import filedialog
+from tkinter import DISABLED, END, INSERT, NORMAL
+from tkinter import IntVar, StringVar
+from tkinter import Button, Checkbutton, Entry, Label, Menu, OptionMenu, Tk, Toplevel
 from tkinter.ttk import Separator
-from PIL import ImageTk, Image
 
 from Base64Assets import *
 from XMLObject import XMLObject
