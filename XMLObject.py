@@ -326,7 +326,7 @@ class XMLTag:
         else:
             self.elements.append(element)
 
-    def get_lines(self, indent='', use_esc_chars=True, as_string=False) -> list[str] | str:
+    def get_lines(self, indent='', use_esc_chars=False, as_string=False) -> list[str] | str:
         if not self.init_success:
             return '' if as_string else []
         if self.hide:
@@ -462,10 +462,11 @@ class XMLObject:
         self.tags = parse_xml(xml_path=xml_path, xml_string=xml_string)
         self.root = next((tag for tag in self.tags if not (tag.is_prolog or tag.is_comment or tag.is_CDATA)), None)
 
-    def get_lines(self, use_esc_chars=True, as_string=False) -> list[str] | str:
+    def get_lines(self, use_esc_chars=False, as_string=False) -> list[str] | str:
         output = []
         if len(self.tags) == 1:
-            return self.tags[0].get_lines(use_esc_chars=use_esc_chars)
+            output = self.tags[0].get_lines(use_esc_chars=use_esc_chars)
+            return ''.join(output) if as_string else output
         for i, tag in enumerate(self.tags):
             output.extend(tag.get_lines(use_esc_chars=use_esc_chars))
             if i != len(self.tags) - 1:
