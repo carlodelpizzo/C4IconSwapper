@@ -2034,7 +2034,6 @@ class Connection:
         new_id = conn_id_type[new_type][0]
         while new_id in self.main.taken_conn_ids:
             new_id += 1
-        print(new_id)
         self.main.taken_conn_ids[new_id] = self
         self.id = new_id
         self.tag.get_tag('type').set_value(conn_id_type[new_type][1])
@@ -3166,15 +3165,15 @@ class C4zPanel:
             tag_dict | {'connection_tag': tag}
             for tag in main.driver_xml.get_tags('connection')
             if len(tag_dict := tag.get_tags_dict({'class', 'classname', 'connectionname', 'id', 'type'})) == 5
-            if get_all_conn or tag_dict['classname'].value in valid_connections
+            if get_all_conn or tag_dict['classname'][0].value in valid_connections
         ]
 
         # Update connection entries up to max number of connections
         for tag_dict in connections:
             new_conn = (Connection(main))
-            new_conn.name_entry_var.set(tag_dict['connectionname'].value)
-            new_conn.type.set(tag_dict['classname'].value)
-            new_conn.id = int(tag_dict['id'].value)
+            new_conn.name_entry_var.set(tag_dict['connectionname'][0].value)
+            new_conn.type.set(tag_dict['classname'][0].value)
+            new_conn.id = int(tag_dict['id'][0].value)
             new_conn.tag = tag_dict['connection_tag']
             new_conn.original = True
             main.connections.append(new_conn)
@@ -3582,6 +3581,7 @@ class ReplacementPanel:
         self.prev_icon_button['state'] = next_button_state
 
 
+# TODO: Add option to not modify XML file
 class ExportPanel:
     def __init__(self, main: C4IconSwapper):
         # Initialize Export Panel
