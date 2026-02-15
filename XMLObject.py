@@ -27,15 +27,22 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
     nested_skip = False
     sub_tag_found = False
 
-    def handle_str_tag():
+    def add_append_tag(new_tag):
+        nonlocal attributes
+        nonlocal tag_start
         nonlocal string_tag
-        if string_tag:
-            str_tag = XMLTag(name=string_tag, is_string=True)
-            if not tag_stack:
-                tags.append(str_tag)
-            else:
-                tag_stack[-1].add_element(str_tag)
+        if isinstance(new_tag, str):
+            if not string_tag:
+                return
+            new_tag = XMLTag(name=string_tag, is_string=True)
             string_tag = ''
+        else:
+            attributes = {}
+            tag_start = None
+        if tag_stack:
+            tag_stack[-1].add_element(new_tag)
+        else:
+            tags.append(new_tag)
 
     # Begin Parsing
     for i in (char_i for char_i, char in enumerate(xml_string) if char in ('<', '>')):
@@ -64,13 +71,8 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
                 if data.count('<![CDATA[') + 1 != nested_cdata:
                     nested_cdata += 1
                     continue
-                handle_str_tag()
-                new_tag = XMLTag(name=f'<{data}>', is_cdata=True)
-                if tag_stack:
-                    tag_stack[-1].add_element(new_tag)
-                else:
-                    tags.append(new_tag)
-                tag_start = None
+                add_append_tag(string_tag)
+                add_append_tag(XMLTag(name=f'<{data}>', is_cdata=True))
                 nested_cdata = 0
                 continue
             elif sub_tag and not sub_tag_found:
@@ -122,13 +124,8 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
             nested_skip = False
             if not data.endswith('--'):
                 continue
-            handle_str_tag()
-            comment_tag = XMLTag(name=data[3:-2], is_comment=True)
-            if tag_stack:
-                tag_stack[-1].add_element(comment_tag)
-            else:
-                tags.append(comment_tag)
-            tag_start = None
+            add_append_tag(string_tag)
+            add_append_tag(XMLTag(name=data[3:-2], is_comment=True))
             continue
 
         # Parse tag attributes
@@ -142,14 +139,8 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
         if data.startswith('?'):
             if not data.endswith('?'):
                 continue
-            handle_str_tag()
-            new_tag = XMLTag(name=data[1:-1], attributes=attributes, is_prolog=True)
-            attributes = {}
-            if tag_stack:
-                tag_stack[-1].add_element(new_tag)
-            else:
-                tags.append(new_tag)
-            tag_start = None
+            add_append_tag(string_tag)
+            add_append_tag(XMLTag(name=data[1:-1], attributes=attributes, is_prolog=True))
             continue
 
         # Handle self-closing tags
@@ -158,21 +149,15 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
             if '<' in data or '>' in data:
                 warnings.warn('< or > found in self-closing tag', SyntaxWarning)
                 return []
-            handle_str_tag()
-            new_tag = XMLTag(name=data, attributes=attributes, is_self_closing=True)
-            attributes = {}
-            if tag_stack:
-                tag_stack[-1].add_element(new_tag)
-            else:
-                tags.append(new_tag)
-            tag_start = None
+            add_append_tag(string_tag)
+            add_append_tag(XMLTag(name=data, attributes=attributes, is_self_closing=True))
             continue
 
         stripped_data = data[:data.index(' ')] if ' ' in data else data
 
         # Handle closing tag, Pull off stack
         if tag_stack and data.startswith('/') and tag_stack[-1].name == stripped_data[1:]:
-            handle_str_tag()
+            add_append_tag(string_tag)
             if len(tag_stack) > 1:
                 tag_stack[-2].add_element(tag_stack.pop())
             else:
@@ -183,7 +168,7 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
             continue
 
         # Push tag on stack to wait for closing tag
-        handle_str_tag()
+        add_append_tag(string_tag)
         tag_stack.append(XMLTag(name=stripped_data, attributes=attributes))
         attributes = {}
         tag_start = None
