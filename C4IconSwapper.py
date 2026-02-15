@@ -85,7 +85,6 @@ class PathStringVar(StringVar):
 
 # Inter-Process Communication (For running multiple instances simultaneously); Port range: (49200-65500)
 # I'm not very happy with separating the IPC functions into their own class, but I think it makes it more readable
-# noinspection PyAttributeOutsideInit
 class IPC:
     self: C4IconSwapper
     root: TkinterDnD.Tk
@@ -93,12 +92,19 @@ class IPC:
     appdata_dir: Path
     global_temp: Path
     recovery_dir: Path
-    default_port: int
-    reestablish_ids: set
     running_as_exe: bool
-    socket_lock: threading.Lock
-    last_seen: dict
-    socket_dict: dict
+
+    def __init__(self):
+        self.client_dict = {}
+        self.socket_dict = {}
+        self.last_seen = {}
+        self.is_server = False
+        self.finished_server_init = False
+        self.reestablish = False
+        self.reestablish_start = None
+        self.reestablish_ids = set()
+        self.socket_lock = threading.Lock()
+        self.default_port = 61352
 
     def ipc(self, takeover=False, port: int = None, first_time=False):
         # noinspection PyShadowingNames
@@ -718,17 +724,8 @@ class C4IconSwapper(IPC):
             self.instance_id = str(random.randint(111111, 999999))
         print(f'Set Instance ID: {self.instance_id}')
 
-        # IPC Variables
-        self.client_dict = {}
-        self.socket_dict = {}
-        self.last_seen = {}
-        self.is_server = False
-        self.finished_server_init = False
-        self.reestablish = False
-        self.reestablish_start = None
-        self.reestablish_ids = set()
-        self.socket_lock = threading.Lock()
-        self.default_port = 61352
+        # Initialize Inter-Process Communication
+        super().__init__()
         self.ipc(first_time=True)
 
         # Instance Directories
@@ -737,7 +734,7 @@ class C4IconSwapper(IPC):
         self.replacement_icons_dir = self.instance_temp / 'Replacement Icons'
         self.replacement_icons_dir.mkdir(exist_ok=True)
 
-        # Root window title after IPC since ipc can change instance_id
+        # Root window title after IPC since instance_id can change during IPC initialization
         show_id_in_title = not self.running_as_exe and not self.is_server
         self.root.title(f'C4 Icon Swapper ({self.instance_id})' if show_id_in_title else 'C4 Icon Swapper')
 
