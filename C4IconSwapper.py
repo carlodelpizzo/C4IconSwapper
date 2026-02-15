@@ -3008,7 +3008,8 @@ class C4zPanel:
                 main.connections_win.refresh(hard=True)
             if main.states_win:
                 main.states_win.refresh()
-
+        if self.sub_icon_win:
+            self.sub_icon_win.update_icon()
         main.ask_to_save = False
 
     def load_c4z(self, file_path=None, generic=False, c4is=None, bypass_ask_save=False, new_thread=True, force=False):
