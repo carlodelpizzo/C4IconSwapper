@@ -26,6 +26,7 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
     nested_cdata = 0
     nested_skip = False
     sub_tag_found = False
+    data = ''
 
     def add_append_tag(new_tag):
         nonlocal attributes
@@ -44,8 +45,48 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
         else:
             tags.append(new_tag)
 
+    def sub_tag_root_search():
+        nonlocal attributes
+        nonlocal data
+        nonlocal tag_start
+        nonlocal sub_tag_found
+        nonlocal data_no_attr
+
+        self_closing = False
+        attributes = {}
+        if ' ' in data:
+            if data[:data.index(' ')] != sub_tag:
+                tag_start = None
+                return None
+            if data.endswith('/'):
+                self_closing = True
+            data_no_attr = re_attributes.sub('', data)
+            if '=' in data_no_attr:  # In case '>' is in attributes
+                tag_start = None
+                return None
+            attributes = {k: (v, q) for k, q, v in re_attributes.findall(data)}
+            data = data[:data.index(' ')]
+        elif data.endswith('/'):
+            if (data := data[:-1]) != sub_tag:
+                tag_start = None
+                return None
+            if '<' in data or '>' in data:
+                warnings.warn('< or > found in self-closing tag', SyntaxWarning)
+                return []
+            self_closing = True
+        elif data != sub_tag:
+            tag_start = None
+            return None
+        if self_closing:
+            return [XMLTag(name=data, attributes=attributes, is_self_closing=True)]
+        tag_stack.append(XMLTag(name=data, attributes=attributes))
+        attributes = {}
+        sub_tag_found = True
+        tag_start = None
+        return None
+
     # Begin Parsing
-    for i in (char_i for char_i, char in enumerate(xml_string) if char in ('<', '>')):
+    for i in (char_index for char_index, char in enumerate(xml_string) if char in ('<', '>')):
         if xml_string[i] == '<':
             if tag_start:
                 continue  # Continue if '<' found inside comment or attribute
@@ -63,56 +104,31 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
 
         try:
             data = xml_string[tag_start + 1:i]
-            if data.startswith('![CDATA['):
-                if not data.endswith(']]'):
-                    if not nested_cdata:
-                        nested_cdata += 1
-                    continue
-                if data.count('<![CDATA[') + 1 != nested_cdata:
-                    nested_cdata += 1
-                    continue
-                add_append_tag(string_tag)
-                add_append_tag(XMLTag(name=f'<{data}>', is_cdata=True))
-                nested_cdata = 0
-                continue
-            elif sub_tag and not sub_tag_found:
-                self_closing = False
-                attributes = {}
-                if ' ' in data:
-                    if data[:data.index(' ')] != sub_tag:
-                        tag_start = None
-                        continue
-                    if data.endswith('/'):
-                        self_closing = True
-                    data_no_attr = re_attributes.sub('', data)
-                    if '=' in data_no_attr:  # In case '>' is in attributes
-                        tag_start = None
-                        continue
-                    attributes = {k: (v, q) for k, q, v in re_attributes.findall(data)}
-                    data = data[:data.index(' ')]
-                elif data.endswith('/'):
-                    if (data := data[:-1]) != sub_tag:
-                        tag_start = None
-                        continue
-                    if '<' in data or '>' in data:
-                        warnings.warn('< or > found in self-closing tag', SyntaxWarning)
-                        return []
-                    self_closing = True
-                elif data != sub_tag:
-                    tag_start = None
-                    continue
-                if self_closing:
-                    return [XMLTag(name=data, attributes=attributes, is_self_closing=True)]
-                tag_stack.append(XMLTag(name=data, attributes=attributes))
-                attributes = {}
-                sub_tag_found = True
-                tag_start = None
-                continue
         except TypeError:
             warnings.warn('Generic issue with XML syntax', SyntaxWarning)
             return []
 
-        # Identify comment
+        # Handle sub_tag search
+        if sub_tag and not sub_tag_found:
+            if self_closing_sub_tag := sub_tag_root_search():
+                return self_closing_sub_tag
+            continue
+
+        # Handle CDATA tags
+        if data.startswith('![CDATA['):
+            if not data.endswith(']]'):
+                if not nested_cdata:
+                    nested_cdata += 1
+                continue
+            if data.count('<![CDATA[') + 1 != nested_cdata:
+                nested_cdata += 1
+                continue
+            add_append_tag(string_tag)
+            add_append_tag(XMLTag(name=f'<{data}>', is_cdata=True))
+            nested_cdata = 0
+            continue
+
+        # Handle comments
         if data.startswith('!--'):
             if not nested_skip:
                 if nested_comments := data.count('!--') - 1:
@@ -135,7 +151,7 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
                 continue
             attributes = {k: (v, q) for k, q, v in re_attributes.findall(data)}
 
-        # Identify prolog
+        # Handle prolog
         if data.startswith('?'):
             if not data.endswith('?'):
                 continue
@@ -155,7 +171,7 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
 
         stripped_data = data[:data.index(' ')] if ' ' in data else data
 
-        # Handle closing tag, Pull off stack
+        # Handle closing tag; Pull off stack
         if tag_stack and data.startswith('/') and tag_stack[-1].name == stripped_data[1:]:
             add_append_tag(string_tag)
             if len(tag_stack) > 1:
@@ -181,51 +197,55 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
 
 # Can only have one root tag
 class XMLTag:
-    # noinspection PyUnresolvedReferences
-    def __init__(self, name: str = None, elements: list = None, attributes: dict = None, parent=None,
+    name: str | None
+    parent: XMLTag | None
+    attributes: dict[str, str]
+    attr_q: dict[str, str]
+    elements: list[XMLTag]
+    is_prolog: bool
+    is_comment: bool
+    is_CDATA: bool
+    is_string: bool
+    is_self_closing: bool
+    hide: bool
+
+    def __init__(self, name: str = None, elements: list = None, attributes: dict = None, parent: XMLTag = None,
                  xml_path: str | Path = None, xml_string: str = None, is_comment=False, is_self_closing=False,
                  is_prolog=False, is_cdata=False, is_string=False, sub_tag=''):
-        self.init_success = True
+        self.init_success = False
+        first_tag = None
         # Constructs an XMLTag object based on the first tag in data if XML path/data is passed in
         if xml_path or xml_string:
-            first_tag = parse_xml(xml_path=xml_path, xml_string=xml_string, sub_tag=sub_tag)
-            if not first_tag:
+            tag_list = parse_xml(xml_path=xml_path, xml_string=xml_string, sub_tag=sub_tag)
+            if not tag_list:
                 warnings.warn(f'Excepted {self.__class__.__name__} in list; Received Empty list',
                               RuntimeWarning)
-                self.init_success = False
                 return
-            first_tag = first_tag[0]
+            first_tag = tag_list[0]
             if not isinstance(first_tag, XMLTag):
                 warnings.warn(f'Expected type: {self.__class__.__name__}; '
                               f'Received type: {first_tag.__class__.__name__}', RuntimeWarning)
-                self.init_success = False
                 return
-            self.name = first_tag.name
-            self.parent = first_tag.parent
-            self.attributes = first_tag.attributes
-            self.elements = first_tag.elements
-            self.is_prolog = first_tag.is_prolog
-            self.is_comment = first_tag.is_comment
-            self.is_CDATA = first_tag.is_CDATA
-            self.is_string = first_tag.is_string
-            self.is_self_closing = first_tag.is_self_closing
-            self.hide = first_tag.hide
-            return
-        self.name = name
-        self.parent = parent
-        self.attributes = {}
-        self.attr_q = {}
+
+        self.name = name if not first_tag else first_tag.name
+        self.parent = parent if not first_tag else first_tag.parent
         if attributes:
+            self.attributes = {}
+            self.attr_q = {}
             for k, (v, q) in attributes.items():
                 self.attributes[k] = v
                 self.attr_q[k] = q
-        self.elements = [] if not elements else elements
-        self.is_prolog = is_prolog
-        self.is_comment = is_comment
-        self.is_CDATA = is_cdata
-        self.is_string = is_string
-        self.is_self_closing = is_self_closing
-        self.hide = False
+        else:
+            self.attributes = {} if not first_tag else first_tag.attributes.copy()
+            self.attr_q = {} if not first_tag else first_tag.attr_q.copy()
+        self.elements = (elements or []) if not first_tag else first_tag.elements
+        self.is_prolog = is_prolog if not first_tag else first_tag.is_prolog
+        self.is_comment = is_comment if not first_tag else first_tag.is_comment
+        self.is_CDATA = is_cdata if not first_tag else first_tag.is_CDATA
+        self.is_string = is_string if not first_tag else first_tag.is_string
+        self.is_self_closing = is_self_closing if not first_tag else first_tag.is_self_closing
+        self.hide = False if not first_tag else first_tag.hide
+        self.init_success = True
 
     @property
     def value(self) -> str:
@@ -241,6 +261,8 @@ class XMLTag:
     def descendants(self) -> list[XMLTag]:
         output = []
         for child in self.elements:
+            if child.is_string:
+                continue
             output.append(child)
             output.extend(child.descendants)
         return output
@@ -249,6 +271,9 @@ class XMLTag:
         return self.value
 
     def set_value(self, new_value: str):
+        if self.is_string:
+            self.name = new_value
+            return
         value_set = False
         for tag in self.elements:
             if tag.is_string:
@@ -268,7 +293,7 @@ class XMLTag:
         element.parent = self
 
     def get_lines(self, indent='', use_esc_chars=False, as_string=False) -> list[str] | str:
-        if self.hide or not self.init_success:
+        if not self.init_success or self.hide:
             return '' if as_string else []
         if self.is_comment:
             comment = f'{indent}<!--{self.name}-->'
@@ -333,7 +358,7 @@ class XMLTag:
         return ''.join(output) if as_string else output
 
     def get_tags(self, name: str) -> list[XMLTag]:
-        if not self.init_success:
+        if not self.init_success or self.is_string:
             return []
         output = [self] if name == self.name else []
         for element in self.elements:
@@ -359,7 +384,7 @@ class XMLTag:
         return output_dict
 
     def get_tag(self, name: str, include_self=True) -> XMLTag | None:
-        if not self.init_success:
+        if not self.init_success or self.is_string:
             return None
         if include_self and name == self.name:
             return self
