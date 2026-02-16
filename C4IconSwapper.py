@@ -652,6 +652,7 @@ class C4IconSwapper(IPC):
         # Default App settings
         self.def_get_all_driver_imgs = BooleanVar()
         self.def_get_all_connections = BooleanVar()
+        self.def_use_original_xml = BooleanVar()
         self.def_merge_on_load = IntVar(value=-1)  # Default: Ask each time
         self.def_include_backup_files = BooleanVar(value=True)
         self.def_inc_driver_version = BooleanVar(value=True)
@@ -999,6 +1000,15 @@ class C4IconSwapper(IPC):
             self.driver_version_new_var.set(version_compare)
             return
         self.ask_to_save = True
+
+    def toggle_use_original_xml(self, *_):
+        state = DISABLED if self.export_panel.use_orig_xml.get() else NORMAL
+        self.export_panel.inc_driver_check['state'] = state
+        if win := self.driver_info_win:
+            win.update_entries()
+        if win := self.connections_win:
+            for conn_entry in win.connection_entries:
+                conn_entry.refresh()
 
     def update_driver_version(self, *_):
         # if not self.driver_version_new_var.get():
@@ -1484,7 +1494,7 @@ class SettingsWin:
         self.window.focus()
         self.window.protocol('WM_DELETE_WINDOW', self.close)
         self.window.title('Settings')
-        self.w, self.h = (255, 300)
+        self.w, self.h = (255, 325)
         self.window.geometry(f'{self.w}x{self.h}+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
 
@@ -1508,6 +1518,13 @@ class SettingsWin:
         self.var_trace_dict[id(main.def_get_all_connections)] = (main.def_get_all_connections, trace)
         self.get_all_connections_check = Checkbutton(self.window, text='Get ALL connections from driver',
                                                      variable=main.def_get_all_connections)
+
+        # noinspection PyTypeChecker
+        trace = main.def_use_original_xml.trace_add('write',
+                                                       lambda *_: self.update_setting(main.def_use_original_xml))
+        self.var_trace_dict[id(main.def_use_original_xml)] = (main.def_use_original_xml, trace)
+        self.use_original_xml_check = Checkbutton(self.window, text='Use original driver XML',
+                                                     variable=main.def_use_original_xml)
 
         self.merge_imgs_on_load_check = None
         if main.def_merge_on_load.get() != -1:
@@ -1577,6 +1594,8 @@ class SettingsWin:
         self.get_all_driver_imgs_check.place(x=5, y=y_val, anchor='nw')
         y_val += 25
         self.get_all_connections_check.place(x=5, y=y_val, anchor='nw')
+        y_val += 25
+        self.use_original_xml_check.place(x=5, y=y_val, anchor='nw')
         y_val += 25
         if self.merge_imgs_on_load_check:
             self.window.geometry(f'{self.w}x{self.h + 42}')
@@ -1860,26 +1879,25 @@ class DriverInfoWin:
         version_arrow = Label(self.window, text='\u2192', font=('', 15))
         version_arrow.place(x=115, y=version_y, anchor='nw')
 
-        driver_ver_orig_label = Label(self.window, text='Original Version:', font=(label_font, 8))
-        driver_ver_orig_label.place(x=110, y=version_y + 45, anchor='ne')
-
         driver_man_label = Label(self.window, text='Driver Manufacturer', font=(label_font, font_size))
-        driver_man_label.place(x=127, y=man_y - 15, anchor='n')
+        driver_man_label.place(relx=0.5, y=man_y - 15, anchor='n')
 
         driver_creator_label = Label(self.window, text='Driver Creator', font=(label_font, font_size))
-        driver_creator_label.place(x=127, y=creator_y - 15, anchor='n')
+        driver_creator_label.place(relx=0.5, y=creator_y - 15, anchor='n')
 
         driver_ver_label = Label(self.window, text='Driver Version', font=(label_font, font_size))
-        driver_ver_label.place(x=127, y=version_y - 15, anchor='n')
+        driver_ver_label.place(relx=0.5, y=version_y - 15, anchor='n')
 
-        # Entry
+        driver_ver_orig_label = Label(self.window, text='Original Version', font=(label_font, 8))
+        driver_ver_orig_label.place(relx=0.5, y=version_y + 65, anchor='n')
+
+        # Entries
         entry_width = 17
         driver_man_entry = Entry(self.window, width=entry_width, textvariable=main.driver_manufac_var)
         driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
         driver_man_entry['state'] = DISABLED
 
-        self.driver_man_new_entry = Entry(self.window, width=entry_width,
-                                          textvariable=main.driver_manufac_new_var)
+        self.driver_man_new_entry = Entry(self.window, width=entry_width, textvariable=main.driver_manufac_new_var)
         self.driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
         main.driver_manufac_new_var.trace_add('write',
                                               lambda name, index, mode: self.main.validate_man_and_creator(
@@ -1890,8 +1908,7 @@ class DriverInfoWin:
         driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
         driver_creator_entry['state'] = DISABLED
 
-        self.driver_creator_new_entry = Entry(self.window, width=entry_width,
-                                              textvariable=main.driver_creator_new_var)
+        self.driver_creator_new_entry = Entry(self.window, width=entry_width, textvariable=main.driver_creator_new_var)
         self.driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
         main.driver_creator_new_var.trace_add('write',
                                               lambda name, index, mode: self.main.validate_man_and_creator(
@@ -1902,8 +1919,7 @@ class DriverInfoWin:
         driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
         driver_ver_entry['state'] = DISABLED
 
-        self.driver_ver_new_entry = Entry(self.window, width=entry_width,
-                                          textvariable=main.driver_version_new_var)
+        self.driver_ver_new_entry = Entry(self.window, width=entry_width, textvariable=main.driver_version_new_var)
         self.driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
         self.driver_ver_new_entry.bind('<FocusOut>', main.update_driver_version)
         main.driver_version_new_var.trace_add('write', main.validate_driver_ver)
@@ -1911,6 +1927,19 @@ class DriverInfoWin:
         driver_ver_orig_entry = Entry(self.window, width=6, textvariable=main.driver_ver_orig)
         driver_ver_orig_entry.place(x=110, y=version_y + 45, anchor='nw')
         driver_ver_orig_entry['state'] = DISABLED
+
+        self.update_entries()
+
+    # noinspection PyTypeChecker
+    def update_entries(self):
+        main = self.main
+        entry_state = DISABLED if (val := main.export_panel.use_orig_xml.get()) else NORMAL
+        self.driver_man_new_entry.config(
+            textvariable=(main.driver_manufac_var if val else main.driver_manufac_new_var), state=entry_state)
+        self.driver_creator_new_entry.config(
+            textvariable=(main.driver_creator_var if val else main.driver_creator_new_var), state=entry_state)
+        self.driver_ver_new_entry.config(textvariable=(main.driver_ver_orig if val else main.driver_version_new_var),
+                                         state=entry_state)
 
     def close(self):
         self.main.validate_man_and_creator(string_var=self.main.driver_manufac_new_var, entry=self.driver_man_new_entry)
@@ -1949,7 +1978,7 @@ class ConnectionsWin:
         self.y_pad = 25
         self.scroll_pad = 20
         num_conns = len(main.connections)
-        self.connections = [
+        self.connection_entries = [
             ConnectionEntry(self, main.connections[i], self.widget_x, i * self.widget_y_offset + self.y_pad)
             for i in range(num_conns)
         ]
@@ -1981,14 +2010,14 @@ class ConnectionsWin:
     def refresh(self, hard=False):
         num_conns = len(self.main.connections)
         if hard:
-            for conn_entry in self.connections:
+            for conn_entry in self.connection_entries:
                 conn_entry.destroy()
-            self.connections = [
+            self.connection_entries = [
                 ConnectionEntry(self, self.main.connections[i], self.widget_x, i * self.widget_y_offset + self.y_pad)
                 for i in range(num_conns)
             ]
         else:
-            for conn_entry in self.connections:
+            for conn_entry in self.connection_entries:
                 conn_entry.refresh()
 
         w = self.window.winfo_width()
@@ -2038,6 +2067,7 @@ class Connection:
         self.tag.get_tag('id').set_value(str(self.id))
 
 
+# TODO: Combine add, delete, and x buttons into single action button
 class ConnectionEntry:
     def __init__(self, parent: ConnectionsWin, conn_obj: Connection, x_pos: int, y_pos: int):
         # Initialize Connection UI Object
@@ -2083,16 +2113,17 @@ class ConnectionEntry:
         if self.conn_object.delete and self.conn_object.original:
             self.del_button['text'] = 'Keep'
             self.del_button['width'] = 4
-            self.del_button.place(x=self.x + self.del_button.winfo_x() - 6, y=self.y)
+            self.del_button.place(x=self.x, y=self.y)
 
     def refresh(self):
         self.name_entry_var.set(self.conn_object.name_entry_var.get())
         self.type.set(self.conn_object.type.get())
         self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
         self.type_menu.place(x=self.x + 210, y=self.y, anchor='w')
+        state = DISABLED if self.main.export_panel.use_orig_xml.get() else NORMAL
         if self.conn_object.enabled:
-            self.type_menu['state'] = NORMAL
-            self.name_entry['state'] = NORMAL
+            self.type_menu['state'] = state
+            self.name_entry['state'] = state
         else:
             self.type_menu['state'] = DISABLED
             if not self.conn_object.original:
@@ -2102,14 +2133,16 @@ class ConnectionEntry:
 
         if self.conn_object.original:
             self.add_button.place_forget()
+            self.del_button['state'] = state
             self.del_button.place(x=self.x, y=self.y, anchor='w')
             self.x_button.place_forget()
         elif self.conn_object.enabled:
             self.add_button.place_forget()
             self.del_button.place_forget()
+            self.x_button['state'] = state
             self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
         else:
-            self.add_button['state'] = NORMAL if self.main.driver_selected else DISABLED
+            self.add_button['state'] = state if self.main.driver_selected else DISABLED
             self.add_button.place(x=self.x, y=self.y, anchor='w')
             self.del_button.place_forget()
             self.x_button.place_forget()
@@ -2117,7 +2150,8 @@ class ConnectionEntry:
         if self.conn_object.delete:
             self.del_button['text'] = 'Keep'
             self.del_button['width'] = 4
-            self.del_button.place(x=self.x + self.del_button.winfo_x() - 6, y=self.y)
+            self.name_entry['state'] = DISABLED
+            self.del_button.place(x=self.x - 6, y=self.y)
 
     def add(self):
         self.main.ask_to_save = True
@@ -2128,20 +2162,20 @@ class ConnectionEntry:
         self.add_button.place_forget()
         self.x_button.place(x=self.x + 14, y=self.y, anchor='w')
         self.name_entry['takefocus'] = 1
-        if self.parent.connections[-1] is self:
+        if self.parent.connection_entries[-1] is self:
             new_conn = Connection(self.main)
             self.main.connections.append(new_conn)
             parent_tag = self.main.driver_xml.get_tag('connections')
             parent_tag.add_element(new_conn.tag)
-            self.parent.connections.append(
+            self.parent.connection_entries.append(
                 ConnectionEntry(self.parent, new_conn, self.parent.widget_x, self.y + self.parent.widget_y_offset))
             self.parent.refresh()
 
     def delete(self):
         self.main.ask_to_save = True
-        self.parent.connections.pop(i := self.parent.connections.index(self))
+        self.parent.connection_entries.pop(i := self.parent.connection_entries.index(self))
         self.main.connections.pop(i)
-        for conn_entry in self.parent.connections[i:]:
+        for conn_entry in self.parent.connection_entries[i:]:
             conn_entry.y -= self.parent.widget_y_offset
         parent_tag = self.main.driver_xml.get_tag('connections')
         parent_tag.elements.pop(parent_tag.elements.index(self.conn_object.tag))
@@ -2161,24 +2195,22 @@ class ConnectionEntry:
             self.conn_object.prior_txt = self.name_entry_var.get()
             self.conn_object.prior_type = self.type.get()
             self.type.set('RIP')
-            self.name_entry['state'] = NORMAL
             self.name_entry_var.set('TO BE DELETED')
             self.name_entry['state'] = DISABLED
             self.del_button['text'] = 'Keep'
             self.del_button['width'] = 4
-            self.del_button.place(x=self.del_button.winfo_x() - 6, y=self.y)
+            self.del_button.place(x=self.x - 6, y=self.y)
             return
         self.conn_object.delete = False
         self.conn_object.tag.hide = False
-        self.name_entry['state'] = NORMAL
         self.name_entry_var.set(self.conn_object.prior_txt)
         self.conn_object.prior_txt = ''
-        self.name_entry['state'] = DISABLED
+        self.name_entry['state'] = 'readonly'
         self.type.set(self.conn_object.prior_type)
         self.conn_object.prior_type = ''
         self.del_button['text'] = 'Del'
         self.del_button['width'] = 3
-        self.del_button.place(x=self.del_button.winfo_x() + 6, y=self.y)
+        self.del_button.place(x=self.x, y=self.y)
 
     def name_update(self, *_):
         self.main.ask_to_save = True
@@ -3590,37 +3622,43 @@ class ExportPanel:
 
         # Labels
         self.panel_label = Label(main.root, text='Export', font=(label_font, 15))
-        self.panel_label.place(x=145 + self.x, y=50 + self.y, anchor='n')
+        self.panel_label.place(x=145 + self.x, y=70 + self.y, anchor='n')
 
         self.driver_name_label = Label(main.root, text='Driver Name:')
-        self.driver_name_label.place(x=65 + self.x, y=180 + self.y, anchor='w')
+        self.driver_name_label.place(x=65 + self.x, y=200 + self.y, anchor='w')
 
         # Buttons
         self.export_as_button = Button(main.root, text='Export As...', width=20, command=self.do_export, takefocus=0)
-        self.export_as_button.place(x=145 + self.x, y=250 + self.y, anchor='n')
+        self.export_as_button.place(x=145 + self.x, y=270 + self.y, anchor='n')
         self.export_as_button['state'] = DISABLED
 
         self.export_button = Button(main.root, text='Quick Export', width=20, command=self.quick_export, takefocus=0)
-        self.export_button.place(x=145 + self.x, y=220 + self.y, anchor='n')
+        self.export_button.place(x=145 + self.x, y=240 + self.y, anchor='n')
         self.export_button['state'] = DISABLED
 
         # Entry
         self.driver_name_var = StringVar(value='New Driver')
         self.driver_name_var.trace_add('write', self.validate_driver_name)
         self.driver_name_entry = Entry(main.root, width=25, textvariable=self.driver_name_var)
-        self.driver_name_entry.place(x=145 + self.x, y=190 + self.y, anchor='n')
+        self.driver_name_entry.place(x=145 + self.x, y=210 + self.y, anchor='n')
 
         # Checkboxes
+        self.use_orig_xml = BooleanVar(value=main.def_use_original_xml.get())
+        self.use_orig_xml.trace_add('write', main.toggle_use_original_xml)
+        self.use_orig_xml_check = Checkbutton(main.root, text='Use original driver XML',
+                                              variable=self.use_orig_xml, takefocus=0)
+        self.use_orig_xml_check.place(x=63 + self.x, y=130 + self.y, anchor='w')
+
         self.include_backups = BooleanVar(value=main.def_include_backup_files.get())
-        self.include_backups_check = Checkbutton(main.root, text='include backup files',
+        self.include_backups_check = Checkbutton(main.root, text='Include backup files',
                                                  variable=self.include_backups, takefocus=0)
-        self.include_backups_check.place(x=63 + self.x, y=130 + self.y, anchor='w')
+        self.include_backups_check.place(x=63 + self.x, y=150 + self.y, anchor='w')
 
         self.inc_driver_version = BooleanVar(value=main.def_inc_driver_version.get())
         self.inc_driver_version.trace_add('write', self.main.update_driver_version)
-        self.inc_driver_check = Checkbutton(main.root, text='increment driver version',
+        self.inc_driver_check = Checkbutton(main.root, text='Increment driver version',
                                             variable=self.inc_driver_version, takefocus=0)
-        self.inc_driver_check.place(x=63 + self.x, y=150 + self.y, anchor='w')
+        self.inc_driver_check.place(x=63 + self.x, y=170 + self.y, anchor='w')
 
     def quick_export(self):
         # Check for empty driver info variables
