@@ -1,0 +1,71 @@
+test1
+test2
+
+<?prolog att1='false' att2="'nu5>6ll'"?>
+test3
+<![CDATA[OHH N>><<<<<<>>>OO-->c4:test]]>
+<![CDATA[<?prolog?> <!--comment-->]]>
+string test 1
+<tag1>
+    <!--cdata comment-->
+    another test
+    <![CDATA[<!--O<![CDATA[OHH >>,<.>^<<<>-->c4:test]]>HH <![CDATA[<!--[C]DATA-->]]> XdF-->]]>
+    <!--2-->
+    string test 2
+    <tag2 att1='val">"1' att2="val2">
+        <!--nested<!--nested comment-->comment-->
+        <test>
+            Text value
+        </test>
+        <!--3-->
+        string test 3
+        <!--3.1-->
+        <tag3>
+            <!--4-->
+            <tag4><!--4in-->qoooo<!--test--></tag4>
+            <tag4>
+                <!--4in-->qoooo<!--test-->
+            </tag4>
+            string test 4
+        </tag3>
+        <!--68-->
+        <tag6>
+        </tag6>
+    <!--2e-->
+    </tag2>string test 9
+    <tag2></tag2>
+    <tag2>
+    </tag2>
+    <!--5-->
+    <tag5 id="tagid>='5'" />
+    <tag6 />
+    <tag7>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</tag7>
+    <tag7>
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+    </tag7>
+    <tagP>
+
+Scenario Experience Button
+This driver is a template driver which enables you to provide a button on the Control4 UI which can then be used to trigger a sequence of custom programming.  Think of it as an advanced Custom Button which can be placed in most UI sections rather than in the corners of the screen.
+The driver will need some customization in order to add your required graphic to the button.
+
+Driver Properties
+Driver Version: Current driver version.
+Current State: Current State of the Experience Button (On, Off)
+On Name: The text value to display on list navigators when the experience button is set to On.
+Off Name: The text value to display on list navigators when the experience button is set to Off.
+Toggle State Each Time Selected: Toggle the state of the experience button when selected from a navigator (Yes), or do not toggle when selected (No).
+On LED Color: The color to set a bound keypad buttons LED to when the experience button is set to On (Selected).
+Off LED Color: The color to set a bound keypad buttons LED to when the experience button is set to Off (Default).
+
+
+    </tagP>
+    <tag8 />
+</tag1>
+strtest8
+<selfclosingtag test="'val2" />
+strtest9<?endprolog?>
+<selfclosingtag />
+<?realendprolog?>
+<![CDATA[test]]>
+string test final boss

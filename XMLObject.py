@@ -102,6 +102,8 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
             continue
         last_pos = i
 
+        # TODO: Handle string at end of XML
+
         try:
             data = xml_string[tag_start + 1:i]
         except TypeError:
@@ -438,3 +440,6 @@ class XMLObject:
 
     def __bool__(self):
         return all(bool(tag) for tag in self.tags) if self.tags else False
+
+
+# print(XMLObject(xml_path='test.xml').get_lines(as_string=True))
