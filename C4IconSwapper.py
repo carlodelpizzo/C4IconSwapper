@@ -854,7 +854,7 @@ class C4IconSwapper(IPC):
         return {
             setting_name: (
                 (None if (val := var.get()) < 0 else bool(val))
-                if isinstance(var := getattr(self, setting_name), IntVar)
+                if type(var := getattr(self, setting_name)) is IntVar
                 else var.get()
             )
             for setting_name in self.setting_names.values()
@@ -2672,7 +2672,7 @@ class C4zPanel:
             main.driver_xml = new_driver
         else:
             shutil.rmtree(new_driver_path, ignore_errors=True)
-            abort = True
+            abort = True  # TODO: Give option to load driver even if XML parsing fails
 
         # Get icons
         if not abort:
@@ -2891,7 +2891,7 @@ class C4zPanel:
                 abort = True
 
         # Abort if no valid driver XML or no icons found
-        if abort:
+        if abort:  # TODO: Popup dialog instead of changing textbox
             shutil.rmtree(new_driver_path, ignore_errors=True)
             main.driver_xml = driver_xml_bak
             self.file_entry_field['state'] = NORMAL
