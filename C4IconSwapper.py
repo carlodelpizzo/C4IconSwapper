@@ -606,7 +606,7 @@ class C4IconSwapper:
             self.dark_mode = dark_mode_status
             background = dark_entry_bg if self.dark_mode else light_entry_bg
             if self.connections_win:
-                for entry in self.connections_win.connections:
+                for entry in self.connections_win.connection_entries:
                     entry.name_entry['background'] = background
             self.export_panel.driver_name_entry['background'] = background
             for state in self.states:
@@ -773,6 +773,7 @@ class C4Icon:
         self.icons, self.extra, self.dupe_number = icons, extra, 0
 
 
+# TODO: Refactor
 class DriverInfoWin:
     def __init__(self, main):
         self.main = main
@@ -824,8 +825,7 @@ class DriverInfoWin:
 
         driver_creator_entry = Entry(self.window, width=entry_width, textvariable=main.driver_creator_var)
         driver_creator_entry['state'] = DISABLED
-        self.driver_creator_new_entry = Entry(self.window, width=entry_width,
-                                              textvariable=main.driver_creator_new_var)
+        self.driver_creator_new_entry = Entry(self.window, width=entry_width, textvariable=main.driver_creator_new_var)
         main.driver_creator_new_var.trace('w', lambda name, index, mode: main.validate_man_and_creator(
             string_var=main.driver_creator_new_var, entry=self.driver_creator_new_entry))
 
@@ -905,12 +905,12 @@ class ConnectionsWin:
         self.window.geometry(f'{w}x{h}+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
 
-        self.connections = [ConnectionEntry(self, main.connections[(x * 6) + y],
-                                            x * x_spacing + 15, y * y_spacing + 25)
-                            for x, y in itertools.product(range(3), range(6))]
+        self.connection_entries = [ConnectionEntry(self, main.connections[(x * 6) + y],
+                                                   x * x_spacing + 15, y * y_spacing + 25)
+                                   for x, y in itertools.product(range(3), range(6))]
 
     def refresh(self):
-        for conn_entry in self.connections:
+        for conn_entry in self.connection_entries:
             conn_entry.refresh()
 
     def close(self):
