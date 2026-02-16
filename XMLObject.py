@@ -15,6 +15,8 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
     if xml_path:
         with open(xml_path, errors='replace', encoding='utf-8') as xml_file:
             xml_string = xml_file.read()
+        if not xml_string:
+            return []
 
     tags = []
     tag_stack = deque()
@@ -86,6 +88,7 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
         return None
 
     # Begin Parsing
+    i = None
     for i in (char_index for char_index, char in enumerate(xml_string) if char in ('<', '>')):
         if xml_string[i] == '<':
             if tag_start:
@@ -101,8 +104,6 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
         if tag_start is None:
             continue
         last_pos = i
-
-        # TODO: Handle string at end of XML
 
         try:
             data = xml_string[tag_start + 1:i]
@@ -188,6 +189,9 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
         tag_stack.append(XMLTag(name=stripped_data, attributes=attributes))
         attributes = {}
         tag_start = None
+
+    if i and (ending_str := xml_string[i + 1:]).strip():
+        tags.append(XMLTag(name=ending_str, is_string=True))
 
     if tag_stack:
         warnings.warn('Could not find pair for each tag', SyntaxWarning)
@@ -440,6 +444,3 @@ class XMLObject:
 
     def __bool__(self):
         return all(bool(tag) for tag in self.tags) if self.tags else False
-
-
-# print(XMLObject(xml_path='test.xml').get_lines(as_string=True))
