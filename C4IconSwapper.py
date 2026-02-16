@@ -641,6 +641,7 @@ class IPC:
             print('(IPC) Nothing to clean up')
 
 
+# TODO: Add ability to rename icons which are found in XML eg ON/OFF
 class C4IconSwapper(IPC):
     def __init__(self):
         if sys.platform != 'win32':
