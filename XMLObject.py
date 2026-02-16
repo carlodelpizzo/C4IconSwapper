@@ -33,7 +33,7 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
         nonlocal tag_start
         nonlocal string_tag
         if isinstance(new_tag, str):
-            if not string_tag:
+            if not string_tag.strip():
                 return
             new_tag = XMLTag(name=string_tag, is_string=True)
             string_tag = ''
@@ -91,7 +91,7 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
             if tag_start:
                 continue  # Continue if '<' found inside comment or attribute
             if not nested_comments and not nested_cdata:
-                string_tag = xml_string[last_pos + 1:i].strip()
+                string_tag = xml_string[last_pos + 1:i]
             tag_start = i
             continue
         if nested_comments:
@@ -117,10 +117,8 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
         # Handle CDATA tags
         if data.startswith('![CDATA['):
             if not data.endswith(']]'):
-                if not nested_cdata:
-                    nested_cdata += 1
                 continue
-            if data.count('<![CDATA[') + 1 != nested_cdata:
+            if data.count('<![CDATA[') != nested_cdata:
                 nested_cdata += 1
                 continue
             add_append_tag(string_tag)
@@ -267,6 +265,10 @@ class XMLTag:
             output.extend(child.descendants)
         return output
 
+    @property
+    def is_standard(self) -> bool:
+        return not (self.is_prolog or self.is_comment or self.is_CDATA or self.is_string)
+
     def get_value(self) -> str:
         return self.value
 
@@ -292,22 +294,18 @@ class XMLTag:
             self.elements.append(element)
         element.parent = self
 
-    def get_lines(self, indent='', use_esc_chars=False, as_string=False) -> list[str] | str:
+    def get_lines(self, indent='', use_esc_chars=False, as_string=False, after_str=False) -> list[str] | str:
         if not self.init_success or self.hide:
             return '' if as_string else []
+        s_indent = '' if after_str else indent
         if self.is_comment:
-            comment = f'{indent}<!--{self.name}-->'
+            comment = f'{s_indent}<!--{self.name}-->'
             return comment if as_string else [comment]
-        if self.is_CDATA:
-            output = f'{indent}{self.name}'
-            return output if as_string else [output]
-        if self.is_string:
-            output = f'{indent}{self.name}'
-            if use_esc_chars:
-                output = f'{indent}{re.sub(r"[<>&]", lambda m: char_escapes[m.group(0)], self.name)}'
+        if self.is_CDATA or self.is_string:
+            output = f'{s_indent}{self.name}'
             return output if as_string else [output]
         if self.is_prolog:
-            prolog = f'{indent}<?{self.name}?>'
+            prolog = f'{s_indent}<?{self.name}?>'
             return prolog if as_string else [prolog]
 
         if use_esc_chars:
@@ -321,37 +319,28 @@ class XMLTag:
         output = []
         if self.is_self_closing:
             if attributes:
-                output.append(f'{indent}<{self.name} {attributes} />')
+                output.append(f'{s_indent}<{self.name} {attributes} />')
             else:
-                output.append(f'{indent}<{self.name} />')
+                output.append(f'{s_indent}<{self.name} />')
             return ''.join(output) if as_string else output
         else:
-            output.append(f'{indent}<{self.name} {attributes}'.rstrip())
-            if not self.elements:
+            output.append(f'{s_indent}<{self.name} {attributes}'.rstrip())
+            if not self.elements or self.elements[0].is_string:
                 output[-1] += '>'
             else:
                 output[-1] += f'>\n'
-        for element in self.elements:
-            if isinstance(element, str):
-                if len(self.elements) == 1:
-                    if use_esc_chars:
-                        output.append(re.sub(r"[<>&]", lambda m: char_escapes[m.group(0)], element))
-                    else:
-                        output.append(element)
-                    continue
-                if element:
-                    if use_esc_chars:
-                        output.append(
-                            f'{indent}\t{re.sub(r"[<>&]", lambda m: char_escapes[m.group(0)], element)}\n')
-                    else:
-                        output.append(f'{indent}\t{element}\n')
+        for i, element in enumerate(self.elements):
+            if element.is_string:
+                output.extend(element.get_lines(use_esc_chars=use_esc_chars))
                 continue
-            if element.hide:
-                continue
-            output.extend(element.get_lines(indent=f'\t{indent}', use_esc_chars=use_esc_chars))
-            output[-1] += '\n'
+            aftr_str = False
+            if i != 0 and self.elements[i - 1].is_string:
+                aftr_str = True
+            output.extend(element.get_lines(indent=f'\t{indent}', use_esc_chars=use_esc_chars, after_str=aftr_str))
+            if i == len(self.elements) - 1 or not self.elements[i + 1].is_string:
+                output[-1] += '\n'
 
-        if not self.elements:
+        if not self.elements or self.elements[-1].is_string:
             output.append(f'</{self.name}>')
         else:
             output.append(f'{indent}</{self.name}>')
@@ -422,7 +411,7 @@ class XMLTag:
 class XMLObject:
     def __init__(self, xml_path: str | Path = None, xml_string=''):
         self.tags = parse_xml(xml_path=xml_path, xml_string=xml_string)
-        self.root = next((tag for tag in self.tags if not (tag.is_prolog or tag.is_comment or tag.is_CDATA)), None)
+        self.root = next((tag for tag in self.tags if tag.is_standard), None)
 
     def get_lines(self, use_esc_chars=False, as_string=False) -> list[str] | str:
         output = []
@@ -431,7 +420,7 @@ class XMLObject:
             return ''.join(output) if as_string else output
         for i, tag in enumerate(self.tags):
             output.extend(tag.get_lines(use_esc_chars=use_esc_chars))
-            if i != len(self.tags) - 1:
+            if i != len(self.tags) - 1 and not (tag.is_string or self.tags[i+1].is_string):
                 output[-1] += '\n'
         return ''.join(output) if as_string else output
 
@@ -448,4 +437,4 @@ class XMLObject:
         return None
 
     def __bool__(self):
-        return bool(self.tags)
+        return all(bool(tag) for tag in self.tags) if self.tags else False
