@@ -3186,6 +3186,7 @@ class C4zPanel:
 
     # TODO: Optimize this if possible; time sections; maybe make custom data structure in XMLObject
     def get_connections(self):
+        start_time = time.perf_counter()
         main = self.main
 
         # Reinitialize all connections
@@ -3224,6 +3225,9 @@ class C4zPanel:
 
         if main.connections_win:
             main.connections_win.refresh(hard=True)
+
+        end_time = time.perf_counter()
+        print(f'get_connections: {end_time - start_time:.6f} seconds')
 
     def right_click_menu(self, event):
         context_menu = Menu(self.main.root, tearoff=0)
