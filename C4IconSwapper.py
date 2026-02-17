@@ -641,6 +641,7 @@ class IPC:
             print('(IPC) Nothing to clean up')
 
 
+# TODO: Look for "X if X else Y" logic and change to "X or Y" ((\S+)\s+if\s+\1\s+else)
 # TODO: Add ability to rename icons which are found in XML eg ON/OFF
 class C4IconSwapper(IPC):
     def __init__(self):
@@ -762,7 +763,7 @@ class C4IconSwapper(IPC):
         self.driver_selected = False
         self.undo_history = deque(maxlen=100)
         self.thread_lock = threading.Lock()
-        self.pending_load_save = False
+        self.pending_load_save = False  # TODO: Change to threading.Event()
 
         # Creating blank image for panels
         with Image.open(assets_path / 'blank_img.png') as img:
@@ -1001,20 +1002,23 @@ class C4IconSwapper(IPC):
             return
         self.ask_to_save = True
 
+    # TODO: schedule for update after pending_load_save
     def toggle_use_original_xml(self, *_):
+        if self.pending_load_save:
+            print('TODO: schedule for update after pending_load_save')
+            return
         state = DISABLED if self.export_panel.use_orig_xml.get() else NORMAL
         self.export_panel.inc_driver_check['state'] = state
         if win := self.driver_info_win:
             win.update_entries()
         if win := self.connections_win:
-            for conn_entry in win.connection_entries:
-                conn_entry.refresh()
+            win.refresh(soft=True)
 
     def update_driver_version(self, *_):
-        # if not self.driver_version_new_var.get():
-        #     self.driver_version_new_var.set('1')
-        #     self.ask_to_save = True
         if not self.export_panel.inc_driver_version.get():
+            curr_ver = self.driver_version_var.get()
+            alt_ver = self.driver_version_new_var.get() or '1'
+            self.driver_version_new_var.set(curr_ver or alt_ver)
             return
         try:
             curr_ver = int(self.driver_version_var.get())
@@ -1056,6 +1060,7 @@ class C4IconSwapper(IPC):
             self.states[i].original_name = state_name
         return True
 
+    # TODO: figure out how to hand conn and states windows during pending_load_save
     def open_edit_win(self, main_win_var, win_type: str):
         if main_win_var:
             main_win_var.window.deiconify()
@@ -1735,7 +1740,7 @@ class C4Icon(Icon):
         self.display_icon = icons[0]
         super().__init__(path=self.display_icon.path)
         self.tk_icon_sm = None
-        self.name = self.display_icon.name if not name else name
+        self.name = name or self.display_icon.name
         self.icons = icons
         self.extra = extra
         self.bak = any(icn.bak_path for icn in icons)
@@ -1982,6 +1987,7 @@ class ConnectionsWin:
             ConnectionEntry(self, main.connections[i], self.widget_x, i * self.widget_y_offset + self.y_pad)
             for i in range(num_conns)
         ]
+        self.refresh(soft=True)
 
         scroll_h = (num_conns * self.widget_y_offset) + self.scroll_pad
         self.scrollable_frame.config(width=w, height=scroll_h)
@@ -2007,7 +2013,7 @@ class ConnectionsWin:
         if self.resize_after_call_id:
             self.resize_after_call_id = None
 
-    def refresh(self, hard=False):
+    def refresh(self, hard=False, soft=False):
         num_conns = len(self.main.connections)
         if hard:
             for conn_entry in self.connection_entries:
@@ -2016,9 +2022,10 @@ class ConnectionsWin:
                 ConnectionEntry(self, self.main.connections[i], self.widget_x, i * self.widget_y_offset + self.y_pad)
                 for i in range(num_conns)
             ]
-        else:
-            for conn_entry in self.connection_entries:
-                conn_entry.refresh()
+        for conn_entry in self.connection_entries:
+            conn_entry.refresh()
+        if soft:
+            return
 
         w = self.window.winfo_width()
         scroll_h = (num_conns * self.widget_y_offset) + self.scroll_pad
@@ -2988,7 +2995,7 @@ class C4zPanel:
                         main.original_conn_ids.add(int(id_tag.value))
 
         # Check Lua file for multi-state
-        if not c4is:
+        if not c4is:  # Because load_project handles these updates
             main.multi_state_driver = False
             main.edit.entryconfig(main.states_pos, state=DISABLED)
             if (lua_path := main.instance_temp / 'driver' / 'driver.lua').is_file():
@@ -3007,19 +3014,13 @@ class C4zPanel:
 
         # Update driver prev/next buttons
         visible_icons = len(self.icons) - (self.extra_icons if not self.show_extra_icons.get() else 0)
-        if visible_icons <= 1:
-            self.prev_icon_button['state'] = DISABLED
-            self.next_icon_button['state'] = DISABLED
-        else:
-            self.prev_icon_button['state'] = NORMAL
-            self.next_icon_button['state'] = NORMAL
+        prev_next_button_state = NORMAL if visible_icons > 1 else DISABLED
+        self.prev_icon_button['state'] = prev_next_button_state
+        self.next_icon_button['state'] = prev_next_button_state
         # Update replacement prev/next buttons
-        if main.replacement_panel.replacement_icon:
-            main.replacement_panel.replace_button['state'] = NORMAL
-            main.replacement_panel.replace_all_button['state'] = NORMAL
-        else:
-            main.replacement_panel.replace_button['state'] = DISABLED
-            main.replacement_panel.replace_all_button['state'] = DISABLED
+        prev_next_button_state = NORMAL if main.replacement_panel.replacement_icon else DISABLED
+        main.replacement_panel.replace_button['state'] = prev_next_button_state
+        main.replacement_panel.replace_all_button['state'] = prev_next_button_state
         # Update 'Restore All' button in driver panel
         done = False
         self.restore_all_button['state'] = DISABLED
@@ -3035,7 +3036,7 @@ class C4zPanel:
         self.update_icon()
 
         # Update connections panel
-        if not c4is:
+        if not c4is:  # Because load_project handles these updates
             self.get_connections()
             if main.connections_win:
                 main.connections_win.refresh(hard=True)
@@ -3183,6 +3184,7 @@ class C4zPanel:
         else:
             self.main.edit.entryconfig(self.main.unrestore_all_pos, state=DISABLED)
 
+    # TODO: Optimize this if possible; time sections; maybe make custom data structure in XMLObject
     def get_connections(self):
         main = self.main
 
@@ -3199,7 +3201,7 @@ class C4zPanel:
             if get_all_conn or tag_dict['classname'][0].value in valid_connections
         ]
 
-        # Update connection entries up to max number of connections
+        # Update connection entries
         for tag_dict in connections:
             new_conn = (Connection(main))
             new_conn.name_entry_var.set(tag_dict['connectionname'][0].value)
