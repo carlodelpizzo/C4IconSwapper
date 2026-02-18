@@ -23,6 +23,8 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
     tag_start = None
     string_tag = ''
     attributes = {}
+    c4_connection = None
+    c4_connection_dict = {}
     last_pos = -1
     nested_comments = 0
     nested_cdata = 0
@@ -175,6 +177,9 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
         # Handle closing tag; Pull off stack
         if tag_stack and data.startswith('/') and tag_stack[-1].name == stripped_data[1:]:
             add_append_tag(string_tag)
+            if stripped_data == '/connection' and len(c4_connection_dict) == 4:
+                if c4_connection_dict['id'].value.isdigit():
+                    c4_connection.connection_dict = c4_connection_dict.copy()
             if len(tag_stack) > 1:
                 tag_stack[-2].add_element(tag_stack.pop())
             else:
@@ -187,6 +192,19 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
         # Push tag on stack to wait for closing tag
         add_append_tag(string_tag)
         tag_stack.append(XMLTag(name=stripped_data, attributes=attributes))
+        if stripped_data == 'connection':
+            c4_connection_dict.clear()
+            c4_connection = tag_stack[-1]
+        elif c4_connection:
+            match stripped_data:
+                case 'id':
+                    c4_connection_dict['id'] = tag_stack[-1]
+                case 'connectionname':
+                    c4_connection_dict['connectionname'] = tag_stack[-1]
+                case 'type':
+                    c4_connection_dict['type'] = tag_stack[-1]
+                case 'classname':
+                    c4_connection_dict['classname'] = tag_stack[-1]
         attributes = {}
         tag_start = None
 
@@ -206,6 +224,7 @@ class XMLTag:
     attributes: dict[str, str]
     attr_q: dict[str, str]
     elements: list[XMLTag]
+    connection_dict: dict
     is_prolog: bool
     is_comment: bool
     is_CDATA: bool
@@ -213,9 +232,9 @@ class XMLTag:
     is_self_closing: bool
     hide: bool
 
-    def __init__(self, name: str = None, elements: list = None, attributes: dict = None, parent: XMLTag = None,
-                 xml_path: str | Path = None, xml_string: str = None, is_comment=False, is_self_closing=False,
-                 is_prolog=False, is_cdata=False, is_string=False, sub_tag=''):
+    def __init__(self, name: str = None, elements: list = None, attributes: dict = None, connection_dict: dict = None,
+                 parent: XMLTag = None, xml_path: str | Path = None, xml_string: str = None, is_comment=False,
+                 is_self_closing=False, is_prolog=False, is_cdata=False, is_string=False, sub_tag=''):
         self.init_success = False
         first_tag = None
         # Constructs an XMLTag object based on the first tag in data if XML path/data is passed in
@@ -243,6 +262,7 @@ class XMLTag:
             self.attributes = {} if not first_tag else first_tag.attributes.copy()
             self.attr_q = {} if not first_tag else first_tag.attr_q.copy()
         self.elements = (elements or []) if not first_tag else first_tag.elements
+        self.connection_dict = (connection_dict or {}) if not first_tag else first_tag.connection_dict
         self.is_prolog = is_prolog if not first_tag else first_tag.is_prolog
         self.is_comment = is_comment if not first_tag else first_tag.is_comment
         self.is_CDATA = is_cdata if not first_tag else first_tag.is_CDATA
