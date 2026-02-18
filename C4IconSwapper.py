@@ -3219,7 +3219,7 @@ class C4zPanel:
             if get_all_conn or tag.connection_dict['classname'].value in valid_connections
         ]
         main.taken_conn_ids = {conn.id: conn.tag for conn in main.connections}
-        main.taken_conn_ids |= {id_val: object()
+        main.taken_conn_ids |= {id_val: None
                                 for tag in main.driver_xml.get_tags('id') if tag.value.isdigit()
                                 if (id_val := int(tag.value)) not in main.taken_conn_ids}
 
