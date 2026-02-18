@@ -311,7 +311,7 @@ class XMLTag:
         if not value_set:
             self.elements.append(XMLTag(name=new_value, is_string=True, parent=self))
 
-    def add_element(self, element, index=None):
+    def add_element(self, element: XMLTag, index=None):
         if not isinstance(element, XMLTag):
             raise TypeError(f'Expected type: {XMLTag.__name__}, Received type: {type(element).__name__}')
         if index:
@@ -319,6 +319,11 @@ class XMLTag:
         else:
             self.elements.append(element)
         element.parent = self
+
+    def remove_element(self, element: XMLTag):
+        if element not in self.elements:
+            return
+        self.elements.pop(self.elements.index(element))
 
     def get_lines(self, indent='', use_esc_chars=False, as_string=False, after_str=False) -> list[str] | str:
         if not self.init_success or self.hide:
