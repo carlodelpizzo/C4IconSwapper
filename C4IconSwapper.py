@@ -1973,6 +1973,8 @@ class ConnectionsWin:
         self.window.geometry(f'{w}x{h}+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.bind('<Configure>', self.on_resize)
         self.resize_after_call_id = None
+        self.threaded_refresh = threading.Event()
+        self.threaded_refresh.set()
 
         self.canvas = Canvas(self.window, highlightthickness=0, borderwidth=0)
         self.scrollbar = Scrollbar(self.window, orient='vertical', command=self.canvas.yview)
@@ -2020,7 +2022,13 @@ class ConnectionsWin:
         if self.resize_after_call_id:
             self.resize_after_call_id = None
 
-    def refresh(self, hard=False):
+    def refresh(self, hard=False, threaded=False, _from_thread=False):
+        if threaded:  # TODO: see if this is a problem or even worth it
+            self.threaded_refresh.clear()
+            threading.Thread(target=self.refresh, kwargs={'hard': hard, '_from_thread': True}, daemon=True).start()
+            return
+        if not self.threaded_refresh.is_set() and not _from_thread:
+            return
         start = time.perf_counter()
         if hard:
             self.supress_trace = True
@@ -2033,9 +2041,10 @@ class ConnectionsWin:
                 ConnectionEntry(self, self.main.connections[i], self.widget_x, i * self.widget_y_offset + self.y_pad)
                 for i in range(len(self.main.connections))
             ]
-            self.update_scroll_frame()
+            self.update_scroll_frame()  # doing this after canvas config takes much longer, and it seems to work as is
             self.canvas.itemconfig(self.canvas_window_id, window=self.scrollable_frame)
             self.supress_trace = False
+            self.threaded_refresh.set()
 
             end = time.perf_counter()
             print(f'ConnectionsWin refresh (hard): {end - start:.6f} seconds')
@@ -2044,6 +2053,7 @@ class ConnectionsWin:
         for conn_entry in self.connection_entries:
             conn_entry.refresh()
         self.update_scroll_frame()
+        self.threaded_refresh.set()
 
         end = time.perf_counter()
         print(f'ConnectionsWin refresh (soft): {end - start:.6f} seconds')
@@ -2064,6 +2074,7 @@ class ConnectionsWin:
             self.scroll_bound = False
 
     def close(self):
+        self.threaded_refresh.wait()
         self.window.destroy()
         self.main.connections_win = None
 
@@ -3060,7 +3071,9 @@ class C4zPanel:
         if not c4is:  # Because load_project handles these updates
             self.get_connections()
             if main.connections_win:
-                main.connections_win.refresh(hard=True)
+                threaded = True
+                # threaded = True if len(main.connections) >= 128 else False
+                main.connections_win.refresh(hard=True, threaded=threaded)
             if main.states_win:
                 main.states_win.refresh()
         if self.sub_icon_win:
