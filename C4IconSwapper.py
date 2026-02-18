@@ -34,7 +34,7 @@ from XMLObject import XMLObject, XMLTag
 
 version = '2.0dev'  # TODO: Change before release; Update README
 
-label_font, light_entry_bg, dark_entry_bg = 'Arial', '#FFFFFF', '#282830'
+label_font, light_entry_bg, readonly_bg = 'Arial', '#FFFFFF', '#F0F0F0'
 re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9]')
 re_natural_sort = re.compile(r'(\d+)')
 valid_img_types = {'.bmp', '.gif', '.jpeg', '.jpg', '.png', '.tif', '.tiff', '.webp'}
@@ -370,7 +370,7 @@ class IPC:
                         for cid in self.client_dict.copy():
                             if not (self.global_temp / cid).is_dir():
                                 self.client_dict.pop(cid)
-                        print(f'(IPC) {self.client_dict if self.client_dict else "No Clients"}')
+                        print(f'(IPC) {self.client_dict or "No Clients"}')
                         self.reestablish_ids.clear()
                         self.reestablish_start = None
                         self.reestablish = False
@@ -640,8 +640,9 @@ class IPC:
             print('(IPC) Nothing to clean up')
 
 
-# TODO: Look for "X if X else Y" logic and change to "X or Y" ((\S+)\s+if\s+\1\s+else)
 # TODO: Add ability to rename icons which are found in XML eg ON/OFF
+# TODO: Created savestate json before each threaded function call in case of crash
+# TODO: Reevaluate when ask_to_save is set to True
 class C4IconSwapper(IPC):
     def __init__(self):
         if sys.platform != 'win32':
@@ -1011,7 +1012,7 @@ class C4IconSwapper(IPC):
         if win := self.driver_info_win:
             win.update_entries()
         if win := self.connections_win:
-            win.refresh(soft=True)
+            win.refresh()
 
     def update_driver_version(self, *_):
         if not self.export_panel.inc_driver_version.get():
@@ -1233,10 +1234,8 @@ class C4IconSwapper(IPC):
                     self.taken_conn_ids[conn_id] = self.connections[i]
                 self.connections[i].original = conn['original']
                 self.connections[i].delete = conn['delete']
-                self.connections[i].prior_txt = conn['prior_txt']
-                self.connections[i].prior_type = conn['prior_type']
                 self.connections[i].tag = conn['tag']
-                self.connections[i].type.set(conn['type'])
+                self.connections[i].type_var.set(conn['type'])
                 self.connections[i].name_entry_var.set(conn['name'])
                 self.connections[i].enabled = conn['state']
             if self.connections_win:
@@ -1995,7 +1994,7 @@ class ConnectionsWin:
             ConnectionEntry(self, main.connections[i], self.widget_x, i * self.widget_y_offset + self.y_pad)
             for i in range(num_conns)
         ]
-        scroll_h = (num_conns * self.widget_y_offset) + self.scroll_pad + 50  # TODO: Remove 50
+        scroll_h = (num_conns * self.widget_y_offset) + self.scroll_pad
         self.scrollable_frame.config(width=w, height=scroll_h)
         self.canvas.configure(scrollregion=(0, 0, w, scroll_h))
         self.canvas.pack(side='left', fill='both', expand=True)
@@ -2022,8 +2021,9 @@ class ConnectionsWin:
         if self.resize_after_call_id:
             self.resize_after_call_id = None
 
+    # TODO: Why is this running 3x faster now? Monitor resolution?
     def refresh(self, hard=False, threaded=False, _from_thread=False):
-        if threaded:  # TODO: see if this is a problem or even worth it
+        if threaded:
             self.threaded_refresh.clear()
             threading.Thread(target=self.refresh, kwargs={'hard': hard, '_from_thread': True}, daemon=True).start()
             return
@@ -2085,11 +2085,14 @@ class Connection:
         self.main = main
         self.id = cid
         self.original, self.enabled, self.delete = original, enabled, delete
-        self.prior_txt, self.prior_type = '', ''
         self.tag = tag or XMLTag(xml_string=connection_tag_generic)
         self.tag.hide = True
-        self.name_entry_var = StringVar(value=cname)
-        self.type = StringVar(value=ctype)
+        if not original:
+            self.name_entry_var = StringVar(value=cname)
+            self.type_var = StringVar(value=ctype)
+        else:
+            self.name = cname
+            self.type = ctype
 
     def update_id(self, *_):
         if self.original:
@@ -2100,7 +2103,7 @@ class Connection:
         if not self.enabled:
             self.id = -1
             return
-        new_type = self.type.get()
+        new_type = self.type_var.get()
         new_id = conn_id_type[new_type][0]
         while new_id in self.main.taken_conn_ids:
             new_id += 1
@@ -2119,31 +2122,43 @@ class ConnectionEntry:
         self.conn_object = conn_obj
         self.x, self.y = x_pos, y_pos
 
+        self.strike = None
+
         # Entry
-        self.name_entry_var = conn_obj.name_entry_var
-        self.name_entry_var.trace_add('write', self.name_update)
-        self.name_entry = Entry(self.frame, width=28, textvariable=self.name_entry_var)
-        self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+        if conn_obj.original:
+            self.name_entry = Entry(self.frame, width=28)
+            self.name_entry.insert(0, conn_obj.name)
+            self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+        else:
+            self.name_entry_var = conn_obj.name_entry_var
+            self.name_entry_var.trace_add('write', self.name_update)
+            self.name_entry = Entry(self.frame, width=28, textvariable=self.name_entry_var)
+            self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
 
         # Dropdown
-        self.type = conn_obj.type
-        # TODO: Replace original OptionMenus with Labels
-        self.type_menu = Label(self.frame, textvariable=self.type, relief='raised', padx=10, pady=5)
-        self.type_menu2 = OptionMenu(self.frame, self.type, *selectable_connections)
-        self.type_menu2.place(x=self.x + 210, y=self.y+35, anchor='w')
-        self.type_menu.place(x=self.x + 210, y=self.y, anchor='w')
-        self.type.trace_add('write', self.type_update)
+        if conn_obj.original:
+            self.type_menu = Label(self.frame, text=conn_obj.type, relief='raised', padx=7, pady=4)
+            self.type_menu.place(x=self.x + 212, y=self.y, anchor='w')
+        else:
+            self.type_var = conn_obj.type_var
+            self.type_menu = OptionMenu(self.frame, self.type_var, *selectable_connections)
+            self.type_menu.place(x=self.x + 210, y=self.y, anchor='w')
+            self.type_var.trace_add('write', self.type_update)
 
         # Button
         button_state = DISABLED if self.main.export_panel.use_orig_xml.get() else NORMAL
         if conn_obj.original:
             if conn_obj.delete and conn_obj.original:
+                self.strike = Frame(self.parent.scrollable_frame, bg='black', height=1)
+                self.strike.place(in_=self.name_entry, relx=0, rely=0.5, relwidth=0.999)
+                self.name_entry.config(readonlybackground='pink')
                 text = 'Keep'
                 width = 4
+                x_offset = -6
             else:
                 text = 'Del'
                 width = 3
-            x_offset = 0
+                x_offset = 0
         elif conn_obj.enabled:
             text = 'x'
             width = 1
@@ -2158,16 +2173,16 @@ class ConnectionEntry:
         self.action_button = Button(self.frame, text=text, width=width, command=self.action, takefocus=0)
         self.action_button.place(x=self.x + x_offset, y=self.y, anchor='w')
         self.action_button['state'] = button_state
-
+        self.type_menu['state'] = DISABLED if not conn_obj.enabled else button_state
         self.name_entry['state'] = 'readonly' if self.conn_object.original else button_state
         if not conn_obj.enabled:
-            self.type_menu['state'] = DISABLED
             if not conn_obj.original:
                 self.name_entry['state'] = DISABLED
 
     def refresh(self):
-        self.name_entry_var.set(self.conn_object.name_entry_var.get())
-        self.type.set(self.conn_object.type.get())
+        if not (original := self.conn_object.original):
+            self.name_entry_var.set(self.conn_object.name_entry_var.get())
+            self.type_var.set(self.conn_object.type_var.get())
         self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
         self.type_menu.place(x=self.x + 210, y=self.y, anchor='w')
         state = DISABLED if self.main.export_panel.use_orig_xml.get() else NORMAL
@@ -2176,12 +2191,9 @@ class ConnectionEntry:
             self.name_entry['state'] = state
         else:
             self.type_menu['state'] = DISABLED
-            if not self.conn_object.original:
-                self.name_entry['state'] = DISABLED
-            else:
-                self.name_entry['state'] = 'readonly'
+            self.name_entry['state'] = 'readonly' if original else DISABLED
 
-        if self.conn_object.original:
+        if original:
             if self.conn_object.delete:
                 self.action_button.config(text='Keep', width=4, state=state)  # type: ignore
                 self.action_button.place(x=self.x - 6, y=self.y, anchor='w')
@@ -2228,21 +2240,17 @@ class ConnectionEntry:
             case 'Del':
                 self.conn_object.delete = True
                 self.conn_object.tag.hide = True
-                self.conn_object.prior_txt = self.name_entry_var.get()
-                self.conn_object.prior_type = self.type.get()
-                self.type.set('RIP')
-                self.name_entry_var.set('TO BE DELETED')
-                self.name_entry['state'] = DISABLED
+                if not self.strike:
+                    self.strike = Frame(self.parent.scrollable_frame, bg='black', height=1)
+                self.strike.place(in_=self.name_entry, relx=0, rely=0.5, relwidth=0.999)
+                self.name_entry.config(readonlybackground='pink')
                 self.action_button.config(text='Keep', width=4)
                 self.action_button.place(x=self.x - 6)
             case 'Keep':
                 self.conn_object.delete = False
                 self.conn_object.tag.hide = False
-                self.name_entry_var.set(self.conn_object.prior_txt)
-                self.conn_object.prior_txt = ''
-                self.name_entry['state'] = 'readonly'
-                self.type.set(self.conn_object.prior_type)
-                self.conn_object.prior_type = ''
+                self.strike.place_forget()
+                self.name_entry.config(readonlybackground=readonly_bg)
                 self.action_button.config(text='Del', width=3)
                 self.action_button.place(x=self.x)
         self.main.ask_to_save = True
@@ -2721,7 +2729,7 @@ class C4zPanel:
             if main.restore_entry_after_id:
                 main.root.after_cancel(main.restore_entry_after_id)
                 main.restore_entry_after_id = None
-            self.file_entry_str.set(main.restore_entry_string if main.restore_entry_string else 'Select .c4z file...')
+            self.file_entry_str.set(main.restore_entry_string or 'Select .c4z file...')
             self.file_entry_field['state'] = 'readonly'
             main.restore_entry_string = ''
 
@@ -2915,10 +2923,10 @@ class C4zPanel:
                         proxy_binding_id_dict[proxybindingid] = tag_name
                     if sm_img_path := tag.attributes.get('small_image'):
                         rel_path = Path(sm_img_path)
-                        icon_groups[(tag_name if tag_name else 'Device Icon', tag.parent)].add(rel_path)
+                        icon_groups[(tag_name or 'Device Icon', tag.parent)].add(rel_path)
                     if lg_img_path := tag.attributes.get('large_image'):
                         rel_path = Path(lg_img_path)
-                        icon_groups[(tag_name if tag_name else 'Device Icon', tag.parent)].add(rel_path)
+                        icon_groups[(tag_name or 'Device Icon', tag.parent)].add(rel_path)
                 for tag in main.driver_xml.get_tags('Icon'):
                     if 'controller://' not in (tag_value := tag.value):
                         print(f'Could not parse Icon tag value in XML: {tag_value}')
@@ -2936,7 +2944,7 @@ class C4zPanel:
                         rel_path = Path('images', rel_path.split('images')[1].lstrip('/\\'))
                     else:
                         rel_path = Path(rel_path)
-                    icon_groups[(group_name if group_name else tag.parent.name, tag.parent)].add(rel_path)
+                    icon_groups[(group_name or tag.parent.name, tag.parent)].add(rel_path)
 
                 seen_groups = {}
                 duplicates = set()
@@ -3071,9 +3079,7 @@ class C4zPanel:
         if not c4is:  # Because load_project handles these updates
             self.get_connections()
             if main.connections_win:
-                threaded = True
-                # threaded = True if len(main.connections) >= 128 else False
-                main.connections_win.refresh(hard=True, threaded=threaded)
+                main.connections_win.refresh(hard=True, threaded=True)
             if main.states_win:
                 main.states_win.refresh()
         if self.sub_icon_win:
@@ -3861,7 +3867,7 @@ class ExportPanel:
             if conn.original:
                 continue
             conn.tag.get_tag('connectionname').set_value(conn.name_entry_var.get())
-            conn.tag.get_tag('classname').set_value(conn_type := conn.type.get())
+            conn.tag.get_tag('classname').set_value(conn_type := conn.type_var.get())
             if 'IN' in conn_type:
                 conn.tag.get_tag('consumer').set_value('True')
             else:
@@ -4017,9 +4023,8 @@ class C4IS:
                        for state in main.states]
 
         # Connection Panel
-        self.connections = [{'id': conn.id, 'original': conn.original, 'delete': conn.delete,
-                             'prior_txt': conn.prior_txt, 'prior_type': conn.prior_type, 'tag': conn.tag,
-                             'type': conn.type.get(), 'name': conn.name_entry_var.get(), 'state': conn.enabled}
+        self.connections = [{'id': conn.id, 'original': conn.original, 'delete': conn.delete, 'tag': conn.tag,
+                             'type': conn.type_var.get(), 'name': conn.name_entry_var.get(), 'state': conn.enabled}
                             for conn in main.connections]
 
         # Export Panel
