@@ -714,6 +714,7 @@ class C4IconSwapper(IPC):
         self.warnings = deque()
         self.exceptions = deque()
         self.handler_recall_id = None
+        self.alert_warnings = False
 
         self.running_as_exe = getattr(sys, 'frozen', False) or '__compiled__' in globals()
         self.debug_console = None
@@ -754,8 +755,6 @@ class C4IconSwapper(IPC):
         self.ask_to_save = False
         self.counter, self.easter_counter = 0, 0
         self.easter_call_after_id = None
-        self.restore_entry_after_id = None
-        self.restore_entry_string = ''
         self.img_bank_size = 4
         self.taken_conn_ids = {}
         self.connections = [Connection(self)]
@@ -928,13 +927,13 @@ class C4IconSwapper(IPC):
                 self.handler_recall_id = None
             self.handler_recall_id = self.root.after(50, self.exception_handler)  # type: ignore
             return
+        if self.warnings and not self.alert_warnings:
+            print(f'\n', '\n\n'.join(self.warnings), '\n', sep='')
+            self.warnings.clear()
         if not self.warnings and not self.exceptions:
             return
-        if len(self.warnings) == 1 and not self.exceptions:
-            self.exception_window(message_txt=self.warnings.pop())
-            return
-        elif len(self.exceptions) == 1 and not self.warnings:
-            self.exception_window(message_txt=self.exceptions.pop())
+        if len(self.warnings) + len(self.exceptions) == 1:
+            self.exception_window(message_txt=(self.warnings or self.exceptions).pop())
             return
 
         def get_label(count: int, text: str):
@@ -977,13 +976,6 @@ class C4IconSwapper(IPC):
         else:
             self.export_panel.driver_name_entry['background'] = 'pink'
         self.root.after(150, self.blink_driver_name_entry)  # type: ignore
-
-    def restore_entry_text(self, *_):
-        if not self.restore_entry_string:
-            return
-        self.c4z_panel.file_entry_str.set(self.restore_entry_string)
-        self.c4z_panel.file_entry_field['state'] = 'readonly'
-        self.restore_entry_string = ''
 
     def validate_man_and_creator(self, string_var: StringVar, entry: Entry):
         name_compare = re_valid_chars.sub('', name := string_var.get())
@@ -2725,14 +2717,6 @@ class C4zPanel:
         new_icon_dir = new_driver_path / 'www' / 'icons'
         new_images_dir = new_driver_path / 'www' / 'images'
 
-        if self.file_entry_str.get() == 'Invalid driver selected...':
-            if main.restore_entry_after_id:
-                main.root.after_cancel(main.restore_entry_after_id)
-                main.restore_entry_after_id = None
-            self.file_entry_str.set(main.restore_entry_string or 'Select .c4z file...')
-            self.file_entry_field['state'] = 'readonly'
-            main.restore_entry_string = ''
-
         # File select dialog
         if file_path is None:
             file_path = filedialog.askopenfilename(filetypes=[('Control4 Drivers', '*.c4z *.zip'),
@@ -2809,26 +2793,13 @@ class C4zPanel:
                     if matches_size(img_name):
                         img_name, r_label = (l_label or r_label), (r_label and img_name)
                     l_match, r_match = matches_size(l_label), matches_size(r_label)
-                    # TODO: Flatten logic
-                    if not (l_label and r_label) and l_match ^ r_match:
-                        sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
-                        icon_groups[img_name].add(sub_icon)
-                        all_sub_icons.add(sub_icon)
-                        continue
-                    elif l_label and r_label:
-                        if l_match and r_match:
-                            sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
-                            both_scheme.append(sub_icon)
-                            all_sub_icons.add(sub_icon)
-                            continue
-                        if l_match or r_match:
-                            img_name = f'{img_name}_{r_label}' if l_match else f'{l_label}_{img_name}'
-                        sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
-                        icon_groups[img_name].add(sub_icon)
-                        all_sub_icons.add(sub_icon)
-                        continue
+                    if l_label and r_label and (l_match ^ r_match):
+                        img_name = f'{img_name}_{r_label}' if l_match else f'{l_label}_{img_name}'
                     sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
-                    icon_groups[img_name].add(sub_icon)
+                    if l_match and r_match:
+                        both_scheme.append(sub_icon)
+                    else:
+                        icon_groups[img_name].add(sub_icon)
                     all_sub_icons.add(sub_icon)
 
                 # Handle icons which have numbers on both sides that match their size
@@ -2974,15 +2945,10 @@ class C4zPanel:
                 abort = True
 
         # Abort if no valid driver XML or no icons found
-        if abort:  # TODO: Popup dialog instead of changing textbox
+        if abort:
+            main.root.after(0, self.load_c4z_abort_dialog)  # type: ignore
             shutil.rmtree(new_driver_path, ignore_errors=True)
             main.driver_xml = driver_xml_bak
-            self.file_entry_field['state'] = NORMAL
-            if self.file_entry_str.get() not in ('Select .c4z file...', 'Invalid driver selected...'):
-                main.restore_entry_after_id = main.root.after(3000, main.restore_entry_text)  # type: ignore
-                main.restore_entry_string = self.file_entry_str.get()
-            self.file_entry_str.set('Invalid driver selected...')
-            self.file_entry_field['state'] = DISABLED
             return
 
         # Delete driver folder and replace with new driver
@@ -3258,6 +3224,22 @@ class C4zPanel:
         context_menu.entryconfig(0, state=menu_state)
         context_menu.tk_popup(event.x_root, event.y_root)
         context_menu.grab_release()
+
+    def load_c4z_abort_dialog(self):
+        def cancel():
+            abort_dialog.destroy()
+
+        abort_dialog = Toplevel(self.main.root)
+        abort_dialog.title('Failed to load driver')
+        abort_dialog.geometry(f'239x70+{self.main.root.winfo_rootx()}+{self.main.root.winfo_rooty()}')
+        abort_dialog.protocol('WM_DELETE_WINDOW', cancel)
+        abort_dialog.grab_set()
+        abort_dialog.focus()
+        abort_dialog.transient(self.main.root)
+        abort_dialog.resizable(False, False)
+
+        label = Label(abort_dialog, text='The driver failed to load for reasons')
+        label.place(relx=0.5, rely=0, y=5, anchor='n')
 
     def toggle_sub_icon_win(self, close=False):
         if close and self.sub_icon_win:
@@ -3901,14 +3883,13 @@ class ExportPanel:
                     conn.tag.add_element(XMLTag(xml_string='<audiosource>False</audiosource>'), index=-3)
                     conn.tag.add_element(XMLTag(xml_string='<videosource>False</videosource>'), index=-3)
 
-        # Backup XML file and write new XML
-        xml_path = main.instance_temp / 'driver' / 'driver.xml'
-        xml_path.replace(xml_path.with_suffix('.bak'))
-        with open(xml_path, 'w', errors='replace', encoding='utf-8') as out_file:
-            out_file.writelines(driver_xml.get_lines())
+            # Backup XML file and write new XML
+            xml_path = main.instance_temp / 'driver' / 'driver.xml'
+            xml_path.replace(xml_path.with_suffix('.bak'))
+            with open(xml_path, 'w', errors='replace', encoding='utf-8') as out_file:
+                out_file.writelines(driver_xml.get_lines())
 
-        # Removed the added XML tags from IR_OUT connections
-        if not self.use_orig_xml.get():
+            # Removed the added XML tags from IR_OUT connections
             for conn in main.connections:
                 if not conn.original and conn.type_var.get() == 'IR_OUT':
                     conn.tag.remove_element('facing')
