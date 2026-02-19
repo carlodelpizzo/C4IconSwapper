@@ -641,7 +641,7 @@ class IPC:
 
 
 # TODO: Add ability to rename icons which are found in XML eg ON/OFF
-# TODO: Created savestate json before each threaded function call in case of crash
+# TODO: Create savestate json for more inclusive undo history and robust app crash recovery
 # TODO: Reevaluate when ask_to_save is set to True
 class C4IconSwapper(IPC):
     def __init__(self):
@@ -750,7 +750,8 @@ class C4IconSwapper(IPC):
         self.driver_ver_orig = StringVar()
         self.driver_version_var = StringVar()
         self.driver_version_new_var = StringVar(value='1')
-        self.multi_state_driver, self.ask_to_save = False, False
+        self.multi_state_driver = False
+        self.ask_to_save = False
         self.counter, self.easter_counter = 0, 0
         self.easter_call_after_id = None
         self.restore_entry_after_id = None
@@ -1060,7 +1061,7 @@ class C4IconSwapper(IPC):
             self.states[i].original_name = state_name
         return True
 
-    # TODO: figure out how to hand conn and states windows during pending_load_save
+    # TODO: add waits for opening conn and states windows during pending_load_save
     def open_edit_win(self, main_win_var, win_type: str):
         if main_win_var:
             main_win_var.window.deiconify()
@@ -1928,8 +1929,8 @@ class DriverInfoWin:
         self.driver_ver_new_entry.bind('<FocusOut>', main.update_driver_version)
         main.driver_version_new_var.trace_add('write', main.validate_driver_ver)
 
-        driver_ver_orig_entry = Entry(self.window, width=6, textvariable=main.driver_ver_orig)
-        driver_ver_orig_entry.place(x=110, y=version_y + 45, anchor='nw')
+        driver_ver_orig_entry = Entry(self.window, width=15, justify='center', textvariable=main.driver_ver_orig)
+        driver_ver_orig_entry.place(relx=0.5, y=version_y + 45, anchor='n')
         driver_ver_orig_entry['state'] = DISABLED
 
         self.update_entries()
@@ -2021,7 +2022,6 @@ class ConnectionsWin:
         if self.resize_after_call_id:
             self.resize_after_call_id = None
 
-    # TODO: Why is this running 3x faster now? Monitor resolution?
     def refresh(self, hard=False, threaded=False, _from_thread=False):
         if threaded:
             self.threaded_refresh.clear()
@@ -2086,7 +2086,7 @@ class Connection:
         self.id = cid
         self.original, self.enabled, self.delete = original, enabled, delete
         self.tag = tag or XMLTag(xml_string=connection_tag_generic)
-        self.tag.hide = True
+        self.tag.hide = True if not original else False
         if not original:
             self.name_entry_var = StringVar(value=cname)
             self.type_var = StringVar(value=ctype)
@@ -2097,7 +2097,7 @@ class Connection:
     def update_id(self, *_):
         if self.original:
             return
-        self.main.ask_to_save = True
+        # Removes self from dict in case a lower id has opened up so that ids are used in ascending order
         if (conn_obj_in_dict := self.main.taken_conn_ids.get(self.id)) and self is conn_obj_in_dict:
             self.main.taken_conn_ids.pop(self.id)
         if not self.enabled:
@@ -2214,6 +2214,7 @@ class ConnectionEntry:
             case 'Add':
                 self.conn_object.enabled = True
                 self.conn_object.tag.hide = False
+                self.conn_object.update_id()
                 self.name_entry['state'] = NORMAL
                 self.type_menu['state'] = NORMAL
                 self.action_button.config(text='x', width=1)
@@ -2229,9 +2230,8 @@ class ConnectionEntry:
                 self.parent.connection_entries.pop(i := self.parent.connection_entries.index(self))
                 self.main.connections.pop(i)
                 self.main.driver_xml.get_tag('connections').remove_element(self.conn_object.tag)
-                if conn_obj_in_dict := self.main.taken_conn_ids.get(self.conn_object.id):
-                    if self.conn_object is conn_obj_in_dict:
-                        self.main.taken_conn_ids.pop(self.conn_object.id)
+                if (in_dict := self.main.taken_conn_ids.get(self.conn_object.id)) and self.conn_object is in_dict:
+                    self.main.taken_conn_ids.pop(self.conn_object.id)
                 self.destroy()
                 for conn_entry in self.parent.connection_entries[i:]:
                     conn_entry.y -= self.parent.widget_y_offset
@@ -2802,24 +2802,27 @@ class C4zPanel:
                     l_label, img_name, r_label = img_info[0], img_info[1], img_info[2]
                     if not img_name:
                         img_name = path.stem
-                    # If XOR left/right size labels exist
-                    if bool(l_label) ^ bool(r_label):
-                        if (l_label and int(l_label) == actual_size) or int(r_label) == actual_size:
-                            sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
-                            icon_groups[img_name].add(sub_icon)
-                            all_sub_icons.add(sub_icon)
-                            continue
+
+                    def matches_size(val):
+                        return val and val.isdigit() and int(val) == actual_size
+                    # Assume if name matches size that path.stem is formatted: #name-only-digits#_#size#
+                    if matches_size(img_name):
+                        img_name, r_label = (l_label or r_label), (r_label and img_name)
+                    l_match, r_match = matches_size(l_label), matches_size(r_label)
+                    # TODO: Flatten logic
+                    if not (l_label and r_label) and l_match ^ r_match:
+                        sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
+                        icon_groups[img_name].add(sub_icon)
+                        all_sub_icons.add(sub_icon)
+                        continue
                     elif l_label and r_label:
-                        r_size = int(r_label)
-                        if l_label == r_label and r_size == actual_size:
+                        if l_match and r_match:
                             sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
                             both_scheme.append(sub_icon)
                             all_sub_icons.add(sub_icon)
                             continue
-                        elif r_size == actual_size:
-                            img_name = f'{l_label}_{img_name}'
-                        elif int(l_label) == actual_size:
-                            img_name = f'{img_name}_{r_label}'
+                        if l_match or r_match:
+                            img_name = f'{img_name}_{r_label}' if l_match else f'{l_label}_{img_name}'
                         sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
                         icon_groups[img_name].add(sub_icon)
                         all_sub_icons.add(sub_icon)
@@ -3685,6 +3688,9 @@ class ExportPanel:
         self.inc_driver_check.place(x=63 + self.x, y=170 + self.y, anchor='w')
 
     def quick_export(self):
+        if self.main.pending_load_save:
+            print('TODO: schedule for update after pending_load_save')
+            return
         # Check for empty driver info variables
         if self.missing_driver_info_check():
             return
@@ -3719,8 +3725,10 @@ class ExportPanel:
             no_button.grid(row=2, column=1, sticky='w', padx=5)
         self.do_export(quick_export=file_path, overwrite_dialog=overwrite_dialog)
 
-    # TODO: Implement use original XML option
     def do_export(self, quick_export=None, overwrite_dialog=None):
+        if self.main.pending_load_save:
+            print('TODO: schedule for update after pending_load_save')
+            return
         # Wait for confirm overwrite dialog
         if overwrite_dialog and isinstance(overwrite_dialog, Toplevel):
             self.main.root.wait_window(overwrite_dialog)
@@ -3744,161 +3752,168 @@ class ExportPanel:
         if self.missing_driver_info_check():
             return
 
-        # Multi-state related checks
-        if main.multi_state_driver:
-            if main.states_win:
-                main.states_win.refresh()
-            # Check State Validity
-            invalid_states = False
-            single_invalid_state = False
-            for state in main.states:
-                if state.bg_color in ('pink', 'cyan'):
-                    self.abort = True
-                    invalid_states = True
-                    if not single_invalid_state:
-                        single_invalid_state = True
-                        continue
-                    single_invalid_state = False
-                    break
-            if invalid_states:
-                invalid_states_dialog = Toplevel(main.root)
-                if single_invalid_state:
-                    invalid_states_dialog.title('Invalid State Found')
-                    label_text = 'Cannot Export: Invalid state label'
-                else:
-                    invalid_states_dialog.title('Invalid States Found')
-                    label_text = 'Cannot Export: Invalid state labels'
-                invalid_states_dialog.geometry(f'239x70+{main.root.winfo_rootx() + self.x}+{main.root.winfo_rooty()}')
-                invalid_states_dialog.grab_set()
-                invalid_states_dialog.focus()
-                invalid_states_dialog.transient(main.root)
-                invalid_states_dialog.resizable(False, False)
-                confirm_label = Label(invalid_states_dialog, text=label_text, justify='center')
-                confirm_label.pack()
-                exit_button = Button(invalid_states_dialog, text='Cancel', width='10',
-                                     command=invalid_states_dialog.destroy, justify='center')
-                exit_button.pack(pady=10)
-            if self.abort:
-                self.abort = False
-                return
-
-            # Update state names in Lua file
-            state_name_changes = {}
-            if (lua_path := main.instance_temp / 'driver' / 'driver.lua').is_file():
-                for state in main.states:
-                    if state.original_name != state.name:
-                        state_name_changes[state.original_name] = state.name
-
-                # Read Lua file
-                modified_lua_lines = []
-                with open(lua_path, errors='replace', encoding='utf-8') as driver_lua_file:
-                    driver_lua_lines = driver_lua_file.readlines()
-                for line in driver_lua_lines:
-                    new_line = line
-                    for orig_name in state_name_changes:
-                        orig_lower = orig_name.lower()
-                        new = state_name_changes[orig_name]
-                        new_lower = new.lower()
-                        if f'{orig_name} ' in line or f'{orig_lower} ' in line:
-                            new_line = new_line.replace(f'{orig_name} ', f'{new} ')
-                            new_line = new_line.replace(f'{orig_lower} ', f'{new_lower} ')
-                        elif f"{orig_name}'" in line or f"{orig_lower}'" in line:
-                            new_line = new_line.replace(f"{orig_name}'", f"{new}'")
-                            new_line = new_line.replace(f"{orig_lower}'", f"{new_lower}'")
-                        elif f'{orig_name}"' in line or f'{orig_lower}"' in line:
-                            new_line = new_line.replace(f'{orig_name}"', f'{new}"')
-                            new_line = new_line.replace(f'{orig_lower}"', f'{new_lower}"')
-                        elif f'{orig_name}=' in line or f'{orig_lower}=' in line:
-                            new_line = new_line.replace(f'{orig_name}=', f'{new}=')
-                            new_line = new_line.replace(f'{orig_lower}=', f'{new_lower}=')
-                    modified_lua_lines.append(new_line)
-                # Backup Lua file and write modified version
-                lua_path.replace(lua_path.with_suffix('.bak'))
-                with open(lua_path, 'w', errors='replace', encoding='utf-8') as driver_lua_file:
-                    driver_lua_file.writelines(modified_lua_lines)
-
-            # Do multi-state related changes in XML
-            if state_name_changes:
-                for orig_name in state_name_changes:
-                    orig_lower = orig_name.lower()
-                    new_name = state_name_changes[orig_name]
-                    new_lower = new_name.lower()
-                    for item_tag in driver_xml.get_tags('item'):
-                        if orig_name == item_tag.value:
-                            item_tag.set_value(new_name)
-                            break
-                        if orig_lower == item_tag.value:
-                            item_tag.set_value(new_lower)
-                            break
-                    for name_tag in driver_xml.get_tags('name'):
-                        if orig_name == name_tag.value or name_tag.value.endswith(orig_name):
-                            name_tag.set_value(name_tag.value.replace(orig_name, new_name))
-                            break
-                        if orig_lower == name_tag.value or name_tag.value.endswith(orig_lower):
-                            name_tag.set_value(name_tag.value.replace(orig_lower, new_lower))
-                            break
-                    for description_tag in driver_xml.get_tags('description'):
-                        if f'{orig_name} ' in description_tag.value:
-                            description_tag.set_value(description_tag.value.replace(orig_name, new_name))
-                            break
-                        if f'{orig_lower} ' in description_tag.value:
-                            description_tag.set_value(description_tag.value.replace(orig_lower, new_lower))
-                            break
-                    for state_tag in driver_xml.get_tags('state'):
-                        if state_tag.attributes['id']:
-                            if state_tag.attributes['id'] == orig_name:
-                                state_tag.attributes['id'] = new_name
-                                break
-                            if state_tag.attributes['id'] == orig_lower:
-                                state_tag.attributes['id'] = new_lower
-                                break
-
-        # Confirm all connections have non-conflicting ids
-        for conn in main.connections:
-            conn.update_id()
-
         # Backup driver files
         driver_bak_folder = main.instance_temp / 'driver_bak'
         shutil.rmtree(driver_bak_folder, ignore_errors=True)
         shutil.copytree(main.instance_temp / 'driver', driver_bak_folder)
 
-        # Update connections XML data
-        for conn in main.connections:
-            if conn.original:
-                continue
-            conn.tag.get_tag('connectionname').set_value(conn.name_entry_var.get())
-            conn.tag.get_tag('classname').set_value(conn_type := conn.type_var.get())
-            if 'IN' in conn_type:
-                conn.tag.get_tag('consumer').set_value('True')
-            else:
-                conn.tag.get_tag('consumer').set_value('False')
-            if conn_type == 'IR_OUT':
-                conn.tag.add_element(XMLTag(xml_string='<facing>6</facing>'), index=2)
-                conn.tag.add_element(XMLTag(xml_string='<audiosource>False</audiosource>'), index=-3)
-                conn.tag.add_element(XMLTag(xml_string='<videosource>False</videosource>'), index=-3)
+        # Update XML with user data
+        if not self.use_orig_xml.get():
+            # Multi-state related checks
+            if main.multi_state_driver:
+                if main.states_win:
+                    main.states_win.refresh()
+                # Check State Validity
+                invalid_states = False
+                single_invalid_state = False
+                for state in main.states:
+                    if state.bg_color in ('pink', 'cyan'):
+                        self.abort = True
+                        invalid_states = True
+                        if not single_invalid_state:
+                            single_invalid_state = True
+                            continue
+                        single_invalid_state = False
+                        break
+                if invalid_states:
+                    invalid_states_dialog = Toplevel(main.root)
+                    if single_invalid_state:
+                        invalid_states_dialog.title('Invalid State Found')
+                        label_text = 'Cannot Export: Invalid state label'
+                    else:
+                        invalid_states_dialog.title('Invalid States Found')
+                        label_text = 'Cannot Export: Invalid state labels'
+                    invalid_states_dialog.geometry(
+                        f'239x70+{main.root.winfo_rootx() + self.x}+{main.root.winfo_rooty()}')
+                    invalid_states_dialog.grab_set()
+                    invalid_states_dialog.focus()
+                    invalid_states_dialog.transient(main.root)
+                    invalid_states_dialog.resizable(False, False)
+                    confirm_label = Label(invalid_states_dialog, text=label_text, justify='center')
+                    confirm_label.pack()
+                    exit_button = Button(invalid_states_dialog, text='Cancel', width='10',
+                                         command=invalid_states_dialog.destroy, justify='center')
+                    exit_button.pack(pady=10)
+                if self.abort:
+                    self.abort = False
+                    return
 
-        # Update XML with new driver name
-        driver_xml.get_tag('name').set_value(driver_name)
-        modified_datestamp = str(datetime.now().strftime('%m/%d/%Y %H:%M'))
-        driver_xml.get_tag('version').set_value(new_ver := main.driver_version_new_var.get())
-        main.driver_version_var.set(new_ver)
-        driver_xml.get_tag('modified').set_value(modified_datestamp)
-        driver_xml.get_tag('creator').set_value(main.driver_creator_new_var.get())
-        driver_xml.get_tag('manufacturer').set_value(main.driver_manufac_new_var.get())
-        for attribute in driver_xml.get_tag('proxy').attributes:
-            if attribute[0] == 'name':
-                attribute[1] = driver_name
-        for icon_tag in driver_xml.get_tags('Icon'):
-            # Not OS specific; related to controller directories
-            if result := re.search('driver/(.*)/icons', icon_tag.value):
-                result = result[1]
-                icon_tag.set_value(icon_tag.value.replace(result, driver_name))
+                # Update state names in Lua file
+                state_name_changes = {}
+                if (lua_path := main.instance_temp / 'driver' / 'driver.lua').is_file():
+                    for state in main.states:
+                        if state.original_name != state.name:
+                            state_name_changes[state.original_name] = state.name
+
+                    # Read Lua file
+                    modified_lua_lines = []
+                    with open(lua_path, errors='replace', encoding='utf-8') as driver_lua_file:
+                        driver_lua_lines = driver_lua_file.readlines()
+                    for line in driver_lua_lines:
+                        new_line = line
+                        for orig_name in state_name_changes:
+                            orig_lower = orig_name.lower()
+                            new = state_name_changes[orig_name]
+                            new_lower = new.lower()
+                            if f'{orig_name} ' in line or f'{orig_lower} ' in line:
+                                new_line = new_line.replace(f'{orig_name} ', f'{new} ')
+                                new_line = new_line.replace(f'{orig_lower} ', f'{new_lower} ')
+                            elif f"{orig_name}'" in line or f"{orig_lower}'" in line:
+                                new_line = new_line.replace(f"{orig_name}'", f"{new}'")
+                                new_line = new_line.replace(f"{orig_lower}'", f"{new_lower}'")
+                            elif f'{orig_name}"' in line or f'{orig_lower}"' in line:
+                                new_line = new_line.replace(f'{orig_name}"', f'{new}"')
+                                new_line = new_line.replace(f'{orig_lower}"', f'{new_lower}"')
+                            elif f'{orig_name}=' in line or f'{orig_lower}=' in line:
+                                new_line = new_line.replace(f'{orig_name}=', f'{new}=')
+                                new_line = new_line.replace(f'{orig_lower}=', f'{new_lower}=')
+                        modified_lua_lines.append(new_line)
+                    # Backup Lua file and write modified version
+                    lua_path.replace(lua_path.with_suffix('.bak'))
+                    with open(lua_path, 'w', errors='replace', encoding='utf-8') as driver_lua_file:
+                        driver_lua_file.writelines(modified_lua_lines)
+
+                # Do multi-state related changes in XML
+                if state_name_changes:
+                    for orig_name in state_name_changes:
+                        orig_lower = orig_name.lower()
+                        new_name = state_name_changes[orig_name]
+                        new_lower = new_name.lower()
+                        for item_tag in driver_xml.get_tags('item'):
+                            if orig_name == item_tag.value:
+                                item_tag.set_value(new_name)
+                                break
+                            if orig_lower == item_tag.value:
+                                item_tag.set_value(new_lower)
+                                break
+                        for name_tag in driver_xml.get_tags('name'):
+                            if orig_name == name_tag.value or name_tag.value.endswith(orig_name):
+                                name_tag.set_value(name_tag.value.replace(orig_name, new_name))
+                                break
+                            if orig_lower == name_tag.value or name_tag.value.endswith(orig_lower):
+                                name_tag.set_value(name_tag.value.replace(orig_lower, new_lower))
+                                break
+                        for description_tag in driver_xml.get_tags('description'):
+                            if f'{orig_name} ' in description_tag.value:
+                                description_tag.set_value(description_tag.value.replace(orig_name, new_name))
+                                break
+                            if f'{orig_lower} ' in description_tag.value:
+                                description_tag.set_value(description_tag.value.replace(orig_lower, new_lower))
+                                break
+                        for state_tag in driver_xml.get_tags('state'):
+                            if state_tag.attributes['id']:
+                                if state_tag.attributes['id'] == orig_name:
+                                    state_tag.attributes['id'] = new_name
+                                    break
+                                if state_tag.attributes['id'] == orig_lower:
+                                    state_tag.attributes['id'] = new_lower
+                                    break
+
+            # XML Changes
+            driver_xml.get_tag('name').set_value(driver_name)
+            modified_datestamp = str(datetime.now().strftime('%m/%d/%Y %H:%M'))
+            driver_xml.get_tag('version').set_value(new_ver := main.driver_version_new_var.get())
+            main.driver_version_var.set(new_ver)
+            driver_xml.get_tag('modified').set_value(modified_datestamp)
+            driver_xml.get_tag('creator').set_value(main.driver_creator_new_var.get())
+            driver_xml.get_tag('manufacturer').set_value(main.driver_manufac_new_var.get())
+            for attribute in driver_xml.get_tag('proxy').attributes:
+                if attribute[0] == 'name':
+                    attribute[1] = driver_name
+            for icon_tag in driver_xml.get_tags('Icon'):
+                # Not OS specific; related to controller directories
+                if result := re.search('driver/(.*)/icons', icon_tag.value):
+                    result = result[1]
+                    icon_tag.set_value(icon_tag.value.replace(result, driver_name))
+
+            # Update connections XML data
+            for conn in main.connections:
+                if conn.original:
+                    continue
+                conn.tag.get_tag('connectionname').set_value(conn.name_entry_var.get())
+                conn.tag.get_tag('classname').set_value(conn_type := conn.type_var.get())
+                if 'IN' in conn_type:
+                    conn.tag.get_tag('consumer').set_value('True')
+                else:
+                    conn.tag.get_tag('consumer').set_value('False')
+                if conn_type == 'IR_OUT':
+                    conn.tag.add_element(XMLTag(xml_string='<facing>6</facing>'), index=2)
+                    conn.tag.add_element(XMLTag(xml_string='<audiosource>False</audiosource>'), index=-3)
+                    conn.tag.add_element(XMLTag(xml_string='<videosource>False</videosource>'), index=-3)
 
         # Backup XML file and write new XML
         xml_path = main.instance_temp / 'driver' / 'driver.xml'
         xml_path.replace(xml_path.with_suffix('.bak'))
         with open(xml_path, 'w', errors='replace', encoding='utf-8') as out_file:
             out_file.writelines(driver_xml.get_lines())
+
+        # Removed the added XML tags from IR_OUT connections
+        if not self.use_orig_xml.get():
+            for conn in main.connections:
+                if not conn.original and conn.type_var.get() == 'IR_OUT':
+                    conn.tag.remove_element('facing')
+                    conn.tag.remove_element('audiosource')
+                    conn.tag.remove_element('videosource')
 
         # Make icon changes
         bak_folder = main.instance_temp / 'bak_files'
@@ -3956,7 +3971,7 @@ class ExportPanel:
         zip_path.replace(out_file_path)
 
         # Increment driver version if applicable
-        if self.inc_driver_version.get():
+        if self.inc_driver_version.get() and not self.use_orig_xml.get():
             main.driver_version_new_var.set(str(int(main.driver_version_new_var.get()) + 1))
 
         # Restore original driver folder
