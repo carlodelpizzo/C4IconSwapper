@@ -269,6 +269,7 @@ class XMLTag:
         self.is_string = is_string if not first_tag else first_tag.is_string
         self.is_self_closing = is_self_closing if not first_tag else first_tag.is_self_closing
         self.hide = False if not first_tag else first_tag.hide
+        self.restore_point = {}
         self.init_success = True
 
     @property
@@ -320,7 +321,13 @@ class XMLTag:
             self.elements.append(element)
         element.parent = self
 
-    def remove_element(self, element: XMLTag):
+    def remove_element(self, element: XMLTag | str):
+        if isinstance(element, str):
+            for i, tag in enumerate(self.elements):
+                if tag.name == element:
+                    self.elements.pop(i)
+                    return
+            return
         if element not in self.elements:
             return
         self.elements.pop(self.elements.index(element))
@@ -361,6 +368,8 @@ class XMLTag:
             else:
                 output[-1] += f'>\n'
         for i, element in enumerate(self.elements):
+            if element.hide:
+                continue
             if element.is_string:
                 output.extend(element.get_lines(use_esc_chars=use_esc_chars))
                 continue
@@ -433,6 +442,33 @@ class XMLTag:
         if self.parent.name == parent_name:
             return self.parent
         return self.parent.get_parent(parent_name)
+
+    def set_restore_point(self):
+        self.restore_point = {
+            'name': self.name,
+            'parent': self.parent,
+            'elements': self.elements.copy(),
+            'connection_dict': self.connection_dict.copy(),
+            'is_prolog': self.is_prolog,
+            'is_comment': self.is_comment,
+            'is_CDATA': self.is_CDATA,
+            'is_string': self.is_string,
+            'is_self_closing': self.is_self_closing,
+            'hide': self.hide
+        }
+
+    def restore(self):
+        self.name = self.restore_point['name']
+        self.parent = self.restore_point['parent']
+        self.elements = self.restore_point['elements']
+        self.connection_dict = self.restore_point['connection_dict']
+        self.is_prolog = self.restore_point['is_prolog']
+        self.is_comment = self.restore_point['is_comment']
+        self.is_CDATA = self.restore_point['is_CDATA']
+        self.is_string = self.restore_point['is_string']
+        self.is_self_closing = self.restore_point['is_self_closing']
+        self.hide = self.restore_point['hide']
+        self.restore_point.clear()
 
     def __bool__(self):
         return self.init_success
