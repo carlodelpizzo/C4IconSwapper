@@ -763,7 +763,7 @@ class C4IconSwapper(IPC):
         self.driver_selected = False
         self.undo_history = deque(maxlen=100)
         self.thread_lock = threading.Lock()
-        self.pending_load_save = False  # TODO: Change to threading.Event()
+        self.pending_load_save = BooleanVar(value=False)
 
         # Creating blank image for panels
         with Image.open(assets_path / 'blank_img.png') as img:
@@ -997,7 +997,7 @@ class C4IconSwapper(IPC):
 
     # TODO: schedule for update after pending_load_save
     def toggle_use_original_xml(self, *_):
-        if self.pending_load_save:
+        if self.pending_load_save.get():
             print('TODO: schedule for update after pending_load_save')
             return
         state = DISABLED if self.export_panel.use_orig_xml.get() else NORMAL
@@ -1053,7 +1053,7 @@ class C4IconSwapper(IPC):
             self.states[i].original_name = state_name
         return True
 
-    # TODO: add waits for opening conn and states windows during pending_load_save
+    # TODO: evaluate the wait behaviour when opening windows during pending_load_save
     def open_edit_win(self, main_win_var, win_type: str):
         if main_win_var:
             main_win_var.window.deiconify()
@@ -1061,10 +1061,22 @@ class C4IconSwapper(IPC):
             return
         match win_type:
             case 'conn':
+                if self.pending_load_save.get():
+                    self.root.wait_variable(self.pending_load_save)
+                    self.root.after(0, lambda: self.open_edit_win(self.connections_win, win_type))  # type: ignore
+                    return
                 self.connections_win = ConnectionsWin(self)
             case 'driver':
+                if self.pending_load_save.get():
+                    self.root.wait_variable(self.pending_load_save)
+                    self.root.after(0, lambda: self.open_edit_win(self.driver_info_win, win_type))  # type: ignore
+                    return
                 self.driver_info_win = DriverInfoWin(self)
             case 'states':
+                if self.pending_load_save.get():
+                    self.root.wait_variable(self.pending_load_save)
+                    self.root.after(0, lambda: self.open_edit_win(self.states_win, win_type))  # type: ignore
+                    return
                 self.states_win = StatesWin(self)
             case 'settings':
                 self.settings_win = SettingsWin(self)
@@ -1072,7 +1084,7 @@ class C4IconSwapper(IPC):
     def save_project(self, *_, out_file_str='', scheduled=False):
         if scheduled:
             self.replacement_panel.threading_event.wait()
-        elif self.pending_load_save:
+        elif self.pending_load_save.get():
             return
 
         if not out_file_str:
@@ -1085,7 +1097,7 @@ class C4IconSwapper(IPC):
 
         if not self.replacement_panel.threading_event.is_set():
             with self.thread_lock:
-                self.pending_load_save = True
+                self.pending_load_save.set(True)
             threading.Thread(target=self.save_project,
                              kwargs={'out_file_str': out_file_str, 'scheduled': True}, daemon=True).start()
             return
@@ -1093,13 +1105,13 @@ class C4IconSwapper(IPC):
         with open(out_file_str, 'wb') as output:
             pickle.dump(C4IS(self), output)  # type: ignore
         self.ask_to_save = False
-        self.pending_load_save = False
+        self.pending_load_save.set(False)
 
     # NOTE: Merging projects does not prevent duplicate replacement images
     def load_project(self, *_, path_str='', scheduled=False, merge_project=None):
         if scheduled:
             self.replacement_panel.threading_event.wait()
-        elif self.pending_load_save:
+        elif self.pending_load_save.get():
             return
 
         if not path_str:
@@ -1171,7 +1183,7 @@ class C4IconSwapper(IPC):
 
         # If images are currently being processed by replacement panel, start new thread waiting for it to finish
         if not self.replacement_panel.threading_event.is_set():
-            self.pending_load_save = True
+            self.pending_load_save.set(True)
             threading.Thread(target=self.load_project,
                              kwargs={'path_str': path_str, 'scheduled': True, 'merge_project': merge_project},
                              daemon=True).start()
@@ -1292,7 +1304,7 @@ class C4IconSwapper(IPC):
             restore_label_img()
 
         self.ask_to_save = False if not merge_project else True
-        self.pending_load_save = False
+        self.pending_load_save.set(False)
 
     def do_recovery(self, recover_path: Path):
         if (driver_folder := recover_path / 'driver').is_dir():
@@ -1931,13 +1943,18 @@ class DriverInfoWin:
     # noinspection PyTypeChecker
     def update_entries(self):
         main = self.main
-        entry_state = DISABLED if (val := main.export_panel.use_orig_xml.get()) else NORMAL
+        entry_state = DISABLED if (use_orig := main.export_panel.use_orig_xml.get()) else NORMAL
         self.driver_man_new_entry.config(
-            textvariable=(main.driver_manufac_var if val else main.driver_manufac_new_var), state=entry_state)
+            textvariable=(main.driver_manufac_var if use_orig else main.driver_manufac_new_var), state=entry_state)
         self.driver_creator_new_entry.config(
-            textvariable=(main.driver_creator_var if val else main.driver_creator_new_var), state=entry_state)
-        self.driver_ver_new_entry.config(textvariable=(main.driver_ver_orig if val else main.driver_version_new_var),
-                                         state=entry_state)
+            textvariable=(main.driver_creator_var if use_orig else main.driver_creator_new_var), state=entry_state)
+        self.driver_ver_new_entry.config(
+            textvariable=(main.driver_ver_orig if use_orig else main.driver_version_new_var), state=entry_state)
+        if not main.driver_xml:
+            main.driver_manufac_var.set('')
+            main.driver_creator_var.set('')
+            main.driver_version_var.set('')
+            main.driver_ver_orig.set('')
 
     def close(self):
         self.main.validate_man_and_creator(string_var=self.main.driver_manufac_new_var, entry=self.driver_man_new_entry)
@@ -2665,7 +2682,7 @@ class C4zPanel:
         self.show_extra_icons_check.config(state='disabled')
 
     def load_gen_driver(self, multi=False):
-        if self.main.pending_load_save:
+        if self.main.pending_load_save.get():
             return
         main = self.main
         if main.ask_to_save:
@@ -2675,7 +2692,7 @@ class C4zPanel:
                 return
 
         def gen_driver_unpack():
-            self.main.pending_load_save = True
+            self.main.pending_load_save.set(True)
             device_icon_dir = main.instance_temp / 'driver' / 'www' / 'icons' / 'device'
             instance_driver_path = main.instance_temp / 'driver'
             with Image.open(assets_path / 'loading_img.png') as loading_img:
@@ -2704,14 +2721,14 @@ class C4zPanel:
 
             main.export_panel.driver_name_var.set('New Driver')
             main.ask_to_save = False
-            self.main.pending_load_save = False
+            self.main.pending_load_save.set(False)
 
         threading.Thread(target=gen_driver_unpack, daemon=True).start()
 
     def _load_c4z(self, file_path=None, generic=False, c4is=None):
         main = self.main
 
-        abort = False
+        abort = ''
         driver_path = main.instance_temp / 'driver'
         new_driver_path = main.instance_temp / 'new_driver'
         new_icon_dir = new_driver_path / 'www' / 'icons'
@@ -2728,228 +2745,240 @@ class C4zPanel:
         shutil.rmtree(new_driver_path, ignore_errors=True)
         shutil.unpack_archive(file_path, new_driver_path, 'zip')
 
+        default_use_original_xml = True if self.icons and not main.driver_xml else False
+
         # Read XML
         driver_xml_bak = main.driver_xml
         if c4is:
             main.driver_xml = c4is.driver_xml
-        elif new_driver := XMLObject(new_driver_path / 'driver.xml'):
-            main.driver_xml = new_driver
+        elif new_driver_xml := XMLObject(new_driver_path / 'driver.xml'):
+            main.driver_xml = new_driver_xml
         else:
-            shutil.rmtree(new_driver_path, ignore_errors=True)
-            abort = True  # TODO: Give option to load driver even if XML parsing fails
+            new_driver_xml = (XMLObject())
+            abort = 'xml'
 
-        # Get icons
-        if not abort:
-            # noinspection PyShadowingNames
-            def get_icons(root_directory):
-                if not root_directory:
+        # noinspection PyShadowingNames
+        def get_icons(root_directory) -> list[C4Icon]:
+            if not root_directory:
+                return []
+            directories = set()
+            if isinstance(root_directory, (list, tuple)):
+                for path in root_directory:
+                    if not path.is_dir():
+                        continue
+                    directories.update(list_all_sub_directories(path, include_root_dir=True))
+                if not directories:
                     return []
-                directories = set()
-                if isinstance(root_directory, (list, tuple)):
-                    for path in root_directory:
-                        if not path.is_dir():
-                            continue
-                        directories.update(list_all_sub_directories(path, include_root_dir=True))
-                    if not directories:
-                        return []
-                elif isinstance(root_directory, Path):
-                    if not root_directory.is_dir():
-                        return []
-                    directories.update(list_all_sub_directories(root_directory, include_root_dir=True))
-                else:
+            elif isinstance(root_directory, Path):
+                if not root_directory.is_dir():
                     return []
-                self.extra_icons = 0
-                output = []
-                icon_groups = defaultdict(set)
-                both_scheme = []
-                all_sub_icons = set()
-                all_paths = [path for directory in directories for path in directory.iterdir()]
-                bak_pattern = re.compile(r'\.bak[^.]*$')
-                bak_files = {
-                    Path(path.parent, bak_pattern.sub('', path.name)): Path(path.parent, path.name)
-                    for path in all_paths if bak_pattern.search(path.name)
-                }
-                for path in all_paths:
-                    if not path.is_file() or path.suffix not in valid_img_types:
-                        continue
-                    try:
-                        with Image.open(path) as img:
-                            actual_size = img.size[0]
-                    except Image.DecompressionBombError:
-                        warnings.warn(f'Skipping potential decompression bomb: {path}', RuntimeWarning)
-                        continue
-                    except (UnidentifiedImageError, OSError):
-                        print(f'Issue with item in get_icons: {path}')
-                        continue
-                    bak_path = bak_files.get(path.with_suffix(''))
-                    img_info = re.search(r'^(?:(\d+)_)?(.+?)(?:_(\d+))?$', path.stem).groups()
-                    l_label, img_name, r_label = img_info[0], img_info[1], img_info[2]
-                    if not img_name:
-                        img_name = path.stem
-
-                    def matches_size(val):
-                        return val and val.isdigit() and int(val) == actual_size
-                    # Assume if name matches size that path.stem is formatted: #name-only-digits#_#size#
-                    if matches_size(img_name):
-                        img_name, r_label = (l_label or r_label), (r_label and img_name)
-                    l_match, r_match = matches_size(l_label), matches_size(r_label)
-                    if l_label and r_label and (l_match ^ r_match):
-                        img_name = f'{img_name}_{r_label}' if l_match else f'{l_label}_{img_name}'
-                    sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
-                    if l_match and r_match:
-                        both_scheme.append(sub_icon)
-                    else:
-                        icon_groups[img_name].add(sub_icon)
-                    all_sub_icons.add(sub_icon)
-
-                # Handle icons which have numbers on both sides that match their size
-                for sub_icon in both_scheme:
-                    found = None
-                    if f'{sub_icon.size[0]}_{sub_icon.name}' in icon_groups:
-                        found = 'r'
-                    if f'{sub_icon.name}_{sub_icon.size[0]}' in icon_groups:
-                        found = 'l' if not found else 'b'
-                    if not found:
-                        icon_name = f'{sub_icon.size[0]}_{sub_icon.name}_{sub_icon.size[0]}'
-                        sub_icon.name = icon_name
-                        icon_groups[icon_name].add(sub_icon)
-                    elif found == 'r':
-                        icon_name = f'{sub_icon.size[0]}_{sub_icon.name}'
-                        sub_icon.name = icon_name
-                        icon_groups[icon_name].add(sub_icon)
-                    elif found == 'l':
-                        icon_name = f'{sub_icon.name}_{sub_icon.size[0]}'
-                        sub_icon.name = icon_name
-                        icon_groups[icon_name].add(sub_icon)
-                    else:
-                        warnings.warn(f'Failed to parse icon data: {sub_icon.path}', RuntimeWarning)
-
-                # Use XML data to form icon groups
-                extras = set()
-                standard_icons = set()
-                group_dict: dict[tuple[str, XMLTag], set[Path]]
-                group_dict = get_icon_groups()
-                device_group = defaultdict(set)
-                split_match = {'icons', 'images'}
-                device_names = {'device_sm', 'device_lg'}
-                for (group_name, _), group in group_dict.items():
-                    group_set = set()
-                    for sub_icon in list(all_sub_icons):
-                        parts = sub_icon.rel_path.parts
-                        split_point = next((idx for idx, part in enumerate(parts) if part in split_match), -1)
-                        if Path(*parts[split_point:]) in group:
-                            if sub_icon.path.stem in device_names:
-                                all_sub_icons.remove(sub_icon)
-                                device_group[group_name].add(sub_icon)
-                                continue
-                            all_sub_icons.remove(sub_icon)
-                            group_set.add(sub_icon)
-                    if not group_set:
-                        continue
-                    standard_icons.add(C4Icon(group_set, name=group_name))
-
-                # Separate any remaining 'device' icons from list
-                for sub_icon in list(all_sub_icons):
-                    if sub_icon.name not in device_names:
-                        continue
-                    if (parent_dir := sub_icon.path.parent) == new_icon_dir:
-                        all_sub_icons.remove(sub_icon)
-                        device_group['device'].add(sub_icon)
-                    else:
-                        all_sub_icons.remove(sub_icon)
-                        device_group[str(parent_dir.stem)].add(sub_icon)
-                device_icons = [C4Icon(group, name=f'{group_name}\n(device icon)')
-                                for group_name, group in device_group.items()]
-
-                # Divide icons into 'standard' and 'extra'
-                for key in icon_groups:
-                    extra_flag = True
-                    if not (group_set := [subicon for subicon in icon_groups[key] if subicon in all_sub_icons]):
-                        continue
-                    for sub_icon in group_set:
-                        if extra_flag and sub_icon.path.parent.name == 'device':
-                            extra_flag = False
-                    if extra_flag:
-                        new_icon = C4Icon(group_set)
-                        new_icon.extra = True
-                        extras.add(new_icon)
-                        continue
-                    standard_icons.add(C4Icon(group_set))
-
-                # Mark extra icons as standard if no standard icons found
-                if not standard_icons and not device_group and extras:
-                    self.extra_icons = 0
-                    for icon in extras:
-                        icon.extra = False
-
-                output.extend(sorted(standard_icons, key=lambda c4icon: natural_key(c4icon.name)))
-                output.extend(sorted(device_icons, key=lambda c4icon: natural_key(c4icon.name)))
-                output.extend(sorted(extras, key=lambda c4icon: natural_key(c4icon.name)))
-                self.extra_icons = sum(icon.extra for icon in output)
-                return output
-
-            def get_icon_groups():
-                icon_groups = defaultdict(set)
-                proxy_binding_id_dict = defaultdict(str)
-                for tag in main.driver_xml.get_tags('proxy'):
-                    tag_name = tag.attributes.get('name')
-                    if proxybindingid := tag.attributes.get('proxybindingid'):
-                        proxy_binding_id_dict[proxybindingid] = tag_name
-                    if sm_img_path := tag.attributes.get('small_image'):
-                        rel_path = Path(sm_img_path)
-                        icon_groups[(tag_name or 'Device Icon', tag.parent)].add(rel_path)
-                    if lg_img_path := tag.attributes.get('large_image'):
-                        rel_path = Path(lg_img_path)
-                        icon_groups[(tag_name or 'Device Icon', tag.parent)].add(rel_path)
-                for tag in main.driver_xml.get_tags('Icon'):
-                    if 'controller://' not in (tag_value := tag.value):
-                        print(f'Could not parse Icon tag value in XML: {tag_value}')
-                        continue
-                    group_name = tag.parent.attributes.get('id')
-                    if not group_name and (parent_tag := tag.get_parent('navigator_display_option')):
-                        if proxybindingid := parent_tag.attributes.get('proxybindingid'):
-                            if new_group_name := proxy_binding_id_dict.get(proxybindingid):
-                                group_name = new_group_name
-
-                    rel_path = tag_value.split('controller://')[1]
-                    if 'icons' in rel_path:
-                        rel_path = Path('icons', rel_path.split('icons')[1].lstrip('/\\'))
-                    elif 'images' in rel_path:
-                        rel_path = Path('images', rel_path.split('images')[1].lstrip('/\\'))
-                    else:
-                        rel_path = Path(rel_path)
-                    icon_groups[(group_name or tag.parent.name, tag.parent)].add(rel_path)
-
-                seen_groups = {}
-                duplicates = set()
-                for name_and_tag, group_set in icon_groups.items():
-                    current_group_set = frozenset(group_set)
-                    if current_group_set in seen_groups:
-                        existing_name_and_tag = seen_groups[current_group_set]
-                        if (not existing_name_and_tag[1].attributes.get('id')) and name_and_tag[1].attributes.get('id'):
-                            duplicates.add(existing_name_and_tag)
-                            seen_groups[current_group_set] = name_and_tag
-                        else:
-                            duplicates.add(name_and_tag)
-                    else:
-                        seen_groups[current_group_set] = name_and_tag
-                for dupe in duplicates:
-                    del icon_groups[dupe]
-
-                return icon_groups
-
-            img_paths = new_driver_path if main.def_get_all_driver_imgs.get() else (new_icon_dir, new_images_dir)
-            if new_icons := get_icons(img_paths):
-                self.icons = new_icons
+                directories.update(list_all_sub_directories(root_directory, include_root_dir=True))
             else:
-                abort = True
+                return []
+            self.extra_icons = 0
+            output = []
+            icon_groups = defaultdict(set)
+            both_scheme = []
+            all_sub_icons = set()
+            all_paths = [path for directory in directories for path in directory.iterdir()]
+            bak_pattern = re.compile(r'\.bak[^.]*$')
+            bak_files = {
+                Path(path.parent, bak_pattern.sub('', path.name)): Path(path.parent, path.name)
+                for path in all_paths if bak_pattern.search(path.name)
+            }
+            for path in all_paths:
+                if not path.is_file() or path.suffix not in valid_img_types:
+                    continue
+                try:
+                    with Image.open(path) as img:
+                        actual_size = img.size[0]
+                except Image.DecompressionBombError:
+                    warnings.warn(f'Skipping potential decompression bomb: {path}', RuntimeWarning)
+                    continue
+                except (UnidentifiedImageError, OSError):
+                    print(f'Issue with item in get_icons: {path}')
+                    continue
+                bak_path = bak_files.get(path.with_suffix(''))
+                img_info = re.search(r'^(?:(\d+)_)?(.+?)(?:_(\d+))?$', path.stem).groups()
+                l_label, img_name, r_label = img_info[0], img_info[1], img_info[2]
+                if not img_name:
+                    img_name = path.stem
+
+                def matches_size(val):
+                    return val and val.isdigit() and int(val) == actual_size
+                # Assume if name matches size that path.stem is formatted: #name-only-digits#_#size#
+                if matches_size(img_name):
+                    img_name, r_label = (l_label or r_label), (r_label and img_name)
+                l_match, r_match = matches_size(l_label), matches_size(r_label)
+                if l_label and r_label and (l_match ^ r_match):
+                    img_name = f'{img_name}_{r_label}' if l_match else f'{l_label}_{img_name}'
+                sub_icon = C4SubIcon(main.instance_id, path, img_name, actual_size, bak_path=bak_path)
+                if l_match and r_match:
+                    both_scheme.append(sub_icon)
+                else:
+                    icon_groups[img_name].add(sub_icon)
+                all_sub_icons.add(sub_icon)
+
+            # Handle icons which have numbers on both sides that match their size
+            for sub_icon in both_scheme:
+                found = None
+                if f'{sub_icon.size[0]}_{sub_icon.name}' in icon_groups:
+                    found = 'r'
+                if f'{sub_icon.name}_{sub_icon.size[0]}' in icon_groups:
+                    found = 'l' if not found else 'b'
+                if not found:
+                    icon_name = f'{sub_icon.size[0]}_{sub_icon.name}_{sub_icon.size[0]}'
+                    sub_icon.name = icon_name
+                    icon_groups[icon_name].add(sub_icon)
+                elif found == 'r':
+                    icon_name = f'{sub_icon.size[0]}_{sub_icon.name}'
+                    sub_icon.name = icon_name
+                    icon_groups[icon_name].add(sub_icon)
+                elif found == 'l':
+                    icon_name = f'{sub_icon.name}_{sub_icon.size[0]}'
+                    sub_icon.name = icon_name
+                    icon_groups[icon_name].add(sub_icon)
+                else:
+                    warnings.warn(f'Failed to parse icon data: {sub_icon.path}', RuntimeWarning)
+
+            # Use XML data to form icon groups
+            extras = set()
+            standard_icons = set()
+            group_dict = get_icon_groups_from_xml() if not abort else {}
+            device_group = defaultdict(set)
+            split_match = {'icons', 'images'}
+            device_names = {'device_sm', 'device_lg'}
+            for (group_name, _), group in group_dict.items():
+                group_set = set()
+                for sub_icon in list(all_sub_icons):
+                    parts = sub_icon.rel_path.parts
+                    split_point = next((idx for idx, part in enumerate(parts) if part in split_match), -1)
+                    if Path(*parts[split_point:]) in group:
+                        if sub_icon.path.stem in device_names:
+                            all_sub_icons.remove(sub_icon)
+                            device_group[group_name].add(sub_icon)
+                            continue
+                        all_sub_icons.remove(sub_icon)
+                        group_set.add(sub_icon)
+                if not group_set:
+                    continue
+                standard_icons.add(C4Icon(group_set, name=group_name))
+
+            # Separate any remaining 'device' icons from list
+            for sub_icon in list(all_sub_icons):
+                if sub_icon.name not in device_names:
+                    continue
+                if (parent_dir := sub_icon.path.parent) == new_icon_dir:
+                    all_sub_icons.remove(sub_icon)
+                    device_group['device'].add(sub_icon)
+                else:
+                    all_sub_icons.remove(sub_icon)
+                    device_group[str(parent_dir.stem)].add(sub_icon)
+            device_icons = [C4Icon(group, name=f'{group_name}\n(device icon)')
+                            for group_name, group in device_group.items()]
+
+            # Divide icons into 'standard' and 'extra'
+            for key in icon_groups:
+                extra_flag = True
+                if not (group_set := [subicon for subicon in icon_groups[key] if subicon in all_sub_icons]):
+                    continue
+                for sub_icon in group_set:
+                    if extra_flag and sub_icon.path.parent.name == 'device':
+                        extra_flag = False
+                if extra_flag:
+                    new_icon = C4Icon(group_set)
+                    new_icon.extra = True
+                    extras.add(new_icon)
+                    continue
+                standard_icons.add(C4Icon(group_set))
+
+            # Mark extra icons as standard if no standard icons found
+            if not standard_icons and not device_group and extras:
+                self.extra_icons = 0
+                for icon in extras:
+                    icon.extra = False
+
+            output.extend(sorted(standard_icons, key=lambda c4icon: natural_key(c4icon.name)))
+            output.extend(sorted(device_icons, key=lambda c4icon: natural_key(c4icon.name)))
+            output.extend(sorted(extras, key=lambda c4icon: natural_key(c4icon.name)))
+            self.extra_icons = sum(icon.extra for icon in output)
+            return output
+
+        def get_icon_groups_from_xml() -> dict[tuple[str, XMLTag], set[Path]]:
+            icon_groups = defaultdict(set)
+            proxy_binding_id_dict = defaultdict(str)
+            for tag in main.driver_xml.get_tags('proxy'):
+                tag_name = tag.attributes.get('name')
+                if proxybindingid := tag.attributes.get('proxybindingid'):
+                    proxy_binding_id_dict[proxybindingid] = tag_name
+                if sm_img_path := tag.attributes.get('small_image'):
+                    rel_path = Path(sm_img_path)
+                    icon_groups[(tag_name or 'Device Icon', tag.parent)].add(rel_path)
+                if lg_img_path := tag.attributes.get('large_image'):
+                    rel_path = Path(lg_img_path)
+                    icon_groups[(tag_name or 'Device Icon', tag.parent)].add(rel_path)
+            for tag in main.driver_xml.get_tags('Icon'):
+                if 'controller://' not in (tag_value := tag.value):
+                    print(f'Could not parse Icon tag value in XML: {tag_value}')
+                    continue
+                group_name = tag.parent.attributes.get('id')
+                if not group_name and (parent_tag := tag.get_parent('navigator_display_option')):
+                    if proxybindingid := parent_tag.attributes.get('proxybindingid'):
+                        if new_group_name := proxy_binding_id_dict.get(proxybindingid):
+                            group_name = new_group_name
+
+                rel_path = tag_value.split('controller://')[1]
+                if 'icons' in rel_path:
+                    rel_path = Path('icons', rel_path.split('icons')[1].lstrip('/\\'))
+                elif 'images' in rel_path:
+                    rel_path = Path('images', rel_path.split('images')[1].lstrip('/\\'))
+                else:
+                    rel_path = Path(rel_path)
+                icon_groups[(group_name or tag.parent.name, tag.parent)].add(rel_path)
+
+            seen_groups = {}
+            duplicates = set()
+            for name_and_tag, group_set in icon_groups.items():
+                current_group_set = frozenset(group_set)
+                if current_group_set in seen_groups:
+                    existing_name_and_tag = seen_groups[current_group_set]
+                    if (not existing_name_and_tag[1].attributes.get('id')) and name_and_tag[1].attributes.get('id'):
+                        duplicates.add(existing_name_and_tag)
+                        seen_groups[current_group_set] = name_and_tag
+                    else:
+                        duplicates.add(name_and_tag)
+                else:
+                    seen_groups[current_group_set] = name_and_tag
+            for dupe in duplicates:
+                del icon_groups[dupe]
+
+            return icon_groups
+
+        other_icons = main.def_get_all_driver_imgs.get()
+        img_paths = new_driver_path if other_icons else (new_icon_dir, new_images_dir)
+        if new_icons := get_icons(img_paths):
+            self.icons = new_icons
+        else:
+            other_icons = False if other_icons else bool(get_icons(new_driver_path))
+            abort = 'both' if abort else 'icons'
 
         # Abort if no valid driver XML or no icons found
         if abort:
-            main.root.after(0, self.load_c4z_abort_dialog)  # type: ignore
-            shutil.rmtree(new_driver_path, ignore_errors=True)
-            main.driver_xml = driver_xml_bak
-            return
+            abort_var = BooleanVar()
+            main.root.after(0, lambda: self.load_c4z_abort_dialog(abort, other_icons, abort_var))  # type: ignore
+            main.root.wait_variable(abort_var)
+            if not abort_var.get():
+                shutil.rmtree(new_driver_path, ignore_errors=True)
+                main.driver_xml = driver_xml_bak
+                return
+            if abort == 'xml':  # noinspection PyUnboundLocalVariable
+                main.driver_xml = new_driver_xml
+                main.export_panel.use_orig_xml.set(True)
+            elif abort == 'icons':
+                self.icons = []
+        elif default_use_original_xml:
+            main.export_panel.use_orig_xml.set(main.def_use_original_xml.get())
+        main.export_panel.use_orig_xml_check['state'] = DISABLED if abort == 'xml' else NORMAL
 
         # Delete driver folder and replace with new driver
         shutil.rmtree(driver_path, ignore_errors=True)
@@ -2957,8 +2986,6 @@ class C4zPanel:
         for c4icon in self.icons:
             c4icon.update_path(driver_path)
         main.undo_history.clear()
-        self.current_icon = 0
-        self.update_icon()
 
         # Update C4zPanel entry with driver file path
         self.file_entry_str.set(file_path)
@@ -2975,33 +3002,28 @@ class C4zPanel:
         if not main.export_panel.driver_name_var.get():
             main.export_panel.driver_name_var.set('New Driver')
 
-        # Update show extra icons checkbox
-        self.show_extra_icons.set(False)
-        extra_icon_text = 'show extra icons' if not self.extra_icons else f'show extra ({self.extra_icons})'
-        self.show_extra_icons_check.config(text=extra_icon_text)
-        self.show_extra_icons_check.config(state='disabled' if not self.extra_icons else 'normal')
-
         # Update XML variables
-        if man_tag := main.driver_xml.get_tag('manufacturer'):
-            main.driver_manufac_var.set(man_tag.value)
-        if creator_tag := main.driver_xml.get_tag('creator'):
-            main.driver_creator_var.set(creator_tag.value)
-        if version_tag := main.driver_xml.get_tag('version'):
-            main.driver_ver_orig.set(version_tag.value)
-            ver_num = re.search(r'\d*', version_tag.value)[0]
-            if ver_num:
-                main.driver_version_var.set(ver_num)
-                ver_num = str(int(ver_num) + 1) if main.export_panel.inc_driver_version.get() else ver_num
-                main.driver_version_new_var.set(ver_num)
-            else:
-                main.driver_version_var.set('0')
-                main.driver_version_new_var.set('1')
-        if id_tags := main.driver_xml.get_tags('id'):
-            main.original_conn_ids = set()
-            for id_tag in id_tags:
-                with contextlib.suppress(ValueError):
-                    if int(id_tag.value) not in main.original_conn_ids:
-                        main.original_conn_ids.add(int(id_tag.value))
+        if main.driver_xml:
+            if man_tag := main.driver_xml.get_tag('manufacturer'):
+                main.driver_manufac_var.set(man_tag.value)
+            if creator_tag := main.driver_xml.get_tag('creator'):
+                main.driver_creator_var.set(creator_tag.value)
+            if version_tag := main.driver_xml.get_tag('version'):
+                main.driver_ver_orig.set(version_tag.value)
+                ver_num = re.search(r'\d*', version_tag.value)[0]
+                if ver_num:
+                    main.driver_version_var.set(ver_num)
+                    ver_num = str(int(ver_num) + 1) if main.export_panel.inc_driver_version.get() else ver_num
+                    main.driver_version_new_var.set(ver_num)
+                else:
+                    main.driver_version_var.set('0')
+                    main.driver_version_new_var.set('1')
+            if id_tags := main.driver_xml.get_tags('id'):
+                main.original_conn_ids = set()
+                for id_tag in id_tags:
+                    with contextlib.suppress(ValueError):
+                        if int(id_tag.value) not in main.original_conn_ids:
+                            main.original_conn_ids.add(int(id_tag.value))
 
         # Check Lua file for multi-state
         if not c4is:  # Because load_project handles these updates
@@ -3021,15 +3043,21 @@ class C4zPanel:
                 if main.states_win:
                     main.states_win.close()
 
+        # Update show extra icons checkbox
+        self.show_extra_icons.set(False)
+        extra_icon_text = 'show extra icons' if not self.extra_icons else f'show extra ({self.extra_icons})'
+        self.show_extra_icons_check.config(text=extra_icon_text)
+        self.show_extra_icons_check.config(state='disabled' if not self.extra_icons else 'normal')
+
         # Update driver prev/next buttons
+        self.current_icon = 0
+        self.update_icon()
         visible_icons = len(self.icons) - (self.extra_icons if not self.show_extra_icons.get() else 0)
         prev_next_button_state = NORMAL if visible_icons > 1 else DISABLED
         self.prev_icon_button['state'] = prev_next_button_state
         self.next_icon_button['state'] = prev_next_button_state
-        # Update replacement prev/next buttons
-        prev_next_button_state = NORMAL if main.replacement_panel.replacement_icon else DISABLED
-        main.replacement_panel.replace_button['state'] = prev_next_button_state
-        main.replacement_panel.replace_all_button['state'] = prev_next_button_state
+        # Update replacement buttons
+        main.replacement_panel.update_buttons()
         # Update 'Restore All' button in driver panel
         done = False
         self.restore_all_button['state'] = DISABLED
@@ -3042,7 +3070,6 @@ class C4zPanel:
                     break
             if done:
                 break
-        self.update_icon()
 
         # Update connections panel
         if not c4is:  # Because load_project handles these updates
@@ -3051,29 +3078,31 @@ class C4zPanel:
                 main.connections_win.refresh(hard=True, threaded=True)
             if main.states_win:
                 main.states_win.refresh()
+            if main.driver_info_win:
+                main.driver_info_win.update_entries()
         if self.sub_icon_win:
             self.sub_icon_win.update_icon()
         main.ask_to_save = False
 
     def load_c4z(self, file_path=None, generic=False, c4is=None, bypass_ask_save=False, new_thread=True, force=False):
-        if not force and self.main.pending_load_save:
+        if not force and self.main.pending_load_save.get():
             return
         if not bypass_ask_save and self.main.ask_to_save:
             self.main.ask_to_save_dialog(save_dialog_result := StringVar(), on_exit=False)
             self.main.root.wait_variable(save_dialog_result)
             if save_dialog_result.get() not in ('do', 'dont'):
                 return
-        self.main.pending_load_save = True
+        self.main.pending_load_save.set(True)
         if new_thread:
             threading.Thread(target=self.load_c4z, kwargs={'file_path': file_path, 'generic': generic, 'c4is': c4is,
                                                            'bypass_ask_save': True, 'new_thread': False, 'force': True},
                              daemon=True).start()
             return
         self._load_c4z(file_path=file_path, generic=generic, c4is=c4is)
-        self.main.pending_load_save = False
+        self.main.pending_load_save.set(False)
 
     def drop_in_c4z(self, event):
-        if self.main.pending_load_save:
+        if self.main.pending_load_save.get():
             return
         paths = parse_drop_event(event)
         c4z_path = next((path for path in paths if path.suffix == '.c4z' and path.is_file()), None)
@@ -3082,7 +3111,7 @@ class C4zPanel:
         self.main.replacement_panel.process_image(file_path=paths)
 
     def restore(self, do_all=False):
-        if self.main.pending_load_save:
+        if self.main.pending_load_save.get():
             return
         self.main.update_undo_history()
         if do_all:
@@ -3096,7 +3125,7 @@ class C4zPanel:
         self.main.ask_to_save = True
 
     def unrestore(self, *_, do_all=False):
-        if self.main.pending_load_save:
+        if self.main.pending_load_save.get():
             return
         self.main.update_undo_history()
         if do_all:
@@ -3109,7 +3138,7 @@ class C4zPanel:
         self.main.ask_to_save = True
 
     def toggle_extra_icons(self, *_):
-        if not self.main.driver_selected or self.main.pending_load_save:
+        if not self.main.c4z_panel.icons or self.main.pending_load_save.get():
             return
         if not (show_extra := self.show_extra_icons.get()):
             if self.extra_icons:
@@ -3128,7 +3157,7 @@ class C4zPanel:
         self.update_icon()
 
     def inc_icon(self, inc=1, validate=True):
-        if not self.main.driver_selected or not inc or self.main.pending_load_save:
+        if not self.icons or not inc or self.main.pending_load_save.get():
             return
 
         self.current_icon = (self.current_icon + inc) % len(self.icons)
@@ -3147,6 +3176,10 @@ class C4zPanel:
 
     def update_icon(self):
         if not (icons := self.icons):
+            self.c4_icon_label.config(image=self.main.img_blank)
+            self.c4_icon_label.image = self.main.img_blank
+            self.icon_num_label.config(text='0 of 0')
+            self.icon_name_label.config(text='Driver with no icons selected')
             return
         if self.current_icon < 0:
             raise ValueError('Expected positive icon index')
@@ -3195,6 +3228,10 @@ class C4zPanel:
 
     def get_connections(self):
         main = self.main
+        if not main.driver_xml:
+            main.connections = [Connection(main)]
+            main.taken_conn_ids = {}
+            return
 
         # Get connections from XML object and update connection entries
         get_all_conn = self.main.def_get_all_connections.get()
@@ -3220,26 +3257,54 @@ class C4zPanel:
     def right_click_menu(self, event):
         context_menu = Menu(self.main.root, tearoff=0)
         context_menu.add_command(label='View Sub Icons', command=self.toggle_sub_icon_win)
-        menu_state = NORMAL if self.icons and not self.main.pending_load_save else DISABLED
+        menu_state = NORMAL if self.icons and not self.main.pending_load_save.get() else DISABLED
         context_menu.entryconfig(0, state=menu_state)
         context_menu.tk_popup(event.x_root, event.y_root)
         context_menu.grab_release()
 
-    def load_c4z_abort_dialog(self):
-        def cancel():
+    def load_c4z_abort_dialog(self, reason, other_icons, abort_var):
+        def close():
+            abort_var.set(False)
+            abort_dialog.destroy()
+
+        def yes():
+            abort_var.set(True)
             abort_dialog.destroy()
 
         abort_dialog = Toplevel(self.main.root)
-        abort_dialog.title('Failed to load driver')
-        abort_dialog.geometry(f'239x70+{self.main.root.winfo_rootx()}+{self.main.root.winfo_rooty()}')
-        abort_dialog.protocol('WM_DELETE_WINDOW', cancel)
+        abort_dialog.title('Problem loading driver')
+        w, h = (239, 90)
+        abort_dialog.protocol('WM_DELETE_WINDOW', close)
         abort_dialog.grab_set()
         abort_dialog.focus()
         abort_dialog.transient(self.main.root)
         abort_dialog.resizable(False, False)
 
-        label = Label(abort_dialog, text='The driver failed to load for reasons')
+        if reason == 'icons':
+            label_text = 'Could not find any icons in the driver'
+            if other_icons:
+                label_text += '\nTry enabling "get all images" in settings'
+                h += 15
+        elif reason == 'xml':
+            label_text = 'Driver XML invalid or missing'
+        else:
+            label_text = 'The driver has no icons and\nthe XML is invalid or missing'
+            h = 50
+
+        abort_dialog.geometry(f'{w}x{h}+{self.main.root.winfo_rootx()}+{self.main.root.winfo_rooty()}')
+
+        label = Label(abort_dialog, text=label_text)
         label.place(relx=0.5, rely=0, y=5, anchor='n')
+
+        if reason in ('icons', 'xml'):
+            label2 = Label(abort_dialog, text='Would you like to load anyway?')
+            label2.place(relx=0.5, rely=0, y=h - 62, anchor='n')
+
+            yes_button = Button(abort_dialog, text='Yes', width='10', command=yes)
+            yes_button.place(relx=0.5, rely=1, x=-5, y=-10, anchor='se')
+
+            no_button = Button(abort_dialog, text='No', width='10', command=close)
+            no_button.place(relx=0.5, rely=1, x=5, y=-10, anchor='sw')
 
     def toggle_sub_icon_win(self, close=False):
         if close and self.sub_icon_win:
@@ -3670,7 +3735,7 @@ class ExportPanel:
         self.inc_driver_check.place(x=63 + self.x, y=170 + self.y, anchor='w')
 
     def quick_export(self):
-        if self.main.pending_load_save:
+        if self.main.pending_load_save.get():
             print('TODO: schedule for update after pending_load_save')
             return
         # Check for empty driver info variables
@@ -3708,7 +3773,7 @@ class ExportPanel:
         self.do_export(quick_export=file_path, overwrite_dialog=overwrite_dialog)
 
     def do_export(self, quick_export=None, overwrite_dialog=None):
-        if self.main.pending_load_save:
+        if self.main.pending_load_save.get():
             print('TODO: schedule for update after pending_load_save')
             return
         # Wait for confirm overwrite dialog
