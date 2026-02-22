@@ -2941,7 +2941,8 @@ class C4zPanel:
             self.extra_icons = sum(icon.extra for icon in output)
             for icon in output:
                 for sub_icon in icon.icons:
-                    sub_icon.xml_references = new_driver_xml.get_by_value(sub_icon.path.name, partial=True)
+                    pattern = rf'(?:^|[ /\\]){re.escape(sub_icon.path.name)}'
+                    sub_icon.xml_references = new_driver_xml.get_by_value(regex=pattern)
             return output
 
         def get_icon_groups_from_xml() -> dict[tuple[str, XMLTag], set[Path]]:
@@ -4034,25 +4035,24 @@ class ExportPanel:
                                     break
 
             # Rename icons
-            def replace_last(string, str_old, str_new):
-                parts = string.rsplit(str_old, 1)
-                return str_new.join(parts)
+            def replace(string, str_old, str_new):
+                return re.sub(rf'(^|[ /\\]){re.escape(str_old)}', rf'\1{str_new}', string)
             for icon in main.c4z_panel.icons:
                 if not icon.renamed:
                     continue
                 if icon.parent_tag:
                     for key, val in icon.parent_tag.attributes.items():
                         if icon.original_name in val:
-                            icon.parent_tag.attributes[key] = replace_last(val, icon.original_name, icon.name)
+                            icon.parent_tag.attributes[key] = replace(val, icon.original_name, icon.name)
                 for sub_icon in icon.icons:
                     new_name = f'{icon.name}_{sub_icon.size[0]}{sub_icon.path.suffix}'
                     for tag in sub_icon.xml_references:
                         file_name = sub_icon.path.name
                         if sub_icon.name in tag.value:
-                            tag.set_value(replace_last(tag.value, file_name, new_name))
+                            tag.set_value(replace(tag.value, file_name, new_name))
                         for key, val in tag.attributes.items():
                             if file_name in val:
-                                tag.attributes[key] = replace_last(val, file_name, new_name)
+                                tag.attributes[key] = replace(val, file_name, new_name)
 
             # General Changes
             driver_xml.get_tag('name').set_value(driver_name)

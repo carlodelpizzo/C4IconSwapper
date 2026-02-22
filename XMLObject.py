@@ -301,14 +301,19 @@ class XMLTag:
     def is_standard(self) -> bool:
         return not (self.is_prolog or self.is_comment or self.is_CDATA or self.is_string)
 
-    def get_by_value(self, search_value: str, partial=False, include_attributes=True) -> list[XMLTag]:
-        output = [self] if search_value == self.value or (partial and search_value in self.value) else []
-        if not output and include_attributes:
-            vals = self.attributes.values()
-            if (search_value in vals) or (partial and any(search_value in val for val in vals)):
-                output = [self]
+    def get_by_value(self, search_value='', partial=False, in_attributes=True, regex=None) -> list[XMLTag]:
+        if regex:
+            output = [self] if re.search(regex, self.value) else []
+            if not output and in_attributes:
+                output = [self] if any(re.search(regex, val) for val in self.attributes.values()) else []
+        else:
+            output = [self] if search_value == self.value or (partial and search_value in self.value) else []
+            if not output and in_attributes:
+                vals = self.attributes.values()
+                if (search_value in vals) or (partial and any(search_value in val for val in vals)):
+                    output = [self]
         for tag in self.children:
-            output.extend(tag.get_by_value(search_value, partial=partial, include_attributes=include_attributes))
+            output.extend(tag.get_by_value(search_value, partial=partial, in_attributes=in_attributes, regex=regex))
         return output
 
     def set_value(self, new_value: str):
@@ -515,8 +520,8 @@ class XMLObject:
                 return output
         return None
 
-    def get_by_value(self, search_value: str, partial=False, include_attributes=True) -> list[XMLTag]:
-        params = (search_value, partial, include_attributes)
+    def get_by_value(self, search_value='', partial=False, in_attributes=True, regex=None) -> list[XMLTag]:
+        params = (search_value, partial, in_attributes, regex)
         return [tag for sub_list in (root_tag.get_by_value(*params) for root_tag in self.tags) for tag in sub_list]
 
     def __bool__(self):
