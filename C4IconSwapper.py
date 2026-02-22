@@ -2903,25 +2903,16 @@ class C4zPanel:
                     if Path(*parts[split_point:]) in group:
                         all_sub_icons.remove(sub_icon)
                         if group_name is None:
-                            device_group[group_name].add(sub_icon)
+                            device_group[(group_name, tag)].add(sub_icon)
                         else:
                             group_set.add(sub_icon)
                 if not group_set:
                     continue
                 standard_icons.add(C4Icon(main, group_set, parent_tag=tag, name=group_name))
 
-            # Separate any remaining 'device' icons from list; Make device_icons list
-            for sub_icon in list(all_sub_icons):
-                if sub_icon.name not in ('device_sm', 'device_lg'):
-                    continue
-                if (parent_dir := sub_icon.path.parent) == new_icon_dir:
-                    all_sub_icons.remove(sub_icon)
-                    device_group['device'].add(sub_icon)
-                else:
-                    all_sub_icons.remove(sub_icon)
-                    device_group[str(parent_dir.stem)].add(sub_icon)
-            device_icons = [C4Icon(main, group, name=group_name, device=True)
-                            for group_name, group in device_group.items()]
+            # Make device_icons list
+            device_icons = [C4Icon(main, group, name=tag.attributes.get('name'), device=True)
+                            for (_, tag), group in device_group.items()]
 
             # Divide icons into 'standard' and 'extra'
             for key in icon_groups:
@@ -2965,10 +2956,10 @@ class C4zPanel:
                     proxy_binding_id_dict[proxybindingid] = tag_name
                 if sm_img_path := tag.attributes.get('small_image'):
                     rel_path = Path(sm_img_path)
-                    icon_groups[(None, tag.parent)].add(rel_path)
+                    icon_groups[(None, tag)].add(rel_path)
                 if lg_img_path := tag.attributes.get('large_image'):
                     rel_path = Path(lg_img_path)
-                    icon_groups[(None, tag.parent)].add(rel_path)
+                    icon_groups[(None, tag)].add(rel_path)
             for tag in main.driver_xml.get_tags('Icon'):
                 if 'controller://' not in (tag_value := tag.value):
                     print(f'Could not parse Icon tag value in XML: {tag_value}')
