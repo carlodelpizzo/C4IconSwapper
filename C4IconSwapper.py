@@ -640,8 +640,7 @@ class IPC:
             print('(IPC) Nothing to clean up')
 
 
-# TODO: Add ability to rename icons which are found in XML eg ON/OFF
-# TODO: Create savestate json for more inclusive undo history and robust app crash recovery
+# TODO: Add ability to rename states in generic drivers
 # TODO: Refine generic drivers
 # TODO: Reevaluate when ask_to_save is set to True
 class C4IconSwapper(IPC):
@@ -753,6 +752,8 @@ class C4IconSwapper(IPC):
         self.driver_version_var = StringVar()
         self.driver_version_new_var = StringVar(value='1')
         self.multi_state_driver = False
+        self.driver_loaded_with = {'all_imgs': self.def_get_all_driver_imgs.get(),
+                                   'all_conns': self.def_get_all_connections.get()}
         self.ask_to_save = False
         self.ignore_arrow_keys = False
         self.counter, self.easter_counter = 0, 0
@@ -1336,26 +1337,88 @@ class C4IconSwapper(IPC):
 
     def undo(self, *_):
         if not self.undo_history:
-            self.edit.entryconfig(self.undo_pos, state=DISABLED)
             return
         ask_to_save = self.ask_to_save
-        self.ask_to_save = False
         undo_dict = self.undo_history.pop()
-        for icon in self.c4z_panel.icons:
-            undo_icon = undo_dict['icons'][icon]
+
+        # Icons
+        for i, undo_icon in enumerate(undo_dict['icons']):
+            icon = self.c4z_panel.icons[i]
             icon.replacement_icon = undo_icon['replacement_icon']
             icon.restore_bak = undo_icon['restore_bak']
+            icon.name = undo_icon['name']
         self.c4z_panel.current_icon = undo_dict['current_icon']
         self.c4z_panel.update_icon()
+
+        # Connections
+        if undo_dict['conn_change']:
+            if not self.connections_win:
+                def make_win():
+                    self.connections_win = ConnectionsWin(self)
+                    wait_var.set(True)
+                threading.Thread(target=make_win, daemon=True).start()
+                self.root.wait_variable(wait_var := BooleanVar(value=False))
+            self.connections_win.supress_trace = True
+            if undo_dict['add_conn']:
+                self.connections_win.connection_entries[-2].action(command='x')
+            elif conn_dict := undo_dict['del_conn']:
+                i, y_offset = conn_dict['index'], self.connections_win.widget_y_offset
+                for conn_entry in self.connections_win.connection_entries[i:]:
+                    conn_entry.y += y_offset
+                self.connections.insert(i, (new_conn := Connection(self)))
+                self.driver_xml.get_tag('connections').add_element(new_conn.tag)
+                conn_y = self.connections_win.connection_entries[i - 1].y + y_offset
+                self.connections_win.connection_entries.insert(i,
+                                                               ConnectionEntry(self.connections_win, new_conn,
+                                                                               self.connections_win.widget_x, conn_y))
+                conn_entry = self.connections_win.connection_entries[i]
+                conn_obj = conn_entry.conn_object
+                conn_obj.enabled = True
+                conn_obj.tag.hide = False
+                conn_obj.update_id()
+                conn_entry.name_entry['state'] = NORMAL
+                conn_entry.type_menu['state'] = NORMAL
+                conn_entry.action_button.config(text='x', width=1)
+                conn_entry.action_button.place(x=conn_entry.x + 14)
+                conn_entry.name_entry['takefocus'] = 1
+                conn_obj.prev_name = conn_dict['name']
+                conn_obj.name_entry_var.set(conn_dict['name'])
+                conn_obj.prev_type = conn_dict['type']
+                conn_obj.type_var.set(conn_dict['type'])
+            for i, delete in enumerate(undo_dict['orig_conns']):
+                self.connections[i].delete = delete
+            for i, conn_dict in enumerate(undo_dict['new_conns'], len(undo_dict['orig_conns'])):
+                cname, ctype = conn_dict['name'], conn_dict['type']
+                self.connections[i].name_entry_var.set(cname)
+                self.connections[i].prev_name = cname
+                self.connections[i].type_var.set(ctype)
+                self.connections[i].prev_type = ctype
+            self.connections_win.refresh()
+            self.connections_win.supress_trace = False
 
         if not self.undo_history:
             self.edit.entryconfig(self.undo_pos, state=DISABLED)
         self.ask_to_save = ask_to_save
 
-    def update_undo_history(self):
-        self.undo_history.append({'icons': {icon: {'replacement_icon': icon.replacement_icon,
-                                                   'restore_bak': icon.restore_bak} for icon in self.c4z_panel.icons},
-                                  'current_icon': self.c4z_panel.current_icon})
+    # TODO: Create savestate json for more inclusive undo history and robust app crash recovery.
+    #  Add DriverInfo variables, ExportPanel driver_name_var, and States
+    #  Remove unnecessary data from dict for undo_history
+    def update_undo_history(self, add_conn=False, del_conn=None, conn_change=False):
+        app_state = {
+            'driver_loaded_with': self.driver_loaded_with.copy(),
+            'icons': [{'replacement_icon': icon.replacement_icon, 'restore_bak': icon.restore_bak, 'name': icon.name}
+                      for icon in self.c4z_panel.icons],
+            'current_icon': self.c4z_panel.current_icon,
+            'conn_change': add_conn or del_conn or conn_change,
+            'orig_conns': [conn.delete for conn in self.connections if conn.original],
+            'new_conns': [{'name': conn.prev_name, 'type': conn.prev_type}
+                          for conn in self.connections[:-1] if not conn.original],
+            'add_conn': add_conn,
+            'del_conn': {'index': del_conn,
+                         'name': self.connections[del_conn].prev_name,
+                         'type': self.connections[del_conn].prev_type} if del_conn is not None else {}
+        }
+        self.undo_history.append(app_state)
         self.edit.entryconfig(self.undo_pos, state=NORMAL)
 
     def ask_to_save_dialog(self, result_var, on_exit=True):
@@ -2024,9 +2087,19 @@ class ConnectionsWin:
         self.window.geometry(f'{w}x{h}+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.bind('<KeyRelease>', self.on_key_release)
         self.window.bind('<Configure>', self.on_resize)
+        self.window.bind('<Control-s>', main.save_project)
+        self.window.bind('<Control-o>', main.load_project)
+        self.window.bind('<Control-z>', main.undo)
+        self.window.bind('<Control-w>', main.end_program)
+
         self.resize_after_call_id = None
         self.threaded_refresh = threading.Event()
         self.threaded_refresh.set()
+
+        def focus_on_click(event):
+            if isinstance(event.widget, Frame):
+                self.window.focus_set()
+        self.window.bind('<Button-1>', focus_on_click)
 
         self.canvas = Canvas(self.window, highlightthickness=0, borderwidth=0)
         self.scrollbar = Scrollbar(self.window, orient='vertical', command=self.canvas.yview)
@@ -2122,6 +2195,10 @@ class ConnectionsWin:
             self.scroll_bound = False
 
     def close(self):
+        for conn_entry in self.connection_entries:
+            if conn_entry.conn_object.original:
+                continue
+            conn_entry.destroy()
         self.threaded_refresh.wait()
         self.window.destroy()
         self.main.connections_win = None
@@ -2136,7 +2213,9 @@ class Connection:
         self.tag = tag or XMLTag(xml_string=connection_tag_generic)
         self.tag.hide = True if not original else False
         if not original:
+            self.prev_name = cname
             self.name_entry_var = StringVar(value=cname)
+            self.prev_type = ctype
             self.type_var = StringVar(value=ctype)
         else:
             self.name = cname
@@ -2176,22 +2255,26 @@ class ConnectionEntry:
         if conn_obj.original:
             self.name_entry = Entry(self.frame, width=28)
             self.name_entry.insert(0, conn_obj.name)
-            self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+            self.entry_trace = None
         else:
             self.name_entry_var = conn_obj.name_entry_var
-            self.name_entry_var.trace_add('write', self.name_update)
+            self.entry_trace = self.name_entry_var.trace_add('write', self.name_update)
             self.name_entry = Entry(self.frame, width=28, textvariable=self.name_entry_var)
-            self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
+            self.name_entry.bind('<FocusIn>', lambda _: self.update_undo_history(True))
+            self.name_entry.bind('<FocusOut>', lambda _: self.update_undo_history(False))
+        self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
 
         # Dropdown
         if conn_obj.original:
             self.type_menu = Label(self.frame, text=conn_obj.type, relief='raised', padx=7, pady=4)
-            self.type_menu.place(x=self.x + 212, y=self.y, anchor='w')
+            self.type_trace = None
         else:
             self.type_var = conn_obj.type_var
             self.type_menu = OptionMenu(self.frame, self.type_var, *selectable_connections)
-            self.type_menu.place(x=self.x + 210, y=self.y, anchor='w')
-            self.type_var.trace_add('write', self.type_update)
+            self.type_menu.bind('<Button-1>', lambda _: parent.window.focus_set())
+            self.type_menu['menu'].config(postcommand=lambda: self.update_undo_history(True, entry=False))
+            self.type_trace = self.type_var.trace_add('write', self.type_update)
+        self.type_menu.place(x=self.x + (212 if conn_obj.original else 210), y=self.y, anchor='w')
 
         # Button
         button_state = DISABLED if self.main.export_panel.use_orig_xml.get() else NORMAL
@@ -2219,6 +2302,7 @@ class ConnectionEntry:
                 button_state = DISABLED
 
         self.action_button = Button(self.frame, text=text, width=width, command=self.action, takefocus=0)
+        self.action_button.bind('<Button-1>', lambda _: parent.window.focus_set())
         self.action_button.place(x=self.x + x_offset, y=self.y, anchor='w')
         self.action_button['state'] = button_state
         self.type_menu['state'] = DISABLED if not conn_obj.enabled else button_state
@@ -2227,12 +2311,26 @@ class ConnectionEntry:
             if not conn_obj.original:
                 self.name_entry['state'] = DISABLED
 
+    def update_undo_history(self, focus_in: bool, entry=True):
+        if entry:
+            if focus_in:
+                self.conn_object.prev_name = self.name_entry_var.get()
+            elif self.conn_object.prev_name != self.name_entry_var.get():
+                self.main.update_undo_history(conn_change=True)
+                self.conn_object.prev_name = self.name_entry_var.get()
+            return
+        if focus_in:
+            self.conn_object.prev_type = self.type_var.get()
+        elif self.conn_object.prev_type != self.type_var.get():
+            self.main.update_undo_history(conn_change=True)
+            self.conn_object.prev_type = self.type_var.get()
+
     def refresh(self):
         if not (original := self.conn_object.original):
             self.name_entry_var.set(self.conn_object.name_entry_var.get())
             self.type_var.set(self.conn_object.type_var.get())
         self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
-        self.type_menu.place(x=self.x + 210, y=self.y, anchor='w')
+        self.type_menu.place(x=self.x + (212 if original else 210), y=self.y, anchor='w')
         state = DISABLED if self.main.export_panel.use_orig_xml.get() else NORMAL
         if self.conn_object.enabled:
             self.type_menu['state'] = state
@@ -2257,8 +2355,8 @@ class ConnectionEntry:
             self.action_button.config(text='Add', width=3, state=state if self.main.driver_selected else DISABLED)
             self.action_button.place(x=self.x, y=self.y, anchor='w')
 
-    def action(self):
-        match self.action_button['text']:
+    def action(self, command=''):
+        match (command or self.action_button['text']):
             case 'Add':
                 self.conn_object.enabled = True
                 self.conn_object.tag.hide = False
@@ -2274,8 +2372,13 @@ class ConnectionEntry:
                     ConnectionEntry(self.parent, new_conn, self.parent.widget_x,
                                     self.y + self.parent.widget_y_offset))
                 self.parent.update_scroll_frame()
+                if not self.parent.supress_trace:
+                    self.main.update_undo_history(add_conn=True)
             case 'x':
-                self.parent.connection_entries.pop(i := self.parent.connection_entries.index(self))
+                i = self.parent.connection_entries.index(self)
+                if not self.parent.supress_trace:
+                    self.main.update_undo_history(del_conn=i)
+                self.parent.connection_entries.pop(i)
                 self.main.connections.pop(i)
                 self.main.driver_xml.get_tag('connections').remove_element(self.conn_object.tag)
                 if (in_dict := self.main.taken_xml_ids.get(self.conn_object.id)) and self.conn_object is in_dict:
@@ -2311,10 +2414,15 @@ class ConnectionEntry:
     def type_update(self, *_):
         if self.parent.supress_trace:
             return
-        self.main.ask_to_save = True
         self.conn_object.update_id()
+        self.update_undo_history(False, entry=False)
+        self.main.ask_to_save = True
 
     def destroy(self):
+        if self.type_trace:
+            self.type_var.trace_remove('write', self.type_trace)
+        if self.entry_trace:
+            self.name_entry_var.trace_remove('write', self.entry_trace)
         self.name_entry.destroy()
         self.type_menu.destroy()
         self.action_button.destroy()
@@ -2793,7 +2901,7 @@ class C4zPanel:
         shutil.rmtree(new_driver_path, ignore_errors=True)
         shutil.unpack_archive(file_path, new_driver_path, 'zip')
 
-        default_use_original_xml = True if self.icons and not main.driver_xml else False
+        use_default_use_original_xml = self.icons and not main.driver_xml
 
         # Read XML
         driver_xml_bak = main.driver_xml
@@ -3020,9 +3128,11 @@ class C4zPanel:
                 main.export_panel.use_orig_xml.set(True)
             elif abort == 'icons':
                 self.icons = []
-        elif default_use_original_xml:
+        elif use_default_use_original_xml:
             main.export_panel.use_orig_xml.set(main.def_use_original_xml.get())
         main.export_panel.use_orig_xml_check['state'] = DISABLED if abort == 'xml' else NORMAL
+        main.driver_loaded_with = {'all_imgs': main.def_get_all_driver_imgs.get(),
+                                   'all_conns': main.def_get_all_connections.get()}
 
         # Delete driver folder and replace with new driver
         shutil.rmtree(driver_path, ignore_errors=True)
