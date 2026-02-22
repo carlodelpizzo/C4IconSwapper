@@ -1353,11 +1353,8 @@ class C4IconSwapper(IPC):
         # Connections
         if undo_dict['conn_change']:
             if not self.connections_win:
-                def make_win():
-                    self.connections_win = ConnectionsWin(self)
-                    wait_var.set(True)
-                threading.Thread(target=make_win, daemon=True).start()
-                self.root.wait_variable(wait_var := BooleanVar(value=False))
+                self.connections_win = ConnectionsWin(self)
+                self.root.update_idletasks()
             self.connections_win.supress_trace = True
             if undo_dict['add_conn']:
                 self.connections_win.connection_entries[-2].action(command='x')
