@@ -9,22 +9,23 @@ re_attributes = re.compile(r'([\w:]+)\s*=\s*([\'"])(.*?)\2')
 
 
 # sub_tag will ignore all tags until it finds a tag with that name, then make that tag the root
-def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XMLTag]:
+def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> tuple[list[XMLTag], dict[int, XMLTag]]:
     if not xml_path and not xml_string:
-        return []
+        return [], {}
     if xml_path:
         with open(xml_path, errors='replace', encoding='utf-8') as xml_file:
             xml_string = xml_file.read()
         if not xml_string:
-            return []
+            return [], {}
 
     tags = []
     tag_stack = deque()
     tag_start = None
     string_tag = ''
     attributes = {}
-    c4_connection = None
-    c4_connection_dict = {}
+    connection = None
+    connection_dict = {}
+    ids = {}
     last_pos = -1
     nested_comments = 0
     nested_cdata = 0
@@ -111,12 +112,12 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
             data = xml_string[tag_start + 1:i]
         except TypeError:
             warnings.warn('Generic issue with XML syntax', SyntaxWarning)
-            return []
+            return [], {}
 
         # Handle sub_tag search
         if sub_tag and not sub_tag_found:
             if self_closing_sub_tag := sub_tag_root_search():
-                return self_closing_sub_tag
+                return self_closing_sub_tag, ids
             continue
 
         # Handle CDATA tags
@@ -139,7 +140,7 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
                     continue
             elif data.count('!--') - 1 != data.count('-->'):
                 warnings.warn('Issue with nested comments', SyntaxWarning)
-                return []
+                return [], {}
             nested_skip = False
             if not data.endswith('--'):
                 continue
@@ -167,7 +168,7 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
             data = data[:-1] if ' ' not in data else data[:data.index(' ')]
             if '<' in data or '>' in data:
                 warnings.warn('< or > found in self-closing tag', SyntaxWarning)
-                return []
+                return [], {}
             add_append_tag(string_tag)
             add_append_tag(XMLTag(name=data, attributes=attributes, is_self_closing=True))
             continue
@@ -177,15 +178,18 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
         # Handle closing tag; Pull off stack
         if tag_stack and data.startswith('/') and tag_stack[-1].name == stripped_data[1:]:
             add_append_tag(string_tag)
-            if stripped_data == '/connection' and len(c4_connection_dict) == 4:
-                if c4_connection_dict['id'].value.isdigit():
-                    c4_connection.connection_dict = c4_connection_dict.copy()
+            if stripped_data == '/connection' and len(connection_dict) == 4:
+                if (id_val := connection_dict['id'].value).isdigit():
+                    connection.connection_dict = connection_dict.copy()
+                    ids[int(id_val)] = connection
+            elif stripped_data == '/id' and (id_val := tag_stack[-1].value).isdigit():
+                ids[int(id_val)] = None
             if len(tag_stack) > 1:
                 tag_stack[-2].add_element(tag_stack.pop())
             else:
                 tags.append(tag_stack.pop())
                 if sub_tag and sub_tag_found and tags[-1].name == sub_tag:
-                    return tags
+                    return tags, ids
             tag_start = None
             continue
 
@@ -193,28 +197,29 @@ def parse_xml(xml_path: str | Path = None, xml_string='', sub_tag='') -> list[XM
         add_append_tag(string_tag)
         tag_stack.append(XMLTag(name=stripped_data, attributes=attributes))
         if stripped_data == 'connection':
-            c4_connection_dict.clear()
-            c4_connection = tag_stack[-1]
-        elif c4_connection:
+            connection_dict.clear()
+            connection = tag_stack[-1]
+        elif connection:
             match stripped_data:
                 case 'id':
-                    c4_connection_dict['id'] = tag_stack[-1]
+                    connection_dict['id'] = tag_stack[-1]
                 case 'connectionname':
-                    c4_connection_dict['connectionname'] = tag_stack[-1]
+                    connection_dict['connectionname'] = tag_stack[-1]
                 case 'type':
-                    c4_connection_dict['type'] = tag_stack[-1]
+                    connection_dict['type'] = tag_stack[-1]
                 case 'classname':
-                    c4_connection_dict['classname'] = tag_stack[-1]
+                    connection_dict['classname'] = tag_stack[-1]
         attributes = {}
         tag_start = None
 
+    # Check for string at end of XML
     if i and (ending_str := xml_string[i + 1:]).strip():
         tags.append(XMLTag(name=ending_str, is_string=True))
 
     if tag_stack:
         warnings.warn('Could not find pair for each tag', SyntaxWarning)
-        return []
-    return tags
+        return [], {}
+    return tags, ids
 
 
 # Can only have one root tag
@@ -239,7 +244,7 @@ class XMLTag:
         first_tag = None
         # Constructs an XMLTag object based on the first tag in data if XML path/data is passed in
         if xml_path or xml_string:
-            tag_list = parse_xml(xml_path=xml_path, xml_string=xml_string, sub_tag=sub_tag)
+            tag_list, _ = parse_xml(xml_path=xml_path, xml_string=xml_string, sub_tag=sub_tag)
             if not tag_list:
                 warnings.warn(f'Excepted {self.__class__.__name__} in list; Received Empty list',
                               RuntimeWarning)
@@ -296,8 +301,15 @@ class XMLTag:
     def is_standard(self) -> bool:
         return not (self.is_prolog or self.is_comment or self.is_CDATA or self.is_string)
 
-    def get_value(self) -> str:
-        return self.value
+    def get_by_value(self, search_value: str, partial=False, include_attributes=True) -> list[XMLTag]:
+        output = [self] if search_value == self.value or (partial and search_value in self.value) else []
+        if not output and include_attributes:
+            vals = self.attributes.values()
+            if (search_value in vals) or (partial and any(search_value in val for val in vals)):
+                output = [self]
+        for tag in self.children:
+            output.extend(tag.get_by_value(search_value, partial=partial, include_attributes=include_attributes))
+        return output
 
     def set_value(self, new_value: str):
         if self.is_string:
@@ -477,7 +489,7 @@ class XMLTag:
 # Allows multiple root tags
 class XMLObject:
     def __init__(self, xml_path: str | Path = None, xml_string=''):
-        self.tags = parse_xml(xml_path=xml_path, xml_string=xml_string)
+        self.tags, self.ids = parse_xml(xml_path=xml_path, xml_string=xml_string)
         self.root = next((tag for tag in self.tags if tag.is_standard), None)
 
     def get_lines(self, use_esc_chars=False, as_string=False) -> list[str] | str:
@@ -502,6 +514,10 @@ class XMLObject:
             if output := tag.get_tag(name):
                 return output
         return None
+
+    def get_by_value(self, search_value: str, partial=False, include_attributes=True) -> list[XMLTag]:
+        params = (search_value, partial, include_attributes)
+        return [tag for sub_list in (root_tag.get_by_value(*params) for root_tag in self.tags) for tag in sub_list]
 
     def __bool__(self):
         return all(bool(tag) for tag in self.tags) if self.tags else False
