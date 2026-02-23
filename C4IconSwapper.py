@@ -70,8 +70,7 @@ conn_id_type = {
 conn_id_type['IR_OUT'] = (1, '1')
 
 assets_path = Path(__file__).resolve().parent / 'assets'  # For Nuitka or venv
-if hasattr(sys, '_MEIPASS'):
-    # noinspection PyProtectedMember
+if hasattr(sys, '_MEIPASS'):  # noinspection PyProtectedMember
     assets_path = Path(sys._MEIPASS) / 'assets'  # For PyInstaller
 
 max_image_pixels = Image.MAX_IMAGE_PIXELS
@@ -745,12 +744,15 @@ class C4IconSwapper(IPC):
         # Class variables
         self.driver_xml = None
         self.driver_manufac_var = StringVar()
-        self.driver_manufac_new_var = StringVar(value=self.def_driver_manufacturer.get())
-        self.driver_creator_var = StringVar()
-        self.driver_creator_new_var = StringVar(value=self.def_driver_creator.get())
-        self.driver_ver_orig = StringVar()
-        self.driver_version_var = StringVar()
-        self.driver_version_new_var = StringVar(value='1')
+        self.manufac_new_prev = self.def_driver_manufacturer.get()
+        self.manufac_new_var = StringVar(value=self.def_driver_manufacturer.get())
+        self.creator_var = StringVar()
+        self.creator_new_prev = self.def_driver_creator.get()
+        self.creator_new_var = StringVar(value=self.def_driver_creator.get())
+        self.version_orig_var = StringVar()
+        self.version_var = StringVar()
+        self.version_new_prev = '1'
+        self.version_new_var = StringVar(value='1')
         self.multi_state_driver = False
         self.driver_loaded_with = {'all_imgs': self.def_get_all_driver_imgs.get(),
                                    'all_conns': self.def_get_all_connections.get()}
@@ -1001,11 +1003,11 @@ class C4IconSwapper(IPC):
         self.ask_to_save = True
 
     def validate_driver_ver(self, *_):
-        version_compare = re.sub(r'\D', '', ver_str := self.driver_version_new_var.get()).lstrip('0')
+        version_compare = re.sub(r'\D', '', ver_str := self.version_new_var.get()).lstrip('0')
         if str_diff := len(ver_str) - len(version_compare):
-            cursor_pos = self.driver_info_win.driver_ver_new_entry.index(INSERT)
-            self.driver_info_win.driver_ver_new_entry.icursor(cursor_pos - str_diff)
-            self.driver_version_new_var.set(version_compare)
+            cursor_pos = self.driver_info_win.version_new_entry.index(INSERT)
+            self.driver_info_win.version_new_entry.icursor(cursor_pos - str_diff)
+            self.version_new_var.set(version_compare)
             return
         self.ask_to_save = True
 
@@ -1025,18 +1027,18 @@ class C4IconSwapper(IPC):
 
     def update_driver_version(self, *_):
         if not self.export_panel.inc_driver_version.get():
-            curr_ver = self.driver_version_var.get()
-            alt_ver = self.driver_version_new_var.get() or '1'
-            self.driver_version_new_var.set(curr_ver or alt_ver)
+            curr_ver = self.version_var.get()
+            alt_ver = self.version_new_var.get() or '1'
+            self.version_new_var.set(curr_ver or alt_ver)
             return
         try:
-            curr_ver = int(self.driver_version_var.get())
-            new_ver = int(self.driver_version_new_var.get())
+            curr_ver = int(self.version_var.get())
+            new_ver = int(self.version_new_var.get())
         except ValueError:
             return
         if curr_ver >= new_ver:
             self.ask_to_save = True
-            self.driver_version_new_var.set(str(curr_ver + 1))
+            self.version_new_var.set(str(curr_ver + 1))
 
     # TODO: Completely overhaul everything related to multistate
     def get_states(self, lua_file):
@@ -1224,12 +1226,12 @@ class C4IconSwapper(IPC):
                 self.c4z_panel.icon_num_label.config(text='0 of 0')
             self.driver_selected = c4is.driver_selected
             self.driver_manufac_var.set(c4is.driver_manufac_var)
-            self.driver_manufac_new_var.set(c4is.driver_manufac_new_var)
-            self.driver_creator_var.set(c4is.driver_creator_var)
-            self.driver_creator_new_var.set(c4is.driver_creator_new_var)
-            self.driver_ver_orig.set(c4is.driver_ver_orig)
-            self.driver_version_var.set(c4is.driver_version_var)
-            self.driver_version_new_var.set(c4is.driver_version_new_var)
+            self.manufac_new_var.set(c4is.driver_manufac_new_var)
+            self.creator_var.set(c4is.driver_creator_var)
+            self.creator_new_var.set(c4is.driver_creator_new_var)
+            self.version_orig_var.set(c4is.driver_ver_orig)
+            self.version_var.set(c4is.driver_version_var)
+            self.version_new_var.set(c4is.driver_version_new_var)
 
             # Multi State
             self.states_orig_names = c4is.states_orig_names
@@ -1338,24 +1340,38 @@ class C4IconSwapper(IPC):
     def undo(self, *_):
         if not self.undo_history:
             return
+
         ask_to_save = self.ask_to_save
         undo_dict = self.undo_history.pop()
 
         # Icons
-        for i, undo_icon in enumerate(undo_dict['icons']):
-            icon = self.c4z_panel.icons[i]
-            icon.replacement_icon = undo_icon['replacement_icon']
-            icon.restore_bak = undo_icon['restore_bak']
-            icon.name = undo_icon['name']
-        self.c4z_panel.current_icon = undo_dict['current_icon']
-        self.c4z_panel.update_icon()
+        if undo_dict['icon_change']:
+            for i, undo_icon in enumerate(undo_dict['icons']):
+                icon = self.c4z_panel.icons[i]
+                icon.replacement_icon = undo_icon['replacement_icon']
+                icon.restore_bak = undo_icon['restore_bak']
+                icon.name = undo_icon['name']
+            self.c4z_panel.current_icon = undo_dict['current_icon']
+            self.c4z_panel.update_icon()
+
+        # Driver Info
+        if undo_dict['dinfo_change']:
+            if not self.driver_info_win:
+                self.driver_info_win = DriverInfoWin(self)
+                self.root.update_idletasks()
+            self.manufac_new_prev = undo_dict['manufac']
+            self.manufac_new_var.set(undo_dict['manufac'])
+            self.creator_new_prev = undo_dict['creator']
+            self.creator_new_var.set(undo_dict['creator'])
+            self.version_new_prev = undo_dict['version']
+            self.version_new_var.set(undo_dict['version'])
 
         # Connections
         if undo_dict['conn_change']:
             if not self.connections_win:
                 self.connections_win = ConnectionsWin(self)
                 self.root.update_idletasks()
-            self.connections_win.supress_trace = True
+            self.connections_win.suppress_trace = True
             if undo_dict['add_conn']:
                 self.connections_win.connection_entries[-2].action(command='x')
             elif conn_dict := undo_dict['del_conn']:
@@ -1369,7 +1385,7 @@ class C4IconSwapper(IPC):
                                                                ConnectionEntry(self.connections_win, new_conn,
                                                                                self.connections_win.widget_x, conn_y))
                 conn_entry = self.connections_win.connection_entries[i]
-                conn_obj = conn_entry.conn_object
+                conn_obj = conn_entry.conn_obj
                 conn_obj.enabled = True
                 conn_obj.tag.hide = False
                 conn_obj.update_id()
@@ -1391,7 +1407,7 @@ class C4IconSwapper(IPC):
                 self.connections[i].type_var.set(ctype)
                 self.connections[i].prev_type = ctype
             self.connections_win.refresh()
-            self.connections_win.supress_trace = False
+            self.connections_win.suppress_trace = False
 
         if not self.undo_history:
             self.edit.entryconfig(self.undo_pos, state=DISABLED)
@@ -1400,9 +1416,11 @@ class C4IconSwapper(IPC):
     # TODO: Create savestate json for more inclusive undo history and robust app crash recovery.
     #  Add DriverInfo variables, ExportPanel driver_name_var, and States
     #  Remove unnecessary data from dict for undo_history
-    def update_undo_history(self, add_conn=False, del_conn=None, conn_change=False):
+    def update_undo_history(self, icon_change=False, conn_change=False, add_conn=False, del_conn=None,
+                            dinfo_change=False):
         app_state = {
             'driver_loaded_with': self.driver_loaded_with.copy(),
+            'icon_change': icon_change,
             'icons': [{'replacement_icon': icon.replacement_icon, 'restore_bak': icon.restore_bak, 'name': icon.name}
                       for icon in self.c4z_panel.icons],
             'current_icon': self.c4z_panel.current_icon,
@@ -1413,8 +1431,13 @@ class C4IconSwapper(IPC):
             'add_conn': add_conn,
             'del_conn': {'index': del_conn,
                          'name': self.connections[del_conn].prev_name,
-                         'type': self.connections[del_conn].prev_type} if del_conn is not None else {}
+                         'type': self.connections[del_conn].prev_type} if del_conn is not None else {},
+            'dinfo_change': dinfo_change,
+            'manufac': self.manufac_new_prev,
+            'creator': self.creator_new_prev,
+            'version': self.version_new_prev
         }
+
         self.undo_history.append(app_state)
         self.edit.entryconfig(self.undo_pos, state=NORMAL)
 
@@ -1579,6 +1602,10 @@ class SettingsWin:
         self.w, self.h = (255, 325)
         self.window.geometry(f'{self.w}x{self.h}+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.bind('<KeyRelease>', self.on_key_release)
+        self.window.bind('<Control-s>', main.save_project)
+        self.window.bind('<Control-o>', main.load_project)
+        self.window.bind('<Control-z>', main.undo)
+        self.window.bind('<Control-w>', self.close)
         self.window.resizable(False, False)
 
         self.halt_trace_calls = False
@@ -1761,7 +1788,7 @@ class SettingsWin:
         settings_str = ',\n\t'.join([f'{setting}: {val}' for setting, val in self.main.settings.items()])
         print(f'Restored default settings: {{\n\t{settings_str}\n}}')
 
-    def close(self):
+    def close(self, *_):
         for setting_var, trace in self.var_trace_dict.values():
             setting_var.trace_remove('write', trace)
         for value in list(self.entry_mod_delay_dict.values()):
@@ -1965,6 +1992,7 @@ class SubIconWin:
         subprocess.Popen(f'explorer /select,"{self.icons[self.curr_index].path.resolve()}"')
 
 
+# TODO: Update undo history on window close
 class DriverInfoWin:
     def __init__(self, main: C4IconSwapper):
         ask_to_save = main.ask_to_save
@@ -1976,7 +2004,16 @@ class DriverInfoWin:
         self.window.protocol('WM_DELETE_WINDOW', self.close)
         self.window.title('Edit Driver Info')
         self.window.geometry(f'255x215+{main.root.winfo_rootx() + main.export_panel.x}+{main.root.winfo_rooty()}')
+
+        def focus_on_click(event):
+            if isinstance(event.widget, (Toplevel, Label)):
+                self.window.focus_set()
+        self.window.bind('<Button-1>', focus_on_click)
         self.window.bind('<KeyRelease>', lambda e: main.on_key_release(e))
+        self.window.bind('<Control-s>', main.save_project)
+        self.window.bind('<Control-o>', main.load_project)
+        self.window.bind('<Control-z>', main.undo)
+        self.window.bind('<Control-w>', self.close)
         self.window.resizable(False, False)
 
         # Labels
@@ -2007,72 +2044,103 @@ class DriverInfoWin:
 
         # Entries
         entry_width = 17
-        driver_man_entry = Entry(self.window, width=entry_width, textvariable=main.driver_manufac_var)
-        driver_man_entry.place(x=10, y=man_y + 7, anchor='nw')
-        driver_man_entry['state'] = DISABLED
+        manufac_entry = Entry(self.window, width=entry_width, textvariable=main.driver_manufac_var)
+        manufac_entry.place(x=10, y=man_y + 7, anchor='nw')
+        manufac_entry['state'] = 'readonly'
 
-        self.driver_man_new_entry = Entry(self.window, width=entry_width, textvariable=main.driver_manufac_new_var)
-        self.driver_man_new_entry.place(x=140, y=man_y + 7, anchor='nw')
-        main.driver_manufac_new_var.trace_add('write',
-                                              lambda name, index, mode: self.main.validate_man_and_creator(
-                                                  string_var=main.driver_manufac_new_var,
-                                                  entry=self.driver_man_new_entry))
+        self.manufac_new_entry = Entry(self.window, width=entry_width, textvariable=main.manufac_new_var)
+        self.manufac_new_entry.bind('<FocusIn>', lambda _: self.update_undo_history(True, 'manufac'))
+        self.manufac_new_entry.bind('<FocusOut>', lambda _: self.update_undo_history(False, 'manufac'))
+        self.manufac_new_entry.place(x=140, y=man_y + 7, anchor='nw')
+        self.trace_m = main.manufac_new_var.trace_add('write',
+                                                      lambda name, index, mode: self.main.validate_man_and_creator(
+                                                          string_var=main.manufac_new_var,
+                                                          entry=self.manufac_new_entry))
 
-        driver_creator_entry = Entry(self.window, width=entry_width, textvariable=main.driver_creator_var)
-        driver_creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
-        driver_creator_entry['state'] = DISABLED
+        creator_entry = Entry(self.window, width=entry_width, textvariable=main.creator_var)
+        creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
+        creator_entry['state'] = 'readonly'
 
-        self.driver_creator_new_entry = Entry(self.window, width=entry_width, textvariable=main.driver_creator_new_var)
-        self.driver_creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
-        main.driver_creator_new_var.trace_add('write',
-                                              lambda name, index, mode: self.main.validate_man_and_creator(
-                                                  string_var=main.driver_creator_new_var,
-                                                  entry=self.driver_creator_new_entry))
+        self.creator_new_entry = Entry(self.window, width=entry_width, textvariable=main.creator_new_var)
+        self.creator_new_entry.bind('<FocusIn>', lambda _: self.update_undo_history(True, 'creator'))
+        self.creator_new_entry.bind('<FocusOut>', lambda _: self.update_undo_history(False, 'creator'))
+        self.creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
+        self.trace_c = main.creator_new_var.trace_add('write',
+                                                      lambda name, index, mode: self.main.validate_man_and_creator(
+                                                          string_var=main.creator_new_var,
+                                                          entry=self.creator_new_entry))
 
-        driver_ver_entry = Entry(self.window, width=entry_width, textvariable=main.driver_version_var)
-        driver_ver_entry.place(x=10, y=version_y + 7, anchor='nw')
-        driver_ver_entry['state'] = DISABLED
+        version_entry = Entry(self.window, width=entry_width, textvariable=main.version_var)
+        version_entry.place(x=10, y=version_y + 7, anchor='nw')
+        version_entry['state'] = 'readonly'
 
-        self.driver_ver_new_entry = Entry(self.window, width=entry_width, textvariable=main.driver_version_new_var)
-        self.driver_ver_new_entry.place(x=140, y=version_y + 7, anchor='nw')
-        self.driver_ver_new_entry.bind('<FocusOut>', main.update_driver_version)
-        main.driver_version_new_var.trace_add('write', main.validate_driver_ver)
+        self.version_new_entry = Entry(self.window, width=entry_width, textvariable=main.version_new_var)
+        self.version_new_entry.bind('<FocusIn>', lambda _: self.update_undo_history(True, 'version'))
+        self.version_new_entry.bind('<FocusOut>', lambda _: self.update_undo_history(False, 'version'))
+        self.version_new_entry.bind('<FocusOut>', main.update_driver_version, add='+')
+        self.version_new_entry.place(x=140, y=version_y + 7, anchor='nw')
+        self.trace_v = main.version_new_var.trace_add('write', main.validate_driver_ver)
 
-        driver_ver_orig_entry = Entry(self.window, width=15, justify='center', textvariable=main.driver_ver_orig)
-        driver_ver_orig_entry.place(relx=0.5, y=version_y + 45, anchor='n')
-        driver_ver_orig_entry['state'] = DISABLED
+        version_orig_entry = Entry(self.window, width=15, justify='center', textvariable=main.version_orig_var)
+        version_orig_entry.place(relx=0.5, y=version_y + 45, anchor='n')
+        version_orig_entry['state'] = 'readonly'
 
         self.update_entries()
         main.ask_to_save = ask_to_save
+
+    def update_undo_history(self, focus_in: bool, entry: str):
+        match entry:
+            case 'manufac':
+                if focus_in:
+                    self.main.manufac_new_prev = self.main.manufac_new_var.get()
+                elif self.main.manufac_new_prev != self.main.manufac_new_var.get():
+                    self.main.update_undo_history(dinfo_change=True)
+                    self.main.manufac_new_prev = self.main.manufac_new_var.get()
+            case 'creator':
+                if focus_in:
+                    self.main.creator_new_prev = self.main.creator_new_var.get()
+                elif self.main.creator_new_prev != self.main.creator_new_var.get():
+                    self.main.update_undo_history(dinfo_change=True)
+                    self.main.creator_new_prev = self.main.creator_new_var.get()
+            case 'version':
+                if focus_in:
+                    self.main.version_new_prev = self.main.version_new_var.get()
+                elif self.main.version_new_prev != self.main.version_new_var.get():
+                    self.main.update_undo_history(dinfo_change=True)
+                    self.main.version_new_prev = self.main.version_new_var.get()
 
     # noinspection PyTypeChecker
     def update_entries(self):
         main = self.main
         entry_state = DISABLED if (use_orig := main.export_panel.use_orig_xml.get()) else NORMAL
-        self.driver_man_new_entry.config(
-            textvariable=(main.driver_manufac_var if use_orig else main.driver_manufac_new_var), state=entry_state)
-        self.driver_creator_new_entry.config(
-            textvariable=(main.driver_creator_var if use_orig else main.driver_creator_new_var), state=entry_state)
-        self.driver_ver_new_entry.config(
-            textvariable=(main.driver_ver_orig if use_orig else main.driver_version_new_var), state=entry_state)
+        self.manufac_new_entry.config(
+            textvariable=(main.driver_manufac_var if use_orig else main.manufac_new_var), state=entry_state)
+        self.creator_new_entry.config(
+            textvariable=(main.creator_var if use_orig else main.creator_new_var), state=entry_state)
+        self.version_new_entry.config(
+            textvariable=(main.version_orig_var if use_orig else main.version_new_var), state=entry_state)
         if not main.driver_xml:
             main.driver_manufac_var.set('')
-            main.driver_creator_var.set('')
-            main.driver_version_var.set('')
-            main.driver_ver_orig.set('')
+            main.creator_var.set('')
+            main.version_var.set('')
+            main.version_orig_var.set('')
 
-    def close(self):
-        self.main.validate_man_and_creator(string_var=self.main.driver_manufac_new_var, entry=self.driver_man_new_entry)
-        self.main.validate_man_and_creator(string_var=self.main.driver_creator_new_var,
-                                           entry=self.driver_creator_new_entry)
+    def close(self, *_):
+        self.main.manufac_new_var.trace_remove('write', self.trace_m)
+        self.main.creator_new_var.trace_remove('write', self.trace_c)
+        self.main.version_new_var.trace_remove('write', self.trace_v)
+        self.main.validate_man_and_creator(string_var=self.main.manufac_new_var, entry=self.manufac_new_entry)
+        self.main.validate_man_and_creator(string_var=self.main.creator_new_var,
+                                           entry=self.creator_new_entry)
         self.main.validate_driver_ver()
         self.window.destroy()
         self.main.driver_info_win = None
 
 
+# TODO: Update undo history on window close
 class ConnectionsWin:
     def __init__(self, main: C4IconSwapper):
-        self.supress_trace = True
+        self.suppress_trace = True
         # Initialize window
         ask_to_save = main.ask_to_save
         self.main = main
@@ -2082,21 +2150,21 @@ class ConnectionsWin:
         self.window.title('Edit Driver Connections')
         self.size = w, h = (375, 250)
         self.window.geometry(f'{w}x{h}+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
-        self.window.bind('<KeyRelease>', self.on_key_release)
-        self.window.bind('<Configure>', self.on_resize)
-        self.window.bind('<Control-s>', main.save_project)
-        self.window.bind('<Control-o>', main.load_project)
-        self.window.bind('<Control-z>', main.undo)
-        self.window.bind('<Control-w>', main.end_program)
-
-        self.resize_after_call_id = None
-        self.threaded_refresh = threading.Event()
-        self.threaded_refresh.set()
 
         def focus_on_click(event):
             if isinstance(event.widget, Frame):
                 self.window.focus_set()
         self.window.bind('<Button-1>', focus_on_click)
+        self.window.bind('<KeyRelease>', self.on_key_release)
+        self.window.bind('<Configure>', self.on_resize)
+        self.window.bind('<Control-s>', main.save_project)
+        self.window.bind('<Control-o>', main.load_project)
+        self.window.bind('<Control-z>', main.undo)
+        self.window.bind('<Control-w>', self.close)
+
+        self.resize_after_call_id = None
+        self.threaded_refresh = threading.Event()
+        self.threaded_refresh.set()
 
         self.canvas = Canvas(self.window, highlightthickness=0, borderwidth=0)
         self.scrollbar = Scrollbar(self.window, orient='vertical', command=self.canvas.yview)
@@ -2127,7 +2195,7 @@ class ConnectionsWin:
             self.scroll_bound = True
 
         main.ask_to_save = ask_to_save
-        self.supress_trace = False
+        self.suppress_trace = False
 
     def on_key_release(self, event):
         match event.keysym:
@@ -2137,7 +2205,7 @@ class ConnectionsWin:
                 self.main.on_key_release(event)
 
     def on_resize(self, *_, called_after=False):
-        if self.supress_trace or (new_size := (self.window.winfo_width(), self.window.winfo_height())) == self.size:
+        if self.suppress_trace or (new_size := (self.window.winfo_width(), self.window.winfo_height())) == self.size:
             return
         if not called_after:
             if self.resize_after_call_id:
@@ -2157,7 +2225,7 @@ class ConnectionsWin:
         if not self.threaded_refresh.is_set() and not _from_thread:
             return
         if hard:
-            self.supress_trace = True
+            self.suppress_trace = True
             self.canvas.itemconfig(self.canvas_window_id, window='')
             for conn_entry in self.connection_entries:
                 conn_entry.destroy()
@@ -2167,7 +2235,7 @@ class ConnectionsWin:
             ]
             self.update_scroll_frame()  # doing this after canvas config takes much longer, and it seems to work as is
             self.canvas.itemconfig(self.canvas_window_id, window=self.scrollable_frame)
-            self.supress_trace = False
+            self.suppress_trace = False
             self.threaded_refresh.set()
             return
 
@@ -2191,9 +2259,9 @@ class ConnectionsWin:
             self.window.unbind('<MouseWheel>')
             self.scroll_bound = False
 
-    def close(self):
+    def close(self, *_):
         for conn_entry in self.connection_entries:
-            if conn_entry.conn_object.original:
+            if conn_entry.conn_obj.original:
                 continue
             conn_entry.destroy()
         self.threaded_refresh.wait()
@@ -2243,7 +2311,7 @@ class ConnectionEntry:
         self.main = parent.main
         self.parent = parent
         self.frame = parent.scrollable_frame
-        self.conn_object = conn_obj
+        self.conn_obj = conn_obj
         self.x, self.y = x_pos, y_pos
 
         self.strike = None
@@ -2254,11 +2322,10 @@ class ConnectionEntry:
             self.name_entry.insert(0, conn_obj.name)
             self.entry_trace = None
         else:
-            self.name_entry_var = conn_obj.name_entry_var
-            self.entry_trace = self.name_entry_var.trace_add('write', self.name_update)
-            self.name_entry = Entry(self.frame, width=28, textvariable=self.name_entry_var)
+            self.name_entry = Entry(self.frame, width=28, textvariable=conn_obj.name_entry_var)
             self.name_entry.bind('<FocusIn>', lambda _: self.update_undo_history(True))
             self.name_entry.bind('<FocusOut>', lambda _: self.update_undo_history(False))
+            self.entry_trace = conn_obj.name_entry_var.trace_add('write', self.name_update)
         self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
 
         # Dropdown
@@ -2266,11 +2333,10 @@ class ConnectionEntry:
             self.type_menu = Label(self.frame, text=conn_obj.type, relief='raised', padx=7, pady=4)
             self.type_trace = None
         else:
-            self.type_var = conn_obj.type_var
-            self.type_menu = OptionMenu(self.frame, self.type_var, *selectable_connections)
+            self.type_menu = OptionMenu(self.frame, conn_obj.type_var, *selectable_connections)
             self.type_menu.bind('<Button-1>', lambda _: parent.window.focus_set())
             self.type_menu['menu'].config(postcommand=lambda: self.update_undo_history(True, entry=False))
-            self.type_trace = self.type_var.trace_add('write', self.type_update)
+            self.type_trace = conn_obj.type_var.trace_add('write', self.type_update)
         self.type_menu.place(x=self.x + (212 if conn_obj.original else 210), y=self.y, anchor='w')
 
         # Button
@@ -2303,7 +2369,7 @@ class ConnectionEntry:
         self.action_button.place(x=self.x + x_offset, y=self.y, anchor='w')
         self.action_button['state'] = button_state
         self.type_menu['state'] = DISABLED if not conn_obj.enabled else button_state
-        self.name_entry['state'] = 'readonly' if self.conn_object.original else button_state
+        self.name_entry['state'] = 'readonly' if self.conn_obj.original else button_state
         if not conn_obj.enabled:
             if not conn_obj.original:
                 self.name_entry['state'] = DISABLED
@@ -2311,25 +2377,26 @@ class ConnectionEntry:
     def update_undo_history(self, focus_in: bool, entry=True):
         if entry:
             if focus_in:
-                self.conn_object.prev_name = self.name_entry_var.get()
-            elif self.conn_object.prev_name != self.name_entry_var.get():
+                self.conn_obj.prev_name = self.conn_obj.name_entry_var.get()
+            elif self.conn_obj.prev_name != self.conn_obj.name_entry_var.get():
                 self.main.update_undo_history(conn_change=True)
-                self.conn_object.prev_name = self.name_entry_var.get()
+                self.conn_obj.prev_name = self.conn_obj.name_entry_var.get()
+            self.conn_obj.prev_name = self.conn_obj.name_entry_var.get()
             return
         if focus_in:
-            self.conn_object.prev_type = self.type_var.get()
-        elif self.conn_object.prev_type != self.type_var.get():
+            self.conn_obj.prev_type = self.conn_obj.type_var.get()
+        elif self.conn_obj.prev_type != self.conn_obj.type_var.get():
             self.main.update_undo_history(conn_change=True)
-            self.conn_object.prev_type = self.type_var.get()
+            self.conn_obj.prev_type = self.conn_obj.type_var.get()
 
     def refresh(self):
-        if not (original := self.conn_object.original):
-            self.name_entry_var.set(self.conn_object.name_entry_var.get())
-            self.type_var.set(self.conn_object.type_var.get())
+        if not (original := self.conn_obj.original):
+            self.conn_obj.name_entry_var.set(self.conn_obj.name_entry_var.get())
+            self.conn_obj.type_var.set(self.conn_obj.type_var.get())
         self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
         self.type_menu.place(x=self.x + (212 if original else 210), y=self.y, anchor='w')
         state = DISABLED if self.main.export_panel.use_orig_xml.get() else NORMAL
-        if self.conn_object.enabled:
+        if self.conn_obj.enabled:
             self.type_menu['state'] = state
             self.name_entry['state'] = state
         else:
@@ -2337,14 +2404,14 @@ class ConnectionEntry:
             self.name_entry['state'] = 'readonly' if original else DISABLED
 
         if original:
-            if self.conn_object.delete:
+            if self.conn_obj.delete:
                 self.action_button.config(text='Keep', width=4, state=state)  # type: ignore
                 self.action_button.place(x=self.x - 6, y=self.y, anchor='w')
                 self.name_entry['state'] = DISABLED
             else:
                 self.action_button.config(text='Del', width=3, state=state)  # type: ignore
                 self.action_button.place(x=self.x, y=self.y, anchor='w')
-        elif self.conn_object.enabled:
+        elif self.conn_obj.enabled:
             self.action_button.config(text='x', width=1, state=state)  # type: ignore
             self.action_button.place(x=self.x + 14, y=self.y, anchor='w')
         else:
@@ -2355,9 +2422,9 @@ class ConnectionEntry:
     def action(self, command=''):
         match (command or self.action_button['text']):
             case 'Add':
-                self.conn_object.enabled = True
-                self.conn_object.tag.hide = False
-                self.conn_object.update_id()
+                self.conn_obj.enabled = True
+                self.conn_obj.tag.hide = False
+                self.conn_obj.update_id()
                 self.name_entry['state'] = NORMAL
                 self.type_menu['state'] = NORMAL
                 self.action_button.config(text='x', width=1)
@@ -2369,25 +2436,25 @@ class ConnectionEntry:
                     ConnectionEntry(self.parent, new_conn, self.parent.widget_x,
                                     self.y + self.parent.widget_y_offset))
                 self.parent.update_scroll_frame()
-                if not self.parent.supress_trace:
+                if not self.parent.suppress_trace:
                     self.main.update_undo_history(add_conn=True)
             case 'x':
                 i = self.parent.connection_entries.index(self)
-                if not self.parent.supress_trace:
+                if not self.parent.suppress_trace:
                     self.main.update_undo_history(del_conn=i)
                 self.parent.connection_entries.pop(i)
                 self.main.connections.pop(i)
-                self.main.driver_xml.get_tag('connections').remove_element(self.conn_object.tag)
-                if (in_dict := self.main.taken_xml_ids.get(self.conn_object.id)) and self.conn_object is in_dict:
-                    self.main.taken_xml_ids.pop(self.conn_object.id)
+                self.main.driver_xml.get_tag('connections').remove_element(self.conn_obj.tag)
+                if (in_dict := self.main.taken_xml_ids.get(self.conn_obj.id)) and self.conn_obj is in_dict:
+                    self.main.taken_xml_ids.pop(self.conn_obj.id)
                 self.destroy()
                 for conn_entry in self.parent.connection_entries[i:]:
                     conn_entry.y -= self.parent.widget_y_offset
                     conn_entry.refresh()
                 self.parent.update_scroll_frame()
             case 'Del':
-                self.conn_object.delete = True
-                self.conn_object.tag.hide = True
+                self.conn_obj.delete = True
+                self.conn_obj.tag.hide = True
                 if not self.strike:
                     self.strike = Frame(self.parent.scrollable_frame, bg='black', height=1)
                 self.strike.place(in_=self.name_entry, relx=0, rely=0.5, relwidth=0.999)
@@ -2395,8 +2462,8 @@ class ConnectionEntry:
                 self.action_button.config(text='Keep', width=4)
                 self.action_button.place(x=self.x - 6)
             case 'Keep':
-                self.conn_object.delete = False
-                self.conn_object.tag.hide = False
+                self.conn_obj.delete = False
+                self.conn_obj.tag.hide = False
                 self.strike.place_forget()
                 self.name_entry.config(readonlybackground=readonly_bg)
                 self.action_button.config(text='Del', width=3)
@@ -2404,22 +2471,22 @@ class ConnectionEntry:
         self.main.ask_to_save = True
 
     def name_update(self, *_):
-        if self.parent.supress_trace:
+        if self.parent.suppress_trace:
             return
         self.main.ask_to_save = True
 
     def type_update(self, *_):
-        if self.parent.supress_trace:
+        if self.parent.suppress_trace:
             return
-        self.conn_object.update_id()
+        self.conn_obj.update_id()
         self.update_undo_history(False, entry=False)
         self.main.ask_to_save = True
 
     def destroy(self):
         if self.type_trace:
-            self.type_var.trace_remove('write', self.type_trace)
+            self.conn_obj.type_var.trace_remove('write', self.type_trace)
         if self.entry_trace:
-            self.name_entry_var.trace_remove('write', self.entry_trace)
+            self.conn_obj.name_entry_var.trace_remove('write', self.entry_trace)
         self.name_entry.destroy()
         self.type_menu.destroy()
         self.action_button.destroy()
@@ -2438,6 +2505,10 @@ class StatesWin:
         self.window.geometry(f'385x287+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
         self.window.resizable(False, False)
         self.window.bind('<KeyRelease>', self.on_key_release)
+        self.window.bind('<Control-s>', main.save_project)
+        self.window.bind('<Control-o>', main.load_project)
+        self.window.bind('<Control-z>', main.undo)
+        self.window.bind('<Control-w>', self.close)
         self.trace_lockout = False
 
         self.state_entries = []
@@ -2495,7 +2566,7 @@ class StatesWin:
         self.refresh(bg_only=True)
         self.trace_lockout = False
 
-    def close(self):
+    def close(self, *_):
         self.refresh()
         self.window.destroy()
         self.main.states_win = None
@@ -2579,26 +2650,27 @@ class RecoveryWin:
                 print('')
             print('Deleted empty Recovery folder')
             return
-        self.window = window = Toplevel(main.root)
+        self.window = Toplevel(main.root)
         self.main = main
         self.recovery_dir = recovery_dir
-        window.grab_set()
-        window.focus()
-        window.transient(main.root)
-        window.title('Project Recovery')
-        window.geometry(f'355x287+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
-        window.resizable(False, False)
-        window.protocol('WM_DELETE_WINDOW', self.close_dialog)
+        self.window.grab_set()
+        self.window.focus()
+        self.window.transient(main.root)
+        self.window.title('Project Recovery')
+        self.window.geometry(f'355x287+{main.root.winfo_rootx()}+{main.root.winfo_rooty()}')
+        self.window.resizable(False, False)
+        self.window.protocol('WM_DELETE_WINDOW', self.close_dialog)
+        self.window.bind('<Control-w>', self.close_dialog)
 
         self.recoverable_projects = [rec_obj for path in recovery_dir.iterdir() if (rec_obj := RecoveryObject(path))]
 
-        title_label = Label(window, text='Select Projects to Recover', font=(label_font, 14))
+        title_label = Label(self.window, text='Select Projects to Recover', font=(label_font, 14))
         title_label.place(relx=0.5, y=5, anchor='n')
 
-        canvas = Canvas(window)
+        canvas = Canvas(self.window)
         scrollable_frame = Frame(canvas)
         if do_scroll := num_of_rec_folders > 8:
-            scrollbar = Scrollbar(window, command=canvas.yview)
+            scrollbar = Scrollbar(self.window, command=canvas.yview)
             scrollable_frame.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
             canvas.bind('<MouseWheel>', lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units'))
             canvas.configure(yscrollcommand=scrollbar.set)
@@ -2618,10 +2690,10 @@ class RecoveryWin:
             if do_scroll:
                 check.bind('<MouseWheel>', lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units'))
 
-        recover_button = Button(window, text='Recover', width=10, command=self.do_recovery)
+        recover_button = Button(self.window, text='Recover', width=10, command=self.do_recovery)
         recover_button.place(relx=0.5, x=-4, rely=1, y=-3, anchor='se')
 
-        delete_button = Button(window, text='Delete' if num_of_rec_folders == 1 else 'Delete All',
+        delete_button = Button(self.window, text='Delete' if num_of_rec_folders == 1 else 'Delete All',
                                width=10, command=self.close_dialog)
         delete_button.place(relx=0.5, x=4, rely=1, y=-3, anchor='sw')
 
@@ -2707,7 +2779,7 @@ class RecoveryWin:
         self.main.root.deiconify()
         self.main.root.focus()
 
-    def close_dialog(self):
+    def close_dialog(self, *_):
         def exit_close_dialog():
             close_dialog.destroy()
             self.window.deiconify()
@@ -3053,13 +3125,9 @@ class C4zPanel:
         def get_icon_groups_from_xml() -> dict[tuple[str, XMLTag], set[Path]]:
             icon_groups = defaultdict(set)
             proxy_binding_id_dict = defaultdict(str)
-            # TODO: maybe implement a search for the following:
-            #   <small image_source="c4z">REL_PATH</small>
-            #   <large image_source="c4z">REL_PATH</large>
             for tag in main.driver_xml.get_tags('proxy'):
-                tag_name = tag.attributes.get('name')
                 if proxybindingid := tag.attributes.get('proxybindingid'):
-                    proxy_binding_id_dict[proxybindingid] = tag_name
+                    proxy_binding_id_dict[proxybindingid] = tag.attributes.get('name')
                 if sm_img_path := tag.attributes.get('small_image'):
                     rel_path = Path(sm_img_path)
                     icon_groups[(None, tag)].add(rel_path)
@@ -3158,17 +3226,17 @@ class C4zPanel:
             if man_tag := main.driver_xml.get_tag('manufacturer'):
                 main.driver_manufac_var.set(man_tag.value)
             if creator_tag := main.driver_xml.get_tag('creator'):
-                main.driver_creator_var.set(creator_tag.value)
+                main.creator_var.set(creator_tag.value)
             if version_tag := main.driver_xml.get_tag('version'):
-                main.driver_ver_orig.set(version_tag.value)
+                main.version_orig_var.set(version_tag.value)
                 ver_num = re.search(r'\d*', version_tag.value)[0]
                 if ver_num:
-                    main.driver_version_var.set(ver_num)
+                    main.version_var.set(ver_num)
                     ver_num = str(int(ver_num) + 1) if main.export_panel.inc_driver_version.get() else ver_num
-                    main.driver_version_new_var.set(ver_num)
+                    main.version_new_var.set(ver_num)
                 else:
-                    main.driver_version_var.set('0')
-                    main.driver_version_new_var.set('1')
+                    main.version_var.set('0')
+                    main.version_new_var.set('1')
             if id_tags := main.driver_xml.get_tags('id'):
                 main.original_conn_ids = set()
                 for id_tag in id_tags:
@@ -3264,7 +3332,7 @@ class C4zPanel:
     def restore(self, do_all=False):
         if self.main.pending_load_save.get():
             return
-        self.main.update_undo_history()
+        self.main.update_undo_history(icon_change=True)
         if do_all:
             show_extra = self.show_extra_icons.get()
             for icon in self.icons:
@@ -3278,7 +3346,7 @@ class C4zPanel:
     def unrestore(self, *_, do_all=False):
         if self.main.pending_load_save.get():
             return
-        self.main.update_undo_history()
+        self.main.update_undo_history(icon_change=True)
         if do_all:
             for icon in self.icons:
                 if not icon.replacement_icon and (icon.restore_bak and icon.bak):
@@ -3836,7 +3904,7 @@ class ReplacementPanel:
             raise ValueError('Current icon index out of range')
 
         if update_undo_history:
-            self.main.update_undo_history()
+            self.main.update_undo_history(icon_change=True)
 
         c4z_panel.icons[c4_icn_index].replace(self.replacement_icon)
         c4z_panel.restore_all_button['state'] = NORMAL
@@ -3846,7 +3914,7 @@ class ReplacementPanel:
     def replace_all(self):
         if not self.threading_event.is_set():
             return
-        self.main.update_undo_history()
+        self.main.update_undo_history(icon_change=True)
         show_extra = self.main.c4z_panel.show_extra_icons.get()
         for i, icon in enumerate(self.main.c4z_panel.icons):
             if icon.extra and not show_extra:
@@ -4164,11 +4232,11 @@ class ExportPanel:
             # General Changes
             driver_xml.get_tag('name').set_value(driver_name)
             modified_datestamp = str(datetime.now().strftime('%m/%d/%Y %H:%M'))
-            driver_xml.get_tag('version').set_value(new_ver := main.driver_version_new_var.get())
-            main.driver_version_var.set(new_ver)
+            driver_xml.get_tag('version').set_value(new_ver := main.version_new_var.get())
+            main.version_var.set(new_ver)
             driver_xml.get_tag('modified').set_value(modified_datestamp)
-            driver_xml.get_tag('creator').set_value(main.driver_creator_new_var.get())
-            driver_xml.get_tag('manufacturer').set_value(main.driver_manufac_new_var.get())
+            driver_xml.get_tag('creator').set_value(main.creator_new_var.get())
+            driver_xml.get_tag('manufacturer').set_value(main.manufac_new_var.get())
             # TODO: Implement this in a smarter way; save and replace current driver name
             for tag in driver_xml.get_tags('proxy'):
                 if not tag.attributes.get('large_image') and not tag.attributes.get('small_image'):
@@ -4288,7 +4356,7 @@ class ExportPanel:
 
         # Increment driver version if applicable
         if self.inc_driver_version.get() and not self.use_orig_xml.get():
-            main.driver_version_new_var.set(str(int(main.driver_version_new_var.get()) + 1))
+            main.version_new_var.set(str(int(main.version_new_var.get()) + 1))
 
         # Restore original driver folder
         shutil.rmtree(main.instance_temp / 'driver')
@@ -4310,8 +4378,8 @@ class ExportPanel:
             missing_driver_info_dialog.destroy()
             main.open_edit_win(main.driver_info_win, 'driver')
         main = self.main
-        if not all([main.driver_version_new_var.get(), main.driver_manufac_new_var.get(),
-                    main.driver_creator_new_var.get()]):
+        if not all([main.version_new_var.get(), main.manufac_new_var.get(),
+                    main.creator_new_var.get()]):
             missing_driver_info_dialog = Toplevel(main.root)
             missing_driver_info_dialog.title('Missing Driver Information')
             label_text = 'Cannot Export: Missing driver info'
@@ -4339,12 +4407,12 @@ class C4IS:
         self.version = 2
         self.driver_xml = main.driver_xml
         self.driver_manufac_var = main.driver_manufac_var.get()
-        self.driver_manufac_new_var = main.driver_manufac_new_var.get()
-        self.driver_creator_var = main.driver_creator_var.get()
-        self.driver_creator_new_var = main.driver_creator_new_var.get()
-        self.driver_ver_orig = main.driver_ver_orig.get()
-        self.driver_version_var = main.driver_version_var.get()
-        self.driver_version_new_var = main.driver_version_new_var.get()
+        self.driver_manufac_new_var = main.manufac_new_var.get()
+        self.driver_creator_var = main.creator_var.get()
+        self.driver_creator_new_var = main.creator_new_var.get()
+        self.driver_ver_orig = main.version_orig_var.get()
+        self.driver_version_var = main.version_var.get()
+        self.driver_version_new_var = main.version_new_var.get()
         self.multi_state_driver = main.multi_state_driver
         self.states_orig_names = main.states_orig_names
         self.driver_selected = main.driver_selected
