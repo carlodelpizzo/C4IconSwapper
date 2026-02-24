@@ -1335,15 +1335,17 @@ class C4IconSwapper(IPC):
             'icons': [{'replacement_icon': icon.replacement_icon, 'restore_bak': icon.restore_bak, 'name': icon.name}
                       for icon in self.c4z_panel.icons],
             'current_icon': self.c4z_panel.current_icon,
-            'conn_change': bool(flags.get('add_conn') or flags.get('del_conn') or flags.get('conn_change')),
+            'conn_change': bool(flags.get('add_conn') or flags.get('x_conn') or flags.get('conn_change')),
             'orig_conns': [conn.delete for conn in self.connections if conn.original],
             'new_conns': [{'name': conn.prev_name, 'type': conn.prev_type}
                           for conn in self.connections[:-1] if not conn.original],
             'add_conn': bool(flags.get('add_conn')),
-            'del_conn': {'index': del_conn,
-                         'name': self.connections[del_conn].prev_name,
-                         'type': self.connections[del_conn].prev_type}
-            if (del_conn := flags.get('del_conn')) is not None else {},
+            'x_conn': {'index': x_conn,
+                         'name': self.connections[x_conn].prev_name,
+                         'type': self.connections[x_conn].prev_type}
+            if (x_conn := flags.get('x_conn')) is not None else {},
+            'del_conn': flags.get('del_conn'),
+            'keep_conn': flags.get('keep_conn'),
             'dinfo_change': bool(flags.get('dinfo_change')),
             'manufac': self.manufac_new_prev,
             'creator': self.creator_new_prev,
@@ -1357,7 +1359,6 @@ class C4IconSwapper(IPC):
         return app_state
 
     def update_instance_state_file(self):
-        print('DEBUG: update_instance_state_file')
         self.instance_state_file.write_text(json.dumps(self.get_app_state(), indent='\t'))
 
     def undo(self, *_):
@@ -1415,7 +1416,7 @@ class C4IconSwapper(IPC):
             self.connections_win.suppress_trace = True
             if undo_dict['add_conn']:
                 self.connections_win.connection_entries[-2].action(command='x')
-            elif conn_dict := undo_dict['del_conn']:
+            elif conn_dict := undo_dict['x_conn']:
                 i, y_offset = conn_dict['index'], self.connections_win.widget_y_offset
                 for conn_entry in self.connections_win.connection_entries[i:]:
                     conn_entry.y += y_offset
@@ -1458,6 +1459,44 @@ class C4IconSwapper(IPC):
     # TODO: Create savestate json for more inclusive undo history and robust app crash recovery.
     #  Remove unnecessary data from dict for undo_history
     def update_undo_history(self, flags: dict = None):
+        app_state = {}
+        if flags.get('icon_change'):
+            app_state['icon_change'] = True
+            icon = self.c4z_panel.icons[i := self.c4z_panel.current_icon]
+            app_state['icon'] = {'replacement_icon': icon.replacement_icon,
+                                 'restore_bak': icon.restore_bak, 'name': icon.name}
+            app_state['icon_index'] = i
+        elif change_type := flags.get('conn_change'):
+            app_state['conn_change'] = change_type
+            match change_type:
+                case 'text':
+                    app_state |= {
+                        'conn_index': (i := flags.get('conn_index')),
+                        'conn_name': self.connections[i].prev_name,
+                        'conn_type': self.connections[i].prev_type
+                    }
+                case 'user':
+                    if flags.get('add_conn'):
+                        app_state['add_conn'] = True
+                    elif (i := flags.get('x_conn')) is not None:
+                        app_state['x_conn'] = i
+                case 'orig':
+                    if (i := flags.get('del_conn')) is not None:
+                        app_state['del_conn'] = i
+                    elif (i := flags.get('keep_conn')) is not None:
+                        app_state['keep_conn'] = i
+        elif change_type := flags.get('dinfo_change'):
+            app_state['dinfo_change'] = change_type
+            match change_type:
+                case 'manufac':
+                    app_state['manufac'] = self.manufac_new_prev
+                case 'creator':
+                    app_state['creator'] = self.creator_new_prev
+                case 'version':
+                    app_state['version'] = self.version_new_prev
+        elif change_type := flags.get('export_change'):
+            pass  # TODO: Finish implementing min data undo
+        print('DEBUG:\n', app_state, sep='')
         self.redo_history.clear()
         self.undo_history.append(self.get_app_state(flags))
         self.edit.entryconfig(self.undo_pos, state=NORMAL)
@@ -2126,21 +2165,21 @@ class DriverInfoWin:
                     self.main.manufac_new_prev = self.main.manufac_new_var.get()
                     return
                 elif self.main.manufac_new_prev != self.main.manufac_new_var.get():
-                    self.main.update_undo_history({'dinfo_change': True})
+                    self.main.update_undo_history({'dinfo_change': entry})
                     self.main.manufac_new_prev = self.main.manufac_new_var.get()
             case 'creator':
                 if focus_in:
                     self.main.creator_new_prev = self.main.creator_new_var.get()
                     return
                 elif self.main.creator_new_prev != self.main.creator_new_var.get():
-                    self.main.update_undo_history({'dinfo_change': True})
+                    self.main.update_undo_history({'dinfo_change': entry})
                     self.main.creator_new_prev = self.main.creator_new_var.get()
             case 'version':
                 if focus_in:
                     self.main.version_new_prev = self.main.version_new_var.get()
                     return
                 elif self.main.version_new_prev != self.main.version_new_var.get():
-                    self.main.update_undo_history({'dinfo_change': True})
+                    self.main.update_undo_history({'dinfo_change': entry})
                     self.main.version_new_prev = self.main.version_new_var.get()
         self.main.update_instance_state_file()
 
@@ -2424,21 +2463,24 @@ class ConnectionEntry:
                 self.conn_obj.prev_name = self.conn_obj.name_var.get()
                 return
             elif self.conn_obj.prev_name != self.conn_obj.name_var.get():
-                self.main.update_undo_history({'conn_change': True})
+                self.main.update_undo_history({'conn_change': 'text',
+                                               'conn_index': self.parent.connection_entries.index(self)})
                 self.conn_obj.prev_name = self.conn_obj.name_var.get()
         else:
             if focus_in:
                 self.conn_obj.prev_type = self.conn_obj.type_var.get()
                 return
             elif self.conn_obj.prev_type != self.conn_obj.type_var.get():
-                self.main.update_undo_history({'conn_change': True})
+                self.main.update_undo_history({'conn_change': 'text',
+                                               'conn_index': self.parent.connection_entries.index(self)})
                 self.conn_obj.prev_type = self.conn_obj.type_var.get()
         self.main.update_instance_state_file()
 
     def refresh(self):
         if not (original := self.conn_obj.original):
-            self.conn_obj.name_var.set(self.conn_obj.name_var.get())
-            self.conn_obj.type_var.set(self.conn_obj.type_var.get())
+            pass  # TODO: See if this breaks anything, maybe I don't need to supress refreshes
+        #     self.conn_obj.name_var.set(self.conn_obj.name_var.get())
+        #     self.conn_obj.type_var.set(self.conn_obj.type_var.get())
         self.name_entry.place(x=self.x + 35, y=self.y, anchor='w')
         self.type_menu.place(x=self.x + (212 if original else 210), y=self.y, anchor='w')
         state = DISABLED if self.main.export_panel.use_orig_xml.get() else NORMAL
@@ -2483,22 +2525,28 @@ class ConnectionEntry:
                                     self.y + self.parent.widget_y_offset))
                 self.parent.update_scroll_frame()
                 if not self.parent.suppress_trace:
-                    self.main.update_undo_history({'add_conn': True})
+                    self.main.update_undo_history({'conn_change': 'user', 'add_conn': True})
             case 'x':
                 i = self.parent.connection_entries.index(self)
                 if not self.parent.suppress_trace:
-                    self.main.update_undo_history({'del_conn': i})
+                    self.main.update_undo_history({'conn_change': 'user', 'x_conn': i})
                 self.parent.connection_entries.pop(i)
                 self.main.connections.pop(i)
                 self.main.driver_xml.get_tag('connections').remove_element(self.conn_obj.tag)
                 if (in_dict := self.main.taken_xml_ids.get(self.conn_obj.id)) and self.conn_obj is in_dict:
                     self.main.taken_xml_ids.pop(self.conn_obj.id)
                 self.destroy()
+                suppress_trace = self.parent.suppress_trace
+                self.parent.suppress_trace = True
                 for conn_entry in self.parent.connection_entries[i:]:
                     conn_entry.y -= self.parent.widget_y_offset
                     conn_entry.refresh()
+                self.parent.suppress_trace = suppress_trace
                 self.parent.update_scroll_frame()
             case 'Del':
+                if not self.parent.suppress_trace:
+                    i = self.parent.connection_entries.index(self)
+                    self.main.update_undo_history({'conn_change': 'orig', 'del_conn': i})
                 self.conn_obj.delete = True
                 self.conn_obj.tag.hide = True
                 if not self.strike:
@@ -2508,6 +2556,9 @@ class ConnectionEntry:
                 self.action_button.config(text='Keep', width=4)
                 self.action_button.place(x=self.x - 6)
             case 'Keep':
+                if not self.parent.suppress_trace:
+                    i = self.parent.connection_entries.index(self)
+                    self.main.update_undo_history({'conn_change': 'orig', 'keep_conn': i})
                 self.conn_obj.delete = False
                 self.conn_obj.tag.hide = False
                 self.strike.place_forget()
