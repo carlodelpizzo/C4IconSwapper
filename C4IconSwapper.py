@@ -733,6 +733,7 @@ class C4IconSwapper(IPC):
 
         # Instance Directories
         self.instance_temp = self.global_temp / self.instance_id
+        self.instance_state_file = self.instance_temp / 'instance_state.json'
         self.instance_temp.mkdir()
         self.replacement_icons_dir = self.instance_temp / 'Replacement Icons'
         self.replacement_icons_dir.mkdir(exist_ok=True)
@@ -1326,34 +1327,38 @@ class C4IconSwapper(IPC):
         shutil.rmtree(recover_path)
         self.ask_to_save = True
 
-    # TODO: Change parameters to dictionary?
-    def get_app_state(self, icon_change=False, conn_change=False, dinfo_change=False, export_change=False,
-                      add_conn=False, del_conn=None):
+    def get_app_state(self, flags: dict = None):
+        flags = flags or {}
         app_state = {
             'driver_loaded_with': self.driver_loaded_with.copy(),
-            'icon_change': icon_change,
+            'icon_change': bool(flags.get('icon_change')),
             'icons': [{'replacement_icon': icon.replacement_icon, 'restore_bak': icon.restore_bak, 'name': icon.name}
                       for icon in self.c4z_panel.icons],
             'current_icon': self.c4z_panel.current_icon,
-            'conn_change': add_conn or del_conn or conn_change,
+            'conn_change': bool(flags.get('add_conn') or flags.get('del_conn') or flags.get('conn_change')),
             'orig_conns': [conn.delete for conn in self.connections if conn.original],
             'new_conns': [{'name': conn.prev_name, 'type': conn.prev_type}
                           for conn in self.connections[:-1] if not conn.original],
-            'add_conn': add_conn,
+            'add_conn': bool(flags.get('add_conn')),
             'del_conn': {'index': del_conn,
                          'name': self.connections[del_conn].prev_name,
-                         'type': self.connections[del_conn].prev_type} if del_conn is not None else {},
-            'dinfo_change': dinfo_change,
+                         'type': self.connections[del_conn].prev_type}
+            if (del_conn := flags.get('del_conn')) is not None else {},
+            'dinfo_change': bool(flags.get('dinfo_change')),
             'manufac': self.manufac_new_prev,
             'creator': self.creator_new_prev,
             'version': self.version_new_prev,
-            'export_change': export_change,
+            'export_change': bool(flags.get('export_change')),
             'driver_name': self.export_panel.driver_name_var_prev,
             'use_orig_xml': self.export_panel.use_orig_xml_prev,
             'include_backups': self.export_panel.include_backups_prev,
             'inc_driver_version': self.export_panel.inc_driver_version_prev
         }
         return app_state
+
+    def update_instance_state_file(self):
+        print('DEBUG: update_instance_state_file')
+        self.instance_state_file.write_text(json.dumps(self.get_app_state(), indent='\t'))
 
     def undo(self, *_):
         if not self.undo_history:
@@ -1448,15 +1453,13 @@ class C4IconSwapper(IPC):
         if not self.undo_history:
             self.edit.entryconfig(self.undo_pos, state=DISABLED)
         self.ask_to_save = ask_to_save
+        self.update_instance_state_file()
 
     # TODO: Create savestate json for more inclusive undo history and robust app crash recovery.
     #  Remove unnecessary data from dict for undo_history
-    def update_undo_history(self, icon_change=False, conn_change=False, dinfo_change=False, export_change=False,
-                            add_conn=False, del_conn=None):
-        app_state = self.get_app_state(icon_change=icon_change, conn_change=conn_change, dinfo_change=dinfo_change,
-                                       export_change=export_change, add_conn=add_conn, del_conn=del_conn)
+    def update_undo_history(self, flags: dict = None):
         self.redo_history.clear()
-        self.undo_history.append(app_state)
+        self.undo_history.append(self.get_app_state(flags))
         self.edit.entryconfig(self.undo_pos, state=NORMAL)
 
     def redo(self, *_):
@@ -1464,6 +1467,7 @@ class C4IconSwapper(IPC):
         if not self.redo_history:
             return
         self.redo_history.popleft()
+        # self.update_instance_state_file()
 
     def ask_to_save_dialog(self, result_var, on_exit=True):
         def cancel():
@@ -2120,21 +2124,25 @@ class DriverInfoWin:
             case 'manufac':
                 if focus_in:
                     self.main.manufac_new_prev = self.main.manufac_new_var.get()
+                    return
                 elif self.main.manufac_new_prev != self.main.manufac_new_var.get():
-                    self.main.update_undo_history(dinfo_change=True)
+                    self.main.update_undo_history({'dinfo_change': True})
                     self.main.manufac_new_prev = self.main.manufac_new_var.get()
             case 'creator':
                 if focus_in:
                     self.main.creator_new_prev = self.main.creator_new_var.get()
+                    return
                 elif self.main.creator_new_prev != self.main.creator_new_var.get():
-                    self.main.update_undo_history(dinfo_change=True)
+                    self.main.update_undo_history({'dinfo_change': True})
                     self.main.creator_new_prev = self.main.creator_new_var.get()
             case 'version':
                 if focus_in:
                     self.main.version_new_prev = self.main.version_new_var.get()
+                    return
                 elif self.main.version_new_prev != self.main.version_new_var.get():
-                    self.main.update_undo_history(dinfo_change=True)
+                    self.main.update_undo_history({'dinfo_change': True})
                     self.main.version_new_prev = self.main.version_new_var.get()
+        self.main.update_instance_state_file()
 
     # noinspection PyTypeChecker
     def update_entries(self):
@@ -2160,10 +2168,11 @@ class DriverInfoWin:
         c = self.main.creator_new_prev != self.main.creator_new_var.get()
         v = self.main.version_new_prev != self.main.version_new_var.get()
         if m or c or v:
-            self.main.update_undo_history(dinfo_change=True)
+            self.main.update_undo_history({'dinfo_change': True})
             self.main.manufac_new_prev = self.main.manufac_new_var.get()
             self.main.creator_new_prev = self.main.creator_new_var.get()
             self.main.version_new_prev = self.main.version_new_var.get()
+            self.main.update_instance_state_file()
         self.window.destroy()
         self.main.driver_info_win = None
 
@@ -2295,8 +2304,9 @@ class ConnectionsWin:
             if conn_entry.conn_obj.original:
                 break
             if conn_entry.conn_obj.prev_name != conn_entry.conn_obj.name_var.get():
-                self.main.update_undo_history(conn_change=True)
+                self.main.update_undo_history({'conn_change': True})
                 conn_entry.conn_obj.prev_name = conn_entry.conn_obj.name_var.get()
+                self.main.update_instance_state_file()
             conn_entry.destroy()
         self.threaded_refresh.wait()
         self.window.destroy()
@@ -2412,16 +2422,18 @@ class ConnectionEntry:
         if entry:
             if focus_in:
                 self.conn_obj.prev_name = self.conn_obj.name_var.get()
+                return
             elif self.conn_obj.prev_name != self.conn_obj.name_var.get():
-                self.main.update_undo_history(conn_change=True)
+                self.main.update_undo_history({'conn_change': True})
                 self.conn_obj.prev_name = self.conn_obj.name_var.get()
-            self.conn_obj.prev_name = self.conn_obj.name_var.get()
-            return
-        if focus_in:
-            self.conn_obj.prev_type = self.conn_obj.type_var.get()
-        elif self.conn_obj.prev_type != self.conn_obj.type_var.get():
-            self.main.update_undo_history(conn_change=True)
-            self.conn_obj.prev_type = self.conn_obj.type_var.get()
+        else:
+            if focus_in:
+                self.conn_obj.prev_type = self.conn_obj.type_var.get()
+                return
+            elif self.conn_obj.prev_type != self.conn_obj.type_var.get():
+                self.main.update_undo_history({'conn_change': True})
+                self.conn_obj.prev_type = self.conn_obj.type_var.get()
+        self.main.update_instance_state_file()
 
     def refresh(self):
         if not (original := self.conn_obj.original):
@@ -2471,11 +2483,11 @@ class ConnectionEntry:
                                     self.y + self.parent.widget_y_offset))
                 self.parent.update_scroll_frame()
                 if not self.parent.suppress_trace:
-                    self.main.update_undo_history(add_conn=True)
+                    self.main.update_undo_history({'add_conn': True})
             case 'x':
                 i = self.parent.connection_entries.index(self)
                 if not self.parent.suppress_trace:
-                    self.main.update_undo_history(del_conn=i)
+                    self.main.update_undo_history({'del_conn': i})
                 self.parent.connection_entries.pop(i)
                 self.main.connections.pop(i)
                 self.main.driver_xml.get_tag('connections').remove_element(self.conn_obj.tag)
@@ -2503,6 +2515,7 @@ class ConnectionEntry:
                 self.action_button.config(text='Del', width=3)
                 self.action_button.place(x=self.x)
         self.main.ask_to_save = True
+        self.main.update_instance_state_file()
 
     def name_update(self, *_):
         if self.parent.suppress_trace:
@@ -3336,6 +3349,7 @@ class C4zPanel:
         if self.sub_icon_win:
             self.sub_icon_win.update_icon()
         main.ask_to_save = False
+        self.main.instance_state_file.write_text(json.dumps(self.main.get_app_state(), indent='\t'))
 
     def load_c4z(self, file_path=None, generic=False, c4is=None, bypass_ask_save=False, new_thread=True, force=False):
         if not force and self.main.pending_load_save.get():
@@ -3366,7 +3380,7 @@ class C4zPanel:
     def restore(self, do_all=False):
         if self.main.pending_load_save.get():
             return
-        self.main.update_undo_history(icon_change=True)
+        self.main.update_undo_history({'icon_change': True})
         if do_all:
             show_extra = self.show_extra_icons.get()
             for icon in self.icons:
@@ -3376,11 +3390,12 @@ class C4zPanel:
             self.icons[self.current_icon].set_restore()
         self.update_icon()
         self.main.ask_to_save = True
+        self.main.update_instance_state_file()
 
     def unrestore(self, *_, do_all=False):
         if self.main.pending_load_save.get():
             return
-        self.main.update_undo_history(icon_change=True)
+        self.main.update_undo_history({'icon_change': True})
         if do_all:
             for icon in self.icons:
                 if not icon.replacement_icon and (icon.restore_bak and icon.bak):
@@ -3389,6 +3404,7 @@ class C4zPanel:
             self.icons[self.current_icon].restore_bak = False
         self.update_icon()
         self.main.ask_to_save = True
+        self.main.update_instance_state_file()
 
     def toggle_extra_icons(self, *_):
         if not self.main.c4z_panel.icons or self.main.pending_load_save.get():
@@ -3938,22 +3954,25 @@ class ReplacementPanel:
             raise ValueError('Current icon index out of range')
 
         if update_undo_history:
-            self.main.update_undo_history(icon_change=True)
+            self.main.update_undo_history({'icon_change': True})
 
         c4z_panel.icons[c4_icn_index].replace(self.replacement_icon)
         c4z_panel.restore_all_button['state'] = NORMAL
         c4z_panel.update_icon()
         self.main.ask_to_save = True
+        if update_undo_history:
+            self.main.update_instance_state_file()
 
     def replace_all(self):
         if not self.threading_event.is_set():
             return
-        self.main.update_undo_history(icon_change=True)
+        self.main.update_undo_history({'icon_change': True})
         show_extra = self.main.c4z_panel.show_extra_icons.get()
         for i, icon in enumerate(self.main.c4z_panel.icons):
             if icon.extra and not show_extra:
                 continue
             self.replace_icon(update_undo_history=False, c4_icn_index=i)
+        self.main.update_instance_state_file()
 
     def right_click_menu(self, event):
         # Assume call from replacement label
@@ -4078,19 +4097,20 @@ class ExportPanel:
         if entry:
             if focus_in:
                 self.driver_name_var_prev = self.driver_name_var.get()
+                return
             elif self.driver_name_var_prev != self.driver_name_var.get():
-                self.main.update_undo_history(export_change=True)
+                self.main.update_undo_history({'export_change': True})
                 self.driver_name_var_prev = self.driver_name_var.get()
-            return
-        if self.use_orig_xml_prev != self.use_orig_xml.get():
-            self.main.update_undo_history(export_change=True)
+        elif self.use_orig_xml_prev != self.use_orig_xml.get():
+            self.main.update_undo_history({'export_change': True})
             self.use_orig_xml_prev = self.use_orig_xml.get()
         elif self.inc_driver_version_prev != self.inc_driver_version.get():
-            self.main.update_undo_history(export_change=True)
+            self.main.update_undo_history({'export_change': True})
             self.inc_driver_version_prev = self.inc_driver_version.get()
         elif self.include_backups_prev != self.include_backups.get():
-            self.main.update_undo_history(export_change=True)
+            self.main.update_undo_history({'export_change': True})
             self.include_backups_prev = self.include_backups.get()
+        self.main.update_instance_state_file()
 
     def toggle_use_original_xml(self, *_, wait=False):
         if self.main.pending_load_save.get():
