@@ -38,6 +38,7 @@ label_font, light_entry_bg, readonly_bg = 'Arial', '#FFFFFF', '#F0F0F0'
 re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9]')
 re_natural_sort = re.compile(r'(\d+)')
 valid_img_types = {'.bmp', '.gif', '.jpeg', '.jpg', '.png', '.tif', '.tiff', '.webp'}
+no_alpha_formats, alpha_modes = {'.bmp', '.jpeg', '.jpg'}, {'RGBA', 'LA', 'P'}
 connection_tag_generic = """
 <connection>
     <id>0</id>
@@ -3823,7 +3824,6 @@ class C4zPanel:
             no_button.place(relx=0.5, rely=1, x=5, y=-10, anchor='sw')
 
 
-# TODO: Why are images not respecting transparency
 class ReplacementPanel:
     def __init__(self, main: C4IconSwapper):
         # Initialize Replacement Panel
@@ -3924,7 +3924,10 @@ class ReplacementPanel:
                 Image.MAX_IMAGE_PIXELS = None  # Temporarily allow very large images to be processed; Trusting user
                 with (Image.open(file_path) as img):
                     Image.MAX_IMAGE_PIXELS = max_image_pixels
-                    img.draft('RGB', (1024, 1024))
+                    if img.format == 'JPEG':
+                        img.draft('RGB', (1024, 1024))
+                    elif img.mode != 'RGBA':
+                        img = img.convert('RGBA')
                     img.thumbnail((1024, 1024), Resampling.LANCZOS)
                     img.save(new_path)
                     new_file_size = new_path.stat().st_size
@@ -4554,6 +4557,15 @@ class ExportPanel:
                             bak_path = new_path.with_suffix('.bak') if do_rename else sub_icon.path.with_suffix('.bak')
                             shutil.copy(sub_icon.path, bak_path)
                         out_icon = rp_icon.resize(sub_icon.size, Resampling.LANCZOS)
+                        # This check should never really be applicable; it's just extra safety
+                        if sub_icon.suffix in no_alpha_formats:
+                            if out_icon.mode in alpha_modes:
+                                # Replace transparency with white background
+                                bg = Image.new('RGB', out_icon.size, 'white')
+                                bg.paste(out_icon, mask=out_icon.split()[3])
+                                out_icon = bg
+                            else:
+                                out_icon = out_icon.convert('RGB')
                         if new_path:
                             os.remove(sub_icon.path)
                         out_icon.save(new_path or sub_icon.path)
