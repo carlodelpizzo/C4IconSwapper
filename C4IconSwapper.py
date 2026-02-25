@@ -878,6 +878,7 @@ class C4IconSwapper(IPC):
             for setting_name in self.setting_names.values()
         }
 
+    # TODO: Make exception window accessible with alt-tab or some other method
     def exception_window(self, *args, message_txt=None):
         root = Toplevel(self.root)
         root.title('Exception')
