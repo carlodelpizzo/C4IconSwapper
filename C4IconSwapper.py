@@ -4558,7 +4558,7 @@ class ExportPanel:
                             shutil.copy(sub_icon.path, bak_path)
                         out_icon = rp_icon.resize(sub_icon.size, Resampling.LANCZOS)
                         # This check should never really be applicable; it's just extra safety
-                        if sub_icon.suffix in no_alpha_formats:
+                        if sub_icon.path.suffix in no_alpha_formats:
                             if out_icon.mode in alpha_modes:
                                 # Replace transparency with white background
                                 bg = Image.new('RGB', out_icon.size, 'white')
