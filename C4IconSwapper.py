@@ -641,7 +641,6 @@ class IPC:
 
 
 # TODO: Add ability to rename states in generic drivers
-# TODO: Refine generic drivers
 # TODO: Reevaluate when ask_to_save is set to True
 class C4IconSwapper(IPC):
     def __init__(self):
@@ -1023,37 +1022,6 @@ class C4IconSwapper(IPC):
         if curr_ver >= new_ver:
             self.ask_to_save = True
             self.version_new_var.set(str(curr_ver + 1))
-
-    # TODO: Completely overhaul everything related to multistate
-    def get_states(self, lua_file):
-        self.states_orig_names = []
-        # Match 'state_OPTIONS' + 0 or more white spaces + '=' + white space + '{'
-        if not (states_index := re.search(r'state_OPTIONS\s*=\s*\{', lua_file)):
-            return False
-        states_index = states_index.start()
-        if states_index < 0:
-            return False
-        states_str = ''
-        bracket_count = 0
-        for i, char in enumerate(lua_file[states_index:]):
-            if char == '{':
-                bracket_count += 1
-                continue
-            if char == '}':
-                bracket_count -= 1
-                if not bracket_count:
-                    states_str = lua_file[states_index:states_index + i]
-                    break
-        if not states_str:
-            return False
-        # Find '{' + 0 or more white spaces + 1 or more alphanumeric char including '_' + white space + '='
-        self.states_orig_names = re.findall(r'\{\s*(\w+)\s*=', states_str)[1:]
-        for i, state_name in enumerate(self.states_orig_names):
-            if self.states_win:
-                self.states_win.states[i].name_entry['state'] = NORMAL
-            self.states[i].name_var.set(state_name)
-            self.states[i].original_name = state_name
-        return True
 
     def open_edit_win(self, main_win_var, win_type: str):
         if main_win_var:
@@ -3113,7 +3081,7 @@ class C4zPanel:
                 icon = ImageTk.PhotoImage(loading_img)
                 self.c4_icon_label.configure(image=icon)
                 self.c4_icon_label.image = icon
-            gen_driver_path = assets_path / ('multi_generic.c4z' if multi else 'generic.c4z')
+            gen_driver_path = assets_path / f"generic-driver{'-multi' if multi else ''}.c4z.compressed"
             shutil.rmtree(instance_driver_path, ignore_errors=True)
             shutil.unpack_archive(gen_driver_path, instance_driver_path, 'zip')
             sizes = [70, 90, 300, 512]
@@ -3441,7 +3409,7 @@ class C4zPanel:
             if (lua_path := main.instance_temp / 'driver' / 'driver.lua').is_file():
                 with open(lua_path, errors='replace', encoding='utf-8') as driver_lua_file:
                     driver_lua = driver_lua_file.read()
-                    if main.get_states(driver_lua):
+                    if self.get_states(driver_lua):
                         main.multi_state_driver = True
                     else:
                         main.multi_state_driver = False
@@ -3662,6 +3630,37 @@ class C4zPanel:
             main.driver_xml.get_tag('devicedata').add_element(
                 parent_tag := XMLTag(xml_string='<connections></connections>'))
         parent_tag.add_element(main.connections[-1].tag)
+
+    # TODO: Completely overhaul everything related to multistate
+    def get_states(self, lua_file):
+        self.main.states_orig_names = []
+        # Match 'COLOR_OPTIONS' + 0 or more white spaces + '=' + white space + '{'
+        if not (states_index := re.search(r'COLOR_OPTIONS\s*=\s*\{', lua_file)):
+            return False
+        states_index = states_index.start()
+        if states_index < 0:
+            return False
+        states_str = ''
+        bracket_count = 0
+        for i, char in enumerate(lua_file[states_index:]):
+            if char == '{':
+                bracket_count += 1
+                continue
+            if char == '}':
+                bracket_count -= 1
+                if not bracket_count:
+                    states_str = lua_file[states_index:states_index + i]
+                    break
+        if not states_str:
+            return False
+        # Find '{' + 0 or more white spaces + 1 or more alphanumeric char including '_' + white space + '='
+        self.main.states_orig_names = re.findall(r'\{\s*(\w+)\s*=', states_str)[1:]
+        for i, state_name in enumerate(self.main.states_orig_names):
+            if self.main.states_win:
+                self.main.states_win.state_entries[i].name_entry['state'] = NORMAL
+            self.main.states[i].name_var.set(state_name)
+            self.main.states[i].original_name = state_name
+        return True
 
     def right_click_menu(self, event):
         renamed = self.icons and self.icons[self.current_icon].renamed
