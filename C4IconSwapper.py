@@ -878,26 +878,30 @@ class C4IconSwapper(IPC):
             for setting_name in self.setting_names.values()
         }
 
-    # TODO: Make exception window accessible with alt-tab or some other method
     def exception_window(self, *args, message_txt=None):
-        root = Toplevel(self.root)
-        root.title('Exception')
-        root.attributes('-toolwindow', True)
-        frame = Frame(root)
+        # noinspection PyUnresolvedReferences
+        def selectable_toolwindow():  # Converts window to toolwindow, but keeps access in alt-tab and start bar
+            hwnd = ctypes.windll.user32.GetParent(window.winfo_id())
+            style = ctypes.windll.user32.GetWindowLongW(hwnd, -20) | 0x40000 | 0x80
+            ctypes.windll.user32.SetWindowLongW(hwnd, -20, style)
+        self.root.after(0, selectable_toolwindow)  # type: ignore
+
+        window = Toplevel(self.root)
+        window.title('Exception')
+        window.resizable(False, False)
+        frame = Frame(window)
         frame.pack(expand=True, fill='both', padx=10, pady=10)
+        h_scrollbar = Scrollbar(frame, orient='horizontal')
+        h_scrollbar.pack(side='bottom', fill='x')
+        v_scrollbar = Scrollbar(frame, orient='vertical')
+        v_scrollbar.pack(side='right', fill='y')
+        text_box = Text(frame, font=('Consolas', 11), wrap='none')
+        text_box.pack(side='left', expand=True, fill='both')
+        text_box.config(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+        v_scrollbar.config(command=text_box.yview)
+        h_scrollbar.config(command=text_box.xview)
 
-        h_scroll = Scrollbar(frame, orient='horizontal')
-        h_scroll.pack(side='bottom', fill='x')
-        v_scroll = Scrollbar(frame, orient='vertical')
-        v_scroll.pack(side='right', fill='y')
-
-        text_widget = Text(frame, font=('Consolas', 11), wrap='none')
-        text_widget.pack(side='left', expand=True, fill='both')
-        text_widget.config(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
-        v_scroll.config(command=text_widget.yview)
-        h_scroll.config(command=text_widget.xview)
-
-        # Set window size
+        # Insert message text
         if message_txt:
             msg_lines = message_txt.splitlines()
         elif len(args) > 1 and args[1] is RuntimeWarning:
@@ -905,28 +909,18 @@ class C4IconSwapper(IPC):
             msg_lines = message_txt.splitlines()
         else:
             msg_lines = (message_txt := '\n'.join(traceback.format_exception(*args))).splitlines()
+        text_box.insert(END, message_txt)
+        text_box.config(width=max(len(line.strip()) for line in msg_lines) + 3, height=len(msg_lines) + 2)
+        text_box['state'] = DISABLED
 
-        text_widget.insert(END, message_txt)
-        width = max(len(line.strip()) for line in msg_lines) + 3
-        height = len(msg_lines) + 2
-        text_widget.config(width=width, height=height)
-
-        # Update window for size check
-        root.update_idletasks()
-
-        # Cap window size
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-        max_rel_w = 0.75
-        max_rel_h = 0.75
-        w = int(screen_width * max_rel_w) if root.winfo_width() > screen_width * max_rel_w else root.winfo_width()
-        h = int(screen_height * max_rel_h) if root.winfo_height() > screen_height * max_rel_h else root.winfo_height()
-        root.geometry(f'{w}x{h}')
-
-        text_widget.config(state='disabled')
-        root.resizable(False, False)
-        root.focus()
-        return
+        # Set window size; Cap at ratio of screen size
+        window.update_idletasks()  # Update window for size check
+        screen_w, screen_h = window.winfo_screenwidth(), window.winfo_screenheight()
+        max_rel_w, max_rel_h = 0.75, 0.75
+        w = int(screen_w * max_rel_w) if window.winfo_width() > screen_w * max_rel_w else window.winfo_width()
+        h = int(screen_h * max_rel_h) if window.winfo_height() > screen_h * max_rel_h else window.winfo_height()
+        window.geometry(f'{w}x{h}')
+        window.focus()
 
     def exception_handler(self, *args):
         if args:
@@ -953,12 +947,10 @@ class C4IconSwapper(IPC):
             return
 
         def get_label(count: int, text: str):
-            if count == 0:
-                return ''
-            return f'{count} {text}' if count != 1 else f'{count} {text[:-1]}'
+            return '' if count == 0 else f"{count} {text}{'S' if count != 1 else ''}"
 
-        labels = (get_label(len(self.exceptions), 'EXCEPTIONS'),
-                  get_label(len(self.warnings), 'WARNINGS'))
+        labels = (get_label(len(self.exceptions), 'EXCEPTION'),
+                  get_label(len(self.warnings), 'WARNING'))
         header = f'{" & ".join(filter(None, labels))}\n'
         header += '=' * len(header.strip())
         msg_body = []
