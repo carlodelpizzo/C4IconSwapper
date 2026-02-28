@@ -194,6 +194,8 @@ class C4IconSwapper:
         # Class variables
         self.driver_xml = None
         self.name = StringVar()
+        self.name_new_prev = 'New Driver'
+        self.name_new = StringVar(value=self.name_new_prev)
         self.manufac = StringVar()
         self.manufac_new_prev = self.def_driver_manufacturer.get()
         self.manufac_new = StringVar(value=self.def_driver_manufacturer.get())
@@ -203,7 +205,7 @@ class C4IconSwapper:
         self.version_orig = StringVar()
         self.version = StringVar()
         self.version_new_prev = '1'
-        self.version_new = StringVar(value='1')
+        self.version_new = StringVar(value=self.version_new_prev)
         self.multi_state_driver = False
         self.driver_loaded_with = {'all_imgs': self.def_get_all_driver_imgs.get(),
                                    'all_conns': self.def_get_all_connections.get()}
@@ -434,18 +436,18 @@ class C4IconSwapper:
         if not self.counter:
             return
         self.counter -= 1
-        if self.export_panel.driver_name_entry['background'] != light_entry_bg:
-            self.export_panel.driver_name_entry['background'] = light_entry_bg
+        if self.export_panel.file_name_entry['background'] != light_entry_bg:
+            self.export_panel.file_name_entry['background'] = light_entry_bg
         else:
-            self.export_panel.driver_name_entry['background'] = 'pink'
+            self.export_panel.file_name_entry['background'] = 'pink'
         self.root.after(150, self.blink_driver_name_entry)  # type: ignore
 
-    def validate_man_and_creator(self, string_var: StringVar, entry: Entry):
-        name_compare = re_valid_chars.sub('', name := string_var.get())
-        if str_diff := len(name) - len(name_compare):
+    def validate_name_man_creator(self, string_var: StringVar, entry: Entry):
+        text_compare = re_valid_chars.sub('', text := string_var.get())
+        if str_diff := len(text) - len(text_compare):
             cursor_pos = entry.index(INSERT)
             entry.icursor(cursor_pos - str_diff)
-            string_var.set(name_compare)
+            string_var.set(text_compare)
             return
         self.ask_to_save = True
 
@@ -764,31 +766,34 @@ class C4IconSwapper:
                 conn = self.connections[-1]
                 conn.enabled = True
                 conn.tag.hide = False
-                conn.name.set(cname := conn_dict['name'])
-                conn.prev_name = cname
-                conn.type.set(ctype := conn_dict['type'])
-                conn.prev_type = ctype
+                conn.prev_name = conn_dict['name']
+                conn.name.set(conn.prev_name)
+                conn.prev_type = conn_dict['type']
+                conn.type.set(conn.prev_type)
+
                 conn.update_id()
                 self.connections.append(new_conn := Connection(self))
                 self.driver_xml.get_tag('connections').add_element(new_conn.tag)
 
             # Driver Info
-            self.manufac_new.set(manufac := recovery_state['manufac'])
-            self.manufac_new_prev = manufac
-            self.creator_new.set(creator := recovery_state['creator'])
-            self.creator_new_prev = creator
-            self.version_new.set(ver := recovery_state['version'])
-            self.version_new_prev = ver
+            self.name_new_prev = recovery_state['name']
+            self.name_new.set(self.name_new_prev)
+            self.manufac_new_prev = recovery_state['manufac']
+            self.manufac_new.set(self.manufac_new_prev)
+            self.creator_new_prev = recovery_state['creator']
+            self.creator_new.set(self.creator_new_prev)
+            self.version_new_prev = recovery_state['version']
+            self.version_new.set(self.version_new_prev)
 
             # Export Panel
-            self.export_panel.file_name.set(dname := recovery_state['file_name'])
-            self.export_panel.file_name_prev = dname
-            self.export_panel.use_orig_xml.set(use_orig_xml := recovery_state['use_orig_xml'])
-            self.export_panel.use_orig_xml_prev = use_orig_xml
-            self.export_panel.include_backups.set(include_backups := recovery_state['include_backups'])
-            self.export_panel.include_backups_prev = include_backups
-            self.export_panel.inc_driver_version.set(inc_driver_version := recovery_state['inc_driver_version'])
-            self.export_panel.inc_driver_version_prev = inc_driver_version
+            self.export_panel.file_name_prev = recovery_state['file_name']
+            self.export_panel.file_name.set(self.export_panel.file_name_prev)
+            self.export_panel.use_orig_xml_prev = recovery_state['use_orig_xml']
+            self.export_panel.use_orig_xml.set(self.export_panel.use_orig_xml_prev)
+            self.export_panel.include_backups_prev = recovery_state['include_backups']
+            self.export_panel.include_backups.set(self.export_panel.include_backups_prev)
+            self.export_panel.inc_driver_version_prev = recovery_state['inc_driver_version']
+            self.export_panel.inc_driver_version.set(self.export_panel.inc_driver_version_prev)
 
         self.def_get_all_driver_imgs.set(curr_get_all_imgs)
         self.def_get_all_connections.set(curr_get_all_conns)
@@ -815,6 +820,7 @@ class C4IconSwapper:
             'icon_paths': [str(path) for path in self.c4z_panel.icon_paths],
             'orig_conns': orig_conns,
             'new_conns': new_conns,
+            'name': self.name_new_prev,
             'manufac': self.manufac_new_prev,
             'creator': self.creator_new_prev,
             'version': self.version_new_prev,
@@ -898,9 +904,9 @@ class C4IconSwapper:
                         conn_entry.action_button.place(x=conn_entry.x + 14)
                         conn_entry.name_entry['takefocus'] = 1
                         conn_obj.prev_name = conn_dict['name']
-                        conn_obj.name.set(conn_dict['name'])
+                        conn_obj.name.set(conn_obj.prev_name)
                         conn_obj.prev_type = conn_dict['type']
-                        conn_obj.type.set(conn_dict['type'])
+                        conn_obj.type.set(conn_obj.prev_type)
                 case 'orig':
                     if (i := undo_dict.get('del_conn')) is not None:
                         self.connections_win.connection_entries[i].action(command='Keep')
@@ -915,32 +921,35 @@ class C4IconSwapper:
                 self.driver_info_win = DriverInfoWin(self)
                 self.root.update_idletasks()
             match change_type:
+                case 'name':
+                    self.name_new_prev = undo_dict['name']
+                    self.name_new.set(self.name_new_prev)
                 case 'manufac':
-                    self.manufac_new_prev = m = undo_dict['manufac']
-                    self.manufac_new.set(m)
+                    self.manufac_new_prev = undo_dict['manufac']
+                    self.manufac_new.set(self.manufac_new_prev)
                 case 'creator':
-                    self.creator_new_prev = c = undo_dict['creator']
-                    self.creator_new.set(c)
+                    self.creator_new_prev = undo_dict['creator']
+                    self.creator_new.set(self.creator_new_prev)
                 case 'version':
-                    self.version_new_prev = v = undo_dict['version']
-                    self.version_new.set(v)
+                    self.version_new_prev = undo_dict['version']
+                    self.version_new.set(self.version_new_prev)
 
         # Export Panel
         elif change_type := undo_dict.get('export_change'):
             self.export_panel.suppress_trace = True
             match change_type:
                 case 'name':
-                    self.export_panel.file_name.set(undo_dict['driver_name'])
                     self.export_panel.file_name_prev = undo_dict['driver_name']
+                    self.export_panel.file_name.set(self.export_panel.file_name_prev)
                 case 'use_orig_xml':
-                    self.export_panel.use_orig_xml.set(undo_dict['use_orig_xml'])
                     self.export_panel.use_orig_xml_prev = undo_dict['use_orig_xml']
+                    self.export_panel.use_orig_xml.set(self.export_panel.use_orig_xml_prev)
                 case 'include_backups':
-                    self.export_panel.include_backups.set(undo_dict['include_backups'])
                     self.export_panel.include_backups_prev = undo_dict['include_backups']
+                    self.export_panel.include_backups.set(self.export_panel.include_backups_prev)
                 case 'inc_version':
-                    self.export_panel.inc_driver_version.set(undo_dict['inc_driver_version'])
                     self.export_panel.inc_driver_version_prev = undo_dict['inc_driver_version']
+                    self.export_panel.inc_driver_version.set(self.export_panel.inc_driver_version_prev)
             self.export_panel.suppress_trace = False
 
         if not self.undo_history:
@@ -986,6 +995,8 @@ class C4IconSwapper:
         elif change_type := flags.get('dinfo_change'):
             app_state['dinfo_change'] = change_type
             match change_type:
+                case 'name':
+                    app_state['name'] = self.name_new_prev
                 case 'manufac':
                     app_state['manufac'] = self.manufac_new_prev
                 case 'creator':
@@ -1856,7 +1867,7 @@ class SettingsWin:
         if isinstance(setting_var, (IntVar, BooleanVar)):
             print(f'Set {setting_name} to: {bool(setting_var.get())}')
         elif isinstance(setting_var, StringVar):
-            self.main.validate_man_and_creator(setting_var, entry)
+            self.main.validate_name_man_creator(setting_var, entry)
             if existing_after_call := self.entry_mod_delay_dict.get(id(setting_var)):
                 self.window.after_cancel(existing_after_call[0])
                 self.entry_mod_delay_dict.pop(id(setting_var))
@@ -2117,7 +2128,7 @@ class DriverInfoWin:
         self.window.focus()
         self.window.protocol('WM_DELETE_WINDOW', self.close)
         self.window.title('Edit Driver Info')
-        self.window.geometry(f'255x215+{main.root.winfo_rootx() + main.export_panel.x}+{main.root.winfo_rooty()}')
+        self.window.geometry(f'255x270+{main.root.winfo_rootx() + main.export_panel.x}+{main.root.winfo_rooty()}')
 
         def focus_on_click(event):
             if (isinstance(event.widget, (Toplevel, Label)) or
@@ -2133,23 +2144,30 @@ class DriverInfoWin:
 
         # Labels
         font_size = 10
-        man_y = 20
+        name_y = 20
+        name_arrow = Label(self.window, text='\u2192', font=('', 15))
+        name_arrow.place(x=115, y=name_y, anchor='nw')
+
+        driver_name_label = Label(self.window, text='Driver Name', font=(label_font, font_size))
+        driver_name_label.place(relx=0.5, y=name_y - 15, anchor='n')
+
+        man_y = name_y + 55
         man_arrow = Label(self.window, text='\u2192', font=('', 15))
         man_arrow.place(x=115, y=man_y, anchor='nw')
+
+        driver_man_label = Label(self.window, text='Driver Manufacturer', font=(label_font, font_size))
+        driver_man_label.place(relx=0.5, y=man_y - 15, anchor='n')
 
         creator_y = man_y + 55
         creator_arrow = Label(self.window, text='\u2192', font=('', 15))
         creator_arrow.place(x=115, y=creator_y, anchor='nw')
 
+        driver_creator_label = Label(self.window, text='Driver Creator', font=(label_font, font_size))
+        driver_creator_label.place(relx=0.5, y=creator_y - 15, anchor='n')
+
         version_y = creator_y + 55
         version_arrow = Label(self.window, text='\u2192', font=('', 15))
         version_arrow.place(x=115, y=version_y, anchor='nw')
-
-        driver_man_label = Label(self.window, text='Driver Manufacturer', font=(label_font, font_size))
-        driver_man_label.place(relx=0.5, y=man_y - 15, anchor='n')
-
-        driver_creator_label = Label(self.window, text='Driver Creator', font=(label_font, font_size))
-        driver_creator_label.place(relx=0.5, y=creator_y - 15, anchor='n')
 
         driver_ver_label = Label(self.window, text='Driver Version', font=(label_font, font_size))
         driver_ver_label.place(relx=0.5, y=version_y - 15, anchor='n')
@@ -2159,6 +2177,18 @@ class DriverInfoWin:
 
         # Entries
         entry_width = 17
+        name_entry = Entry(self.window, width=entry_width, textvariable=main.name)
+        name_entry.place(x=10, y=name_y + 7, anchor='nw')
+        name_entry['state'] = DISABLED
+
+        self.name_new_entry = Entry(self.window, width=entry_width, textvariable=main.name_new)
+        self.name_new_entry.bind('<FocusIn>', lambda _: self.update_undo_history(True, 'name'))
+        self.name_new_entry.bind('<FocusOut>', lambda _: self.update_undo_history(False, 'name'))
+        self.name_new_entry.place(x=140, y=name_y + 7, anchor='nw')
+        self.trace_n = main.name_new.trace_add('write', lambda name, index, mode: self.main.validate_name_man_creator(
+                                                          string_var=main.name_new,
+                                                          entry=self.name_new_entry))
+
         manufac_entry = Entry(self.window, width=entry_width, textvariable=main.manufac)
         manufac_entry.place(x=10, y=man_y + 7, anchor='nw')
         manufac_entry['state'] = DISABLED
@@ -2168,7 +2198,7 @@ class DriverInfoWin:
         self.manufac_new_entry.bind('<FocusOut>', lambda _: self.update_undo_history(False, 'manufac'))
         self.manufac_new_entry.place(x=140, y=man_y + 7, anchor='nw')
         self.trace_m = main.manufac_new.trace_add('write',
-                                                  lambda name, index, mode: self.main.validate_man_and_creator(
+                                                  lambda name, index, mode: self.main.validate_name_man_creator(
                                                           string_var=main.manufac_new,
                                                           entry=self.manufac_new_entry))
 
@@ -2181,7 +2211,7 @@ class DriverInfoWin:
         self.creator_new_entry.bind('<FocusOut>', lambda _: self.update_undo_history(False, 'creator'))
         self.creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
         self.trace_c = main.creator_new.trace_add('write',
-                                                  lambda name, index, mode: self.main.validate_man_and_creator(
+                                                  lambda name, index, mode: self.main.validate_name_man_creator(
                                                           string_var=main.creator_new,
                                                           entry=self.creator_new_entry))
 
@@ -2205,6 +2235,13 @@ class DriverInfoWin:
 
     def update_undo_history(self, focus_in: bool, entry: str):
         match entry:
+            case 'name':
+                if focus_in:
+                    self.main.name_new_prev = self.main.name_new.get()
+                    return
+                elif self.main.name_new_prev != self.main.name_new.get():
+                    self.main.update_undo_history({'dinfo_change': entry})
+                    self.main.name_new_prev = self.main.name_new.get()
             case 'manufac':
                 if focus_in:
                     self.main.manufac_new_prev = self.main.manufac_new.get()
@@ -2232,6 +2269,8 @@ class DriverInfoWin:
     def update_entries(self):
         main = self.main
         entry_state = DISABLED if (use_orig := main.export_panel.use_orig_xml.get()) else NORMAL
+        self.name_new_entry.config(
+            textvariable=(main.name if use_orig else main.name_new), state=entry_state)
         self.manufac_new_entry.config(
             textvariable=(main.manufac if use_orig else main.manufac_new), state=entry_state)
         self.creator_new_entry.config(
@@ -2245,17 +2284,28 @@ class DriverInfoWin:
             main.version_orig.set('')
 
     def close(self, *_):
+        self.main.name_new.trace_remove('write', self.trace_n)
         self.main.manufac_new.trace_remove('write', self.trace_m)
         self.main.creator_new.trace_remove('write', self.trace_c)
         self.main.version_new.trace_remove('write', self.trace_v)
-        m = self.main.manufac_new_prev != self.main.manufac_new.get()
-        c = self.main.creator_new_prev != self.main.creator_new.get()
-        v = self.main.version_new_prev != self.main.version_new.get()
-        if m or c or v:
-            self.main.update_undo_history({'dinfo_change': True})
-            self.main.manufac_new_prev = self.main.manufac_new.get()
-            self.main.creator_new_prev = self.main.creator_new.get()
-            self.main.version_new_prev = self.main.version_new.get()
+        changes = {
+            'name': self.main.name_new_prev != self.main.name_new.get(),
+            'manufac': self.main.manufac_new_prev != self.main.manufac_new.get(),
+            'creator': self.main.creator_new_prev != self.main.creator_new.get(),
+            'version': self.main.version_new_prev != self.main.version_new.get()
+        }
+
+        if change_type := next((k for k, v in changes.items() if v), None):
+            self.main.update_undo_history({'dinfo_change': change_type})
+            match change_type:
+                case 'name':
+                    self.main.name_new_prev = self.main.name_new.get()
+                case 'manufac':
+                    self.main.manufac_new_prev = self.main.manufac_new.get()
+                case 'creator':
+                    self.main.creator_new_prev = self.main.creator_new.get()
+                case 'version':
+                    self.main.version_new_prev = self.main.version_new.get()
             self.main.get_app_state(write_file=True)
         self.window.destroy()
         self.main.driver_info_win = None
@@ -3369,6 +3419,9 @@ class C4zPanel:
 
         # Update XML variables
         if main.driver_xml:
+            if name_tag := main.driver_xml.get_tag('name'):
+                main.name.set(name_tag.value)
+                main.name_new.set(name_tag.value)
             if man_tag := main.driver_xml.get_tag('manufacturer'):
                 main.manufac.set(man_tag.value)
             if creator_tag := main.driver_xml.get_tag('creator'):
@@ -3466,6 +3519,50 @@ class C4zPanel:
             return
         self._load_c4z(file_path=file_path, generic=generic, c4is=c4is)
         self.main.pending_load_save.set(False)
+
+    def load_c4z_abort_dialog(self, reason, other_icons, abort_var):
+        def close():
+            abort_var.set(False)
+            abort_dialog.destroy()
+
+        def yes():
+            abort_var.set(True)
+            abort_dialog.destroy()
+
+        abort_dialog = Toplevel(self.main.root)
+        abort_dialog.title('Problem loading driver')
+        w, h = (239, 90)
+        abort_dialog.protocol('WM_DELETE_WINDOW', close)
+        abort_dialog.grab_set()
+        abort_dialog.focus()
+        abort_dialog.transient(self.main.root)
+        abort_dialog.resizable(False, False)
+
+        if reason == 'icons':
+            label_text = 'Could not find any icons in the driver'
+            if other_icons:
+                label_text += '\nTry enabling "get all images" in settings'
+                h += 15
+        elif reason == 'xml':
+            label_text = 'Driver XML invalid or missing'
+        else:
+            label_text = 'The driver has no icons and\nthe XML is invalid or missing'
+            h = 50
+
+        abort_dialog.geometry(f'{w}x{h}+{self.main.root.winfo_rootx()}+{self.main.root.winfo_rooty()}')
+
+        label = Label(abort_dialog, text=label_text)
+        label.place(relx=0.5, rely=0, y=5, anchor='n')
+
+        if reason in ('icons', 'xml'):
+            label2 = Label(abort_dialog, text='Would you like to load anyway?')
+            label2.place(relx=0.5, rely=0, y=h - 62, anchor='n')
+
+            yes_button = Button(abort_dialog, text='Yes', width='10', command=yes)
+            yes_button.place(relx=0.5, rely=1, x=-5, y=-10, anchor='se')
+
+            no_button = Button(abort_dialog, text='No', width='10', command=close)
+            no_button.place(relx=0.5, rely=1, x=5, y=-10, anchor='sw')
 
     def drop_in_c4z(self, event):
         if self.main.pending_load_save.get():
@@ -3676,6 +3773,7 @@ class C4zPanel:
             return
         self.sub_icon_win.window.deiconify()
 
+    # TODO: Make rename entry box UX nicer
     def rename_icon(self, x, y):
         curr_icon = self.icons[self.current_icon]
 
@@ -3760,50 +3858,6 @@ class C4zPanel:
         self.icon_paths |= {sub_icon.path for sub_icon in curr_icon.icons}
         self.update_icon()
         self.main.get_app_state(write_file=True)
-
-    def load_c4z_abort_dialog(self, reason, other_icons, abort_var):
-        def close():
-            abort_var.set(False)
-            abort_dialog.destroy()
-
-        def yes():
-            abort_var.set(True)
-            abort_dialog.destroy()
-
-        abort_dialog = Toplevel(self.main.root)
-        abort_dialog.title('Problem loading driver')
-        w, h = (239, 90)
-        abort_dialog.protocol('WM_DELETE_WINDOW', close)
-        abort_dialog.grab_set()
-        abort_dialog.focus()
-        abort_dialog.transient(self.main.root)
-        abort_dialog.resizable(False, False)
-
-        if reason == 'icons':
-            label_text = 'Could not find any icons in the driver'
-            if other_icons:
-                label_text += '\nTry enabling "get all images" in settings'
-                h += 15
-        elif reason == 'xml':
-            label_text = 'Driver XML invalid or missing'
-        else:
-            label_text = 'The driver has no icons and\nthe XML is invalid or missing'
-            h = 50
-
-        abort_dialog.geometry(f'{w}x{h}+{self.main.root.winfo_rootx()}+{self.main.root.winfo_rooty()}')
-
-        label = Label(abort_dialog, text=label_text)
-        label.place(relx=0.5, rely=0, y=5, anchor='n')
-
-        if reason in ('icons', 'xml'):
-            label2 = Label(abort_dialog, text='Would you like to load anyway?')
-            label2.place(relx=0.5, rely=0, y=h - 62, anchor='n')
-
-            yes_button = Button(abort_dialog, text='Yes', width='10', command=yes)
-            yes_button.place(relx=0.5, rely=1, x=-5, y=-10, anchor='se')
-
-            no_button = Button(abort_dialog, text='No', width='10', command=close)
-            no_button.place(relx=0.5, rely=1, x=5, y=-10, anchor='sw')
 
 
 class ReplacementPanel:
@@ -4194,7 +4248,7 @@ class ExportPanel:
         self.panel_label = Label(main.root, text='Export', font=(label_font, 15))
         self.panel_label.place(x=145 + self.x, y=70 + self.y, anchor='n')
 
-        self.driver_name_label = Label(main.root, text='Driver Name:')
+        self.driver_name_label = Label(main.root, text='File Name:')
         self.driver_name_label.place(x=65 + self.x, y=200 + self.y, anchor='w')
 
         # Buttons
@@ -4208,12 +4262,12 @@ class ExportPanel:
 
         # Entry
         self.file_name_prev = 'New Driver'
-        self.file_name = StringVar(value='New Driver')
-        self.file_name.trace_add('write', self.validate_driver_name)
-        self.driver_name_entry = Entry(main.root, width=25, textvariable=self.file_name)
-        self.driver_name_entry.bind('<FocusIn>', lambda _: self.update_undo_history(entry=True, focus_in=True))
-        self.driver_name_entry.bind('<FocusOut>', lambda _: self.update_undo_history(entry=True))
-        self.driver_name_entry.place(x=145 + self.x, y=210 + self.y, anchor='n')
+        self.file_name = StringVar(value=self.file_name_prev)
+        self.file_name.trace_add('write', self.validate_file_name)
+        self.file_name_entry = Entry(main.root, width=25, textvariable=self.file_name)
+        self.file_name_entry.bind('<FocusIn>', lambda _: self.update_undo_history(entry=True, focus_in=True))
+        self.file_name_entry.bind('<FocusOut>', lambda _: self.update_undo_history(entry=True))
+        self.file_name_entry.place(x=145 + self.x, y=210 + self.y, anchor='n')
 
         # Checkboxes
         self.use_orig_xml_prev = main.def_use_original_xml.get()
@@ -4328,7 +4382,7 @@ class ExportPanel:
         driver_name = re_valid_chars.sub('', self.file_name.get())
         main.export_panel.file_name.set(driver_name)
         if not driver_name:
-            self.driver_name_entry['background'] = 'pink'
+            self.file_name_entry['background'] = 'pink'
             main.counter = 7
             main.root.after(150, main.blink_driver_name_entry)  # type: ignore
             return
@@ -4616,15 +4670,15 @@ class ExportPanel:
         shutil.rmtree(main.instance_temp / 'driver')
         driver_bak_folder.replace(main.instance_temp / 'driver')
 
-    def validate_driver_name(self, *_):
+    def validate_file_name(self, *_):
         if self.suppress_trace:
             return
-        driver_name_cmp = re_valid_chars.sub('', driver_name := self.file_name.get())
+        file_name_cmp = re_valid_chars.sub('', file_name := self.file_name.get())
 
-        if str_diff := len(driver_name) - len(driver_name_cmp):
-            cursor_pos = self.driver_name_entry.index(INSERT)
-            self.driver_name_entry.icursor(cursor_pos - str_diff)
-            self.file_name.set(driver_name_cmp)
+        if str_diff := len(file_name) - len(file_name_cmp):
+            cursor_pos = self.file_name_entry.index(INSERT)
+            self.file_name_entry.icursor(cursor_pos - str_diff)
+            self.file_name.set(file_name_cmp)
             return
 
         self.main.ask_to_save = True
