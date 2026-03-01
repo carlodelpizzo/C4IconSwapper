@@ -2120,6 +2120,7 @@ class SubIconWin:
         subprocess.Popen(f'explorer /select,"{self.icons[self.curr_index].path.resolve()}"')
 
 
+# TODO: Make entries slightly wider
 class DriverInfoWin:
     def __init__(self, main: C4IconSwapper):
         ask_to_save = main.ask_to_save
