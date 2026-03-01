@@ -490,6 +490,9 @@ class XMLTag:
     def __bool__(self):
         return self.init_success
 
+    def __getitem__(self, item):
+        return tag.value if (tag := self.get_tag(item)) else None
+
 
 # Allows multiple root tags
 class XMLObject:
@@ -526,3 +529,6 @@ class XMLObject:
 
     def __bool__(self):
         return all(bool(tag) for tag in self.tags) if self.tags else False
+
+    def __getitem__(self, item):
+        return next((val for tag in self.tags if (val := tag[item]) is not None), None)
