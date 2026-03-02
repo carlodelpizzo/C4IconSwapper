@@ -1989,7 +1989,7 @@ class C4Icon(Icon):
         super().__init__(path=icons[0].path)
         self.tk_icon_sm = None
         self.name = name or icons[0].name
-        self.original_name = self.name
+        self.name_orig = self.name
         self.parent_tag = parent_tag
         self.device = device
         self.icons = icons
@@ -2013,12 +2013,12 @@ class C4Icon(Icon):
 
     @property
     def display_name(self):
-        display_name = self.original_name if self.main.export_panel.use_orig_xml.get() else self.name
+        display_name = self.name_orig if self.main.export_panel.use_orig_xml.get() else self.name
         return display_name if not self.device else f'{display_name}\n(device icon)'
 
     @property
     def renamed(self):
-        return self.name != self.original_name
+        return self.name != self.name_orig
 
     def refresh_tk_img(self, bak=False):
         if bak and self.bak:
@@ -3056,6 +3056,13 @@ class C4zPanel:
 
         self.sub_icon_win = None
 
+        # Canvas (For right click target behind labels)
+        x1, y1, x2, y2 = 29 + self.x, 38 + self.y, 160, 190
+        canvas = Canvas(main.root, width=x2, height=y2, highlightthickness=0)
+        canvas.place(x=x1, y=y1)
+        # canvas.create_rectangle(0, 0, x2, y2, fill='', outline='red', width=5)  # To view target area
+        canvas.bind('<Button-3>', self.right_click_menu)
+
         # Labels
         self.panel_label = Label(main.root, text='Driver Selection', font=(label_font, 15))
         self.panel_label.place(x=150 + self.x, y=-20 + self.y, anchor='n')
@@ -3069,9 +3076,11 @@ class C4zPanel:
 
         self.icon_num_label = Label(main.root, text='0 of 0', font=(label_font, 10))
         self.icon_num_label.place(x=108 + self.x, y=180 + self.y, anchor='n')
+        self.icon_num_label.bind('<Button-3>', self.right_click_menu)
 
         self.icon_name_label = Label(main.root, text='icon name', font=(label_font, 10, 'bold'), wraplength=220)
         self.icon_name_label.place(x=108 + self.x, y=197 + self.y, anchor='n')
+        self.icon_name_label.bind('<Button-3>', self.right_click_menu)
 
         # Buttons
         self.open_file_button = Button(main.root, text='Open', width=10, command=self.load_c4z, takefocus=0)
@@ -3752,7 +3761,7 @@ class C4zPanel:
         renamed = self.icons and self.icons[self.current_icon].renamed
         context_menu = Menu(self.main.root, tearoff=0)
         context_menu.add_command(label='View Sub Icons', command=self.toggle_sub_icon_win)
-        context_menu.add_command(label='Rename', command=lambda: self.rename_icon(event.x_root, event.y_root))
+        context_menu.add_command(label='Rename', command=self.rename_icon)
         if renamed:
             context_menu.add_command(label='Restore Name', command=self.restore_icon_name)
         menu_state = NORMAL if self.icons and not self.main.pending_load_save.get() else DISABLED
@@ -3772,8 +3781,8 @@ class C4zPanel:
             return
         self.sub_icon_win.window.deiconify()
 
-    # TODO: Make rename entry box UX nicer
-    def rename_icon(self, x, y):
+    def rename_icon(self):
+        root = self.main.root
         curr_icon = self.icons[self.current_icon]
 
         def name_collision_dialog():
@@ -3784,7 +3793,7 @@ class C4zPanel:
             error_dialog = Toplevel(root)
             error_dialog.title('Cannot Rename Icon')
             error_dialog.protocol('WM_DELETE_WINDOW', close)
-            error_dialog.geometry(f'239x35+{x}+{y}')
+            error_dialog.geometry(f'239x35')
             error_dialog.grab_set()
             error_dialog.focus()
             error_dialog.transient(root)
@@ -3794,13 +3803,14 @@ class C4zPanel:
             confirm_label.place(relx=0.5, rely=0, y=5, anchor='n')
             return error_dialog
 
-        def destroy(*_):
+        def destroy(*_, change=True):
             nonlocal dialog
-            if (new_name := entry_var.get()) and new_name != curr_icon.name:
+            if change and (new_name := entry_var.get()) and new_name != curr_icon.name:
                 name_collision = False
                 new_paths = set()
                 for sub_icon in curr_icon.icons:
-                    new_path = (sub_icon.path.parent / f'{new_name}_{sub_icon.size[0]}{sub_icon.path.suffix}').resolve()
+                    new_file_name = f'{new_name}_{sub_icon.size[0]}{sub_icon.path.suffix}'
+                    new_path = (sub_icon.path.parent / new_file_name).resolve()
                     if new_path in self.icon_paths:
                         name_collision = True
                         break
@@ -3813,7 +3823,8 @@ class C4zPanel:
                     return
                 else:
                     self.main.update_undo_history({'icon_change': True, 'icon_rename': True})
-                    self.icon_paths -= {sub_icon.path for sub_icon in curr_icon.icons} if not curr_icon.renamed else {
+                    self.icon_paths -= {sub_icon.path for sub_icon in curr_icon.icons}\
+                        if not curr_icon.renamed else {
                         (sub_icon.path.parent / f'{curr_icon.name}_{sub_icon.size[0]}{sub_icon.path.suffix}').resolve()
                         for sub_icon in curr_icon.icons
                     }
@@ -3821,7 +3832,8 @@ class C4zPanel:
                     curr_icon.name = new_name
                     self.update_icon()
                     self.main.get_app_state(write_file=True)
-            root.destroy()
+            entry.destroy()
+            self.icon_name_label.place(x=108 + self.x, y=197 + self.y, anchor='n')
 
         def validate_text(*_):
             text_compare = re.sub(r'[^a-zA-Z0-9_-]', '', entry_var.get()).strip()
@@ -3831,20 +3843,17 @@ class C4zPanel:
                 entry_var.set(text_compare)
 
         dialog: Toplevel | None = None
-        root = Toplevel()
-        root.overrideredirect(True)
-        root.geometry(f'+{x-35}+{y+25}')
-        canvas = Canvas(root, borderwidth=0, highlightthickness=0)
+        self.icon_name_label.place_forget()
         entry_var = StringVar(value=curr_icon.name)
         entry_var.trace_add('write', validate_text)  # type: ignore
-        entry = Entry(canvas, width=25, relief='flat', textvariable=entry_var,
-                      borderwidth=0, highlightthickness=0, justify='center')
-        entry.focus()
+        entry = Entry(root, width=54, relief='flat', textvariable=entry_var, font=(label_font, 10, 'bold'),
+                      bg=root.cget('bg'), borderwidth=0, highlightthickness=0, justify='center')
+        entry.place(x=108 + self.x, y=198 + self.y, anchor='n')
         entry.bind('<FocusOut>', destroy)
         entry.bind('<Return>', destroy)
-        entry.bind('<Escape>', lambda _: root.destroy())
+        entry.bind('<Escape>', lambda _: destroy)
         entry.select_range(0, 'end')
-        canvas.pack(), entry.pack()
+        entry.focus()
 
     def restore_icon_name(self):
         self.main.update_undo_history({'icon_change': True, 'icon_rename': True})
