@@ -34,10 +34,11 @@ from XMLObject import XMLObject, XMLTag
 version = '2.0dev'  # TODO: Change before release; Update README
 
 label_font, light_entry_bg, readonly_bg = 'Arial', '#FFFFFF', '#F0F0F0'
-re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9]')
+re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9()]')
 re_natural_sort = re.compile(r'(\d+)')
 valid_img_types = {'.bmp', '.gif', '.jpeg', '.jpg', '.png', '.tif', '.tiff', '.webp'}
-no_alpha_formats, alpha_modes = {'.bmp', '.jpeg', '.jpg'}, {'RGBA', 'LA', 'P'}
+no_alpha_formats = {'.bmp', '.jpeg', '.jpg'}
+alpha_modes = {'RGBA', 'LA', 'P'}
 connection_tag_generic = """
 <connection>
     <id>0</id>
@@ -81,7 +82,7 @@ class PathStringVar(StringVar):
         return str(Path.cwd()) if not (value := super().get()) and blank_gives_cwd else value
 
 
-# TODO: Reevaluate when ask_to_save is set; Only set if driver or images loaded
+# TODO: Reevaluate when ask_to_save is set; Check if entry variables have changed
 # TODO: Implement ability to rename states for generic driver
 class C4IconSwapper:
     def __init__(self):
@@ -445,12 +446,15 @@ class C4IconSwapper:
 
     def validate_entry_text(self, string_var: StringVar, entry: Entry):
         text_compare = re_valid_chars.sub('', text := string_var.get())
+        if string_var is self.export_panel.file_name:
+            text_compare = re.sub(r'[()]', '', text_compare)
         if str_diff := len(text) - len(text_compare):
             cursor_pos = entry.index(INSERT)
             entry.icursor(cursor_pos - str_diff)
             string_var.set(text_compare)
             return
-        self.ask_to_save = True
+        if self.driver_selected or self.c4z_panel.icons:
+            self.ask_to_save = True
 
     def validate_driver_ver(self, *_):
         version_compare = re.sub(r'\D', '', ver_str := self.version_new.get()).lstrip('0')
@@ -459,7 +463,8 @@ class C4IconSwapper:
             self.driver_info_win.version_new_entry.icursor(cursor_pos - str_diff)
             self.version_new.set(version_compare)
             return
-        self.ask_to_save = True
+        if self.driver_selected or self.c4z_panel.icons:
+            self.ask_to_save = True
 
     def update_driver_version(self, *_):
         if not self.export_panel.inc_driver_version.get():
@@ -473,8 +478,9 @@ class C4IconSwapper:
         except ValueError:
             return
         if curr_ver >= new_ver:
-            self.ask_to_save = True
             self.version_new.set(str(curr_ver + 1))
+            if self.driver_selected or self.c4z_panel.icons:
+                self.ask_to_save = True
 
     def open_edit_win(self, main_win_var, win_type: str):
         if main_win_var:
@@ -834,13 +840,14 @@ class C4IconSwapper:
             self.instance_state_file_path.write_text(json.dumps(app_state, indent='\t'))
         return app_state
 
+    # TODO: Test undo functionality
     def undo(self, *_):
         if self.pending_load_save.get() or not self.undo_history:
             return
 
         ask_to_save = self.ask_to_save
         undo_dict = self.undo_history.pop()
-        print('DEBUG:', undo_dict)
+        print('DEBUG - undo:\n', undo_dict, '\n', '*' * 50, sep='')
         if not self.redo_history:
             self.redo_history.extend([self.get_app_state(), undo_dict])
         else:
@@ -1017,11 +1024,12 @@ class C4IconSwapper:
                     app_state['include_backups'] = self.export_panel.include_backups_prev
                 case 'inc_version':
                     app_state['inc_driver_version'] = self.export_panel.inc_driver_version_prev
-        print('DEBUG:\n', app_state, sep='')
+        print('DEBUG - update_undo_history:\n', app_state, '\n', '*' * 50, sep='')
         self.redo_history.clear()
         self.undo_history.append(app_state)
         self.edit.entryconfig(self.undo_pos, state=NORMAL)
 
+    # TODO: Implement redo function
     def redo(self, *_):
         print('TODO: Implement redo function')
         if self.pending_load_save.get() or not self.redo_history:
@@ -2120,7 +2128,6 @@ class SubIconWin:
         subprocess.Popen(f'explorer /select,"{self.icons[self.curr_index].path.resolve()}"')
 
 
-# TODO: Make entries slightly wider
 class DriverInfoWin:
     def __init__(self, main: C4IconSwapper):
         ask_to_save = main.ask_to_save
@@ -2131,7 +2138,7 @@ class DriverInfoWin:
         self.window.focus()
         self.window.protocol('WM_DELETE_WINDOW', self.close)
         self.window.title('Edit Driver Info')
-        self.window.geometry(f'255x270+{main.root.winfo_rootx() + main.export_panel.x}+{main.root.winfo_rooty()}')
+        self.window.geometry(f'280x270+{main.root.winfo_rootx() + main.export_panel.x}+{main.root.winfo_rooty()}')
 
         def focus_on_click(event):
             if (isinstance(event.widget, (Toplevel, Label)) or
@@ -2149,28 +2156,28 @@ class DriverInfoWin:
         font_size = 10
         name_y = 20
         name_arrow = Label(self.window, text='\u2192', font=('', 15))
-        name_arrow.place(x=115, y=name_y, anchor='nw')
+        name_arrow.place(relx=0.5, y=name_y, anchor='n')
 
         driver_name_label = Label(self.window, text='Driver Name', font=(label_font, font_size))
         driver_name_label.place(relx=0.5, y=name_y - 15, anchor='n')
 
         man_y = name_y + 55
         man_arrow = Label(self.window, text='\u2192', font=('', 15))
-        man_arrow.place(x=115, y=man_y, anchor='nw')
+        man_arrow.place(relx=0.5, y=man_y, anchor='n')
 
         driver_man_label = Label(self.window, text='Driver Manufacturer', font=(label_font, font_size))
         driver_man_label.place(relx=0.5, y=man_y - 15, anchor='n')
 
         creator_y = man_y + 55
         creator_arrow = Label(self.window, text='\u2192', font=('', 15))
-        creator_arrow.place(x=115, y=creator_y, anchor='nw')
+        creator_arrow.place(relx=0.5, y=creator_y, anchor='n')
 
         driver_creator_label = Label(self.window, text='Driver Creator', font=(label_font, font_size))
         driver_creator_label.place(relx=0.5, y=creator_y - 15, anchor='n')
 
         version_y = creator_y + 55
         version_arrow = Label(self.window, text='\u2192', font=('', 15))
-        version_arrow.place(x=115, y=version_y, anchor='nw')
+        version_arrow.place(relx=0.5, y=version_y, anchor='n')
 
         driver_ver_label = Label(self.window, text='Driver Version', font=(label_font, font_size))
         driver_ver_label.place(relx=0.5, y=version_y - 15, anchor='n')
@@ -2179,54 +2186,54 @@ class DriverInfoWin:
         driver_ver_orig_label.place(relx=0.5, y=version_y + 65, anchor='n')
 
         # Entries
-        entry_width = 17
+        entry_width, x_offset = 20, 12
         name_entry = Entry(self.window, width=entry_width, textvariable=main.name)
-        name_entry.place(x=10, y=name_y + 7, anchor='nw')
+        name_entry.place(relx=0.5, x=-x_offset, y=name_y + 7, anchor='ne')
         name_entry['state'] = DISABLED
 
         self.name_new_entry = Entry(self.window, width=entry_width, textvariable=main.name_new)
         self.name_new_entry.bind('<FocusIn>', lambda _: self.update_undo_history(True, 'name'))
         self.name_new_entry.bind('<FocusOut>', lambda _: self.update_undo_history(False, 'name'))
-        self.name_new_entry.place(x=140, y=name_y + 7, anchor='nw')
+        self.name_new_entry.place(relx=0.5, x=x_offset, y=name_y + 7, anchor='nw')
         self.trace_n = main.name_new.trace_add('write', lambda name, index, mode: self.main.validate_entry_text(
                                                           string_var=main.name_new,
                                                           entry=self.name_new_entry))
 
         manufac_entry = Entry(self.window, width=entry_width, textvariable=main.manufac)
-        manufac_entry.place(x=10, y=man_y + 7, anchor='nw')
+        manufac_entry.place(relx=0.5, x=-x_offset, y=man_y + 7, anchor='ne')
         manufac_entry['state'] = DISABLED
 
         self.manufac_new_entry = Entry(self.window, width=entry_width, textvariable=main.manufac_new)
         self.manufac_new_entry.bind('<FocusIn>', lambda _: self.update_undo_history(True, 'manufac'))
         self.manufac_new_entry.bind('<FocusOut>', lambda _: self.update_undo_history(False, 'manufac'))
-        self.manufac_new_entry.place(x=140, y=man_y + 7, anchor='nw')
+        self.manufac_new_entry.place(relx=0.5, x=x_offset, y=man_y + 7, anchor='nw')
         self.trace_m = main.manufac_new.trace_add('write',
                                                   lambda name, index, mode: self.main.validate_entry_text(
                                                           string_var=main.manufac_new,
                                                           entry=self.manufac_new_entry))
 
         creator_entry = Entry(self.window, width=entry_width, textvariable=main.creator)
-        creator_entry.place(x=10, y=creator_y + 7, anchor='nw')
+        creator_entry.place(relx=0.5, x=-x_offset, y=creator_y + 7, anchor='ne')
         creator_entry['state'] = DISABLED
 
         self.creator_new_entry = Entry(self.window, width=entry_width, textvariable=main.creator_new)
         self.creator_new_entry.bind('<FocusIn>', lambda _: self.update_undo_history(True, 'creator'))
         self.creator_new_entry.bind('<FocusOut>', lambda _: self.update_undo_history(False, 'creator'))
-        self.creator_new_entry.place(x=140, y=creator_y + 7, anchor='nw')
+        self.creator_new_entry.place(relx=0.5, x=x_offset, y=creator_y + 7, anchor='nw')
         self.trace_c = main.creator_new.trace_add('write',
                                                   lambda name, index, mode: self.main.validate_entry_text(
                                                           string_var=main.creator_new,
                                                           entry=self.creator_new_entry))
 
         version_entry = Entry(self.window, width=entry_width, textvariable=main.version)
-        version_entry.place(x=10, y=version_y + 7, anchor='nw')
+        version_entry.place(relx=0.5, x=-x_offset, y=version_y + 7, anchor='ne')
         version_entry['state'] = DISABLED
 
         self.version_new_entry = Entry(self.window, width=entry_width, textvariable=main.version_new)
         self.version_new_entry.bind('<FocusIn>', lambda _: self.update_undo_history(True, 'version'))
         self.version_new_entry.bind('<FocusOut>', lambda _: self.update_undo_history(False, 'version'))
         self.version_new_entry.bind('<FocusOut>', main.update_driver_version, add='+')
-        self.version_new_entry.place(x=140, y=version_y + 7, anchor='nw')
+        self.version_new_entry.place(relx=0.5, x=x_offset, y=version_y + 7, anchor='nw')
         self.trace_v = main.version_new.trace_add('write', main.validate_driver_ver)
 
         version_orig_entry = Entry(self.window, width=15, justify='center', textvariable=main.version_orig)
@@ -2734,7 +2741,6 @@ class StatesWin:
         self.trace_lockout = trace_lockout
 
     def validate_states(self, *_):
-        self.main.ask_to_save = True
         self.trace_lockout = True
         # Update/format names and reset entry bg colors
         for state_entry in self.state_entries:
@@ -2765,6 +2771,7 @@ class StatesWin:
                                 break
         self.refresh()
         self.trace_lockout = False
+        self.main.ask_to_save = True
 
     def close(self, *_):
         for state_entry in self.state_entries:
