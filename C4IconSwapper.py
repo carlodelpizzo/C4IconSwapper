@@ -3045,6 +3045,7 @@ class RecoveryObject:
         return self.init_success
 
 
+# TODO: Have DnD replace current icon when loading image
 class C4zPanel:
     def __init__(self, main: C4IconSwapper):
         # Initialize C4z Panel
