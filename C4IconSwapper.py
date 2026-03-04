@@ -965,6 +965,7 @@ class C4IconSwapper:
         self.ask_to_save = ask_to_save
         self.get_app_state(write_file=True)
 
+    # TODO: Consider how to handle replacement images being deleted
     def update_undo_history(self, flags: dict = None):
         if self.pending_load_save.get():
             return
@@ -3045,7 +3046,6 @@ class RecoveryObject:
         return self.init_success
 
 
-# TODO: Have DnD replace current icon when loading image
 class C4zPanel:
     def __init__(self, main: C4IconSwapper):
         # Initialize C4z Panel
@@ -3580,7 +3580,7 @@ class C4zPanel:
         c4z_path = next((path for path in paths if path.suffix == '.c4z' and path.is_file()), None)
         if c4z_path:
             self.load_c4z(file_path=c4z_path)
-        self.main.replacement_panel.process_image(file_path=paths)
+        self.main.replacement_panel.process_image(file_path=paths, c4z_drop=True)
 
     def restore(self, do_all=False):
         if self.main.pending_load_save.get():
@@ -3931,7 +3931,8 @@ class ReplacementPanel:
         self.file_entry_field.dnd_bind('<<Drop>>', self.drag_and_drop_image)
         self.file_entry_field['state'] = DISABLED
 
-    def _process_image(self, file_path: Path | str | list | tuple = None, bank_index=None, threaded=False):
+    def _process_image(self, file_path: Path | str | list | tuple = None,
+                       bank_index=None, threaded=False, c4z_drop=False):
         if not threaded and not self.threading_event.is_set():
             return
         if not file_path:
@@ -3944,7 +3945,8 @@ class ReplacementPanel:
         elif isinstance(file_path, tuple) or isinstance(file_path, list):
             for path in file_path:
                 if path.is_file():
-                    self._process_image(file_path=path, bank_index=bank_index, threaded=threaded)
+                    self._process_image(file_path=path, bank_index=bank_index, threaded=threaded, c4z_drop=c4z_drop)
+                    c4z_drop = False
                     continue
                 for directory in list_all_sub_directories(path, include_root_dir=True):
                     for file in directory.iterdir():
@@ -3957,6 +3959,13 @@ class ReplacementPanel:
 
         main = self.main
         existing_replacement = bool(self.replacement_icon)
+
+        def replace_curr_icon():
+            main.update_undo_history({'icon_change': True})
+            main.c4z_panel.icons[main.c4z_panel.current_icon].replace(self.replacement_icon)
+            main.c4z_panel.restore_all_button['state'] = NORMAL
+            main.c4z_panel.update_icon()
+            main.get_app_state(write_file=True)
 
         # Process image and check if it is already in replacement images folder
         if file_path:
@@ -4021,8 +4030,10 @@ class ReplacementPanel:
                             self.img_bank[existing_index] = swap_icon
                             self.refresh_img_bank()
                             return
-                        else:  # If image is dropped on replacement
+                        else:
                             if existing_replacement and self.replacement_icon.path == cmp_path:
+                                if c4z_drop and main.c4z_panel.icons:
+                                    replace_curr_icon()
                                 return
                             existing_icon = next((icon for icon in self.img_bank if icon.path == cmp_path))
                             bank_index = self.img_bank.index(existing_icon)
@@ -4034,10 +4045,15 @@ class ReplacementPanel:
                                 self.replacement_icon = self.img_bank.pop(bank_index)
                                 self.img_bank_tk_labels[bank_index].configure(image=main.img_bank_blank)
                                 self.img_bank_tk_labels[bank_index].image = main.img_bank_blank
+                                if (bank_len := len(self.img_bank)) < main.img_bank_size:
+                                    self.img_bank_tk_labels[bank_len].configure(image=main.img_bank_blank)
+                                    self.img_bank_tk_labels[bank_len].image = main.img_bank_blank
                                 self.update_buttons()
                             self.replacement_img_label.configure(image=self.replacement_icon.tk_icon_lg)
                             self.replacement_img_label.image = self.replacement_icon.tk_icon_lg
                             self.refresh_img_bank()
+                            if c4z_drop and main.c4z_panel.icons:
+                                replace_curr_icon()
                             return
 
                     new_icon = Icon(new_path, img=img)
@@ -4071,6 +4087,9 @@ class ReplacementPanel:
         else:
             file_path = self.replacement_icon.path
 
+        if c4z_drop and main.c4z_panel.icons:
+            replace_curr_icon()
+
         self.file_entry_str.set(file_path)
         if not existing_replacement:
             self.file_entry_field['state'] = 'readonly'
@@ -4083,12 +4102,14 @@ class ReplacementPanel:
         if main.driver_selected:
             main.ask_to_save = True
 
-    def process_image(self, file_path: Path | str | list | tuple = None, bank_index=None, new_thread=True):
+    def process_image(self, file_path: Path | str | list | tuple = None,
+                      bank_index=None, new_thread=True, c4z_drop=False):
         if self.open_file_button.config('relief')[-1] == 'sunken':
             return
         if new_thread:
             threading.Thread(target=self.process_image,
-                             kwargs={'file_path': file_path, 'bank_index': bank_index, 'new_thread': False},
+                             kwargs={'file_path': file_path, 'bank_index': bank_index,
+                                     'new_thread': False, 'c4z_drop': c4z_drop},
                              daemon=True).start()
             return
 
@@ -4097,7 +4118,7 @@ class ReplacementPanel:
         with self.main.thread_lock:
             self.open_file_button.config(relief='raised')
             self.threading_event.clear()
-            self._process_image(file_path=file_path, bank_index=bank_index, threaded=True)
+            self._process_image(file_path=file_path, bank_index=bank_index, threaded=True, c4z_drop=c4z_drop)
             self.threading_event.set()
 
     def drag_and_drop_image(self, event, bank_num: int | None = None):
