@@ -841,37 +841,42 @@ class C4IconSwapper:
         return app_state
 
     # TODO: Test undo functionality
-    def undo(self, *_):
-        if self.pending_load_save.get() or not self.undo_history:
+    def undo(self, *_, redo_dict=None):
+        if self.pending_load_save.get() or not (redo_dict or self.undo_history):
             return
 
         ask_to_save = self.ask_to_save
-        undo_dict = self.undo_history.pop()
-        print('DEBUG - undo:\n', undo_dict, '\n', '*' * 50, sep='')
-        if not self.redo_history:
-            self.redo_history.extend([self.get_app_state(), undo_dict])
+        if not redo_dict:
+            undo_dict = self.undo_history.pop()
+            self.redo_history.append(self.update_undo_history(flags=undo_dict, for_redo=True))
         else:
-            self.redo_history.append(undo_dict)
+            undo_dict = redo_dict
 
         # Icons
-        if undo_dict.get('icon_change'):
-            self.c4z_panel.current_icon = i = undo_dict['icon_index']
-            icon = self.c4z_panel.icons[i]
-            if undo_dict.get('icon_rename'):
-                old_name = icon.name
-                icon.name = name = undo_dict['icon_name']
-                self.c4z_panel.icon_paths -= {
-                    (sub_icon.path.parent / f'{old_name}_{sub_icon.size[0]}{sub_icon.path.suffix}').resolve()
-                    for sub_icon in icon.icons
-                }
-                self.c4z_panel.icon_paths |= {
-                    (sub_icon.path.parent / f'{name}_{sub_icon.size[0]}{sub_icon.path.suffix}').resolve()
-                    for sub_icon in icon.icons
-                } if icon.renamed else {sub_icon.path for sub_icon in icon.icons}
-            else:
-                icon_dict = undo_dict['icon']
-                icon.replacement_icon = icon_dict['replacement_icon']
-                icon.restore_bak = icon_dict['restore_bak']
+        if change_type := undo_dict.get('icon_change'):
+            match change_type:
+                case 'all':
+                    for icon, icon_dict in undo_dict['icons'].items():
+                        icon.replacement_icon = icon_dict['replacement_icon']
+                        icon.restore_bak = icon_dict['restore_bak']
+                case 'curr':
+                    self.c4z_panel.current_icon = i = undo_dict['icon_index']
+                    icon = self.c4z_panel.icons[i]
+                    if undo_dict.get('icon_rename'):
+                        old_name = icon.name
+                        icon.name = name = undo_dict['icon_name']
+                        self.c4z_panel.icon_paths -= {
+                            (sub_icon.path.parent / f'{old_name}_{sub_icon.size[0]}{sub_icon.path.suffix}').resolve()
+                            for sub_icon in icon.icons
+                        }
+                        self.c4z_panel.icon_paths |= {
+                            (sub_icon.path.parent / f'{name}_{sub_icon.size[0]}{sub_icon.path.suffix}').resolve()
+                            for sub_icon in icon.icons
+                        } if icon.renamed else {sub_icon.path for sub_icon in icon.icons}
+                    else:
+                        icon_dict = undo_dict['icon']
+                        icon.replacement_icon = icon_dict['replacement_icon']
+                        icon.restore_bak = icon_dict['restore_bak']
             self.c4z_panel.update_icon()
 
         # Connections
@@ -966,21 +971,25 @@ class C4IconSwapper:
         self.get_app_state(write_file=True)
 
     # TODO: Consider how to handle replacement images being deleted
-    def update_undo_history(self, flags: dict = None):
+    def update_undo_history(self, flags: dict = None, for_redo=False):
         if self.pending_load_save.get():
-            return
-        app_state = {}
-        if flags.get('icon_change'):
-            app_state['icon_change'] = True
-            icon = self.c4z_panel.icons[i := self.c4z_panel.current_icon]
-            app_state['icon_index'] = i
-            if flags.get('icon_rename'):
-                app_state['icon_rename'] = True
-                app_state['icon_name'] = icon.name
-            else:
-                app_state['icon'] = {'replacement_icon': icon.replacement_icon, 'restore_bak': icon.restore_bak}
+            return None
+        app_state = flags.copy()
+        if change_type := flags.get('icon_change'):
+            match change_type:
+                case 'all':
+                    app_state['icons'] = {
+                        icon: {'replacement_icon': icon.replacement_icon, 'restore_bak': icon.restore_bak}
+                        for icon in self.c4z_panel.icons
+                    }
+                case 'curr':
+                    icon = self.c4z_panel.icons[i := self.c4z_panel.current_icon]
+                    app_state['icon_index'] = i
+                    if flags.get('icon_rename'):
+                        app_state['icon_name'] = icon.name
+                    else:
+                        app_state['icon'] = {'replacement_icon': icon.replacement_icon, 'restore_bak': icon.restore_bak}
         elif change_type := flags.get('conn_change'):
-            app_state['conn_change'] = change_type
             match change_type:
                 case 'text':
                     app_state |= {
@@ -1004,7 +1013,6 @@ class C4IconSwapper:
                     elif (i := flags.get('keep_conn')) is not None:
                         app_state['keep_conn'] = i
         elif change_type := flags.get('dinfo_change'):
-            app_state['dinfo_change'] = change_type
             match change_type:
                 case 'name':
                     app_state['name'] = self.name_new_prev
@@ -1015,7 +1023,6 @@ class C4IconSwapper:
                 case 'version':
                     app_state['version'] = self.version_new_prev
         elif change_type := flags.get('export_change'):
-            app_state['export_change'] = change_type
             match change_type:
                 case 'name':
                     app_state['driver_name'] = self.export_panel.file_name_prev
@@ -1025,18 +1032,21 @@ class C4IconSwapper:
                     app_state['include_backups'] = self.export_panel.include_backups_prev
                 case 'inc_version':
                     app_state['inc_driver_version'] = self.export_panel.inc_driver_version_prev
-        print('DEBUG - update_undo_history:\n', app_state, '\n', '*' * 50, sep='')
-        self.redo_history.clear()
-        self.undo_history.append(app_state)
-        self.edit.entryconfig(self.undo_pos, state=NORMAL)
 
-    # TODO: Implement redo function
+        if not for_redo:
+            print('DEBUG - update_undo_history:', app_state)
+            self.redo_history.clear()
+            self.undo_history.append(app_state)
+            self.edit.entryconfig(self.undo_pos, state=NORMAL)
+        return app_state
+
     def redo(self, *_):
-        print('TODO: Implement redo function')
         if self.pending_load_save.get() or not self.redo_history:
             return
-        self.redo_history.popleft()
-        # self.update_instance_state_file()
+        redo_dict = self.redo_history.pop()
+        self.undo_history.append(self.update_undo_history(flags=redo_dict, for_redo=True))
+        self.edit.entryconfig(self.undo_pos, state=NORMAL)
+        self.undo(redo_dict=redo_dict)
 
     def ask_to_save_dialog(self, result_var, on_exit=True):
         def cancel():
@@ -3585,7 +3595,7 @@ class C4zPanel:
     def restore(self, do_all=False):
         if self.main.pending_load_save.get():
             return
-        self.main.update_undo_history({'icon_change': True})
+        self.main.update_undo_history({'icon_change': 'curr'})
         if do_all:
             show_extra = self.show_extra_icons.get()
             for icon in self.icons:
@@ -3600,7 +3610,7 @@ class C4zPanel:
     def unrestore(self, *_, do_all=False):
         if self.main.pending_load_save.get():
             return
-        self.main.update_undo_history({'icon_change': True})
+        self.main.update_undo_history({'icon_change': 'curr'})
         if do_all:
             for icon in self.icons:
                 if not icon.replacement_icon and (icon.restore_bak and icon.bak):
@@ -3823,7 +3833,7 @@ class C4zPanel:
                         dialog = name_collision_dialog()
                     return
                 else:
-                    self.main.update_undo_history({'icon_change': True, 'icon_rename': True})
+                    self.main.update_undo_history({'icon_change': 'curr', 'icon_rename': True})
                     self.icon_paths -= {sub_icon.path for sub_icon in curr_icon.icons}\
                         if not curr_icon.renamed else {
                         (sub_icon.path.parent / f'{curr_icon.name}_{sub_icon.size[0]}{sub_icon.path.suffix}').resolve()
@@ -3857,7 +3867,7 @@ class C4zPanel:
         entry.focus()
 
     def restore_icon_name(self):
-        self.main.update_undo_history({'icon_change': True, 'icon_rename': True})
+        self.main.update_undo_history({'icon_change': 'curr', 'icon_rename': True})
         curr_icon = self.icons[self.current_icon]
         curr_icon.name = curr_icon.name_orig
         self.icon_paths -= {
@@ -3869,6 +3879,7 @@ class C4zPanel:
         self.main.get_app_state(write_file=True)
 
 
+# TODO: Add ability to drag images onto driver icon
 class ReplacementPanel:
     def __init__(self, main: C4IconSwapper):
         # Initialize Replacement Panel
@@ -3960,13 +3971,6 @@ class ReplacementPanel:
         main = self.main
         existing_replacement = bool(self.replacement_icon)
 
-        def replace_curr_icon():
-            main.update_undo_history({'icon_change': True})
-            main.c4z_panel.icons[main.c4z_panel.current_icon].replace(self.replacement_icon)
-            main.c4z_panel.restore_all_button['state'] = NORMAL
-            main.c4z_panel.update_icon()
-            main.get_app_state(write_file=True)
-
         # Process image and check if it is already in replacement images folder
         if file_path:
             new_path = main.replacement_icons_dir / file_path.name
@@ -4033,7 +4037,7 @@ class ReplacementPanel:
                         else:
                             if existing_replacement and self.replacement_icon.path == cmp_path:
                                 if c4z_drop and main.c4z_panel.icons:
-                                    replace_curr_icon()
+                                    self.replace_icon(update_ask_to_save=False)
                                 return
                             existing_icon = next((icon for icon in self.img_bank if icon.path == cmp_path))
                             bank_index = self.img_bank.index(existing_icon)
@@ -4053,7 +4057,7 @@ class ReplacementPanel:
                             self.replacement_img_label.image = self.replacement_icon.tk_icon_lg
                             self.refresh_img_bank()
                             if c4z_drop and main.c4z_panel.icons:
-                                replace_curr_icon()
+                                self.replace_icon(update_ask_to_save=False)
                             return
 
                     new_icon = Icon(new_path, img=img)
@@ -4088,7 +4092,7 @@ class ReplacementPanel:
             file_path = self.replacement_icon.path
 
         if c4z_drop and main.c4z_panel.icons:
-            replace_curr_icon()
+            self.replace_icon(update_ask_to_save=False)
 
         self.file_entry_str.set(file_path)
         if not existing_replacement:
@@ -4176,7 +4180,7 @@ class ReplacementPanel:
             self.img_bank.append(temp)
         self.refresh_img_bank()
 
-    def replace_icon(self, update_undo_history=True, c4_icn_index=None):
+    def replace_icon(self, update_ask_to_save=True, update_undo_history=True, c4_icn_index=None):
         if not self.threading_event.is_set():
             return
         c4z_panel = self.main.c4z_panel
@@ -4186,19 +4190,20 @@ class ReplacementPanel:
             raise ValueError('Current icon index out of range')
 
         if update_undo_history:
-            self.main.update_undo_history({'icon_change': True})
+            self.main.update_undo_history({'icon_change': 'curr'})
 
         c4z_panel.icons[c4_icn_index].replace(self.replacement_icon)
         c4z_panel.restore_all_button['state'] = NORMAL
         c4z_panel.update_icon()
-        self.main.ask_to_save = True
+        if update_ask_to_save:
+            self.main.ask_to_save = True
         if update_undo_history:
             self.main.get_app_state(write_file=True)
 
     def replace_all(self):
         if not self.threading_event.is_set():
             return
-        self.main.update_undo_history({'icon_change': True})
+        self.main.update_undo_history({'icon_change': 'all'})
         show_extra = self.main.c4z_panel.show_extra_icons.get()
         for i, icon in enumerate(self.main.c4z_panel.icons):
             if icon.extra and not show_extra:
