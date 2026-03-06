@@ -18,6 +18,7 @@ import traceback
 import warnings
 from collections import Counter, defaultdict, deque
 from datetime import datetime
+from math import hypot
 from pathlib import Path
 
 from PIL import Image, ImageTk, UnidentifiedImageError
@@ -2335,6 +2336,7 @@ class DriverInfoWin:
 class ConnectionsWin:
     def __init__(self, main: C4IconSwapper):
         self.suppress_trace = True
+
         # Initialize window
         ask_to_save = main.ask_to_save
         self.main = main
@@ -3058,7 +3060,6 @@ class RecoveryObject:
 
 class C4zPanel:
     def __init__(self, main: C4IconSwapper):
-        # Initialize C4z Panel
         self.main = main
         self.x, self.y = 5, 20
         self.current_icon, self.extra_icons = 0, 0
@@ -3879,17 +3880,24 @@ class C4zPanel:
         self.main.get_app_state(write_file=True)
 
 
-# TODO: Add ability to drag images onto driver icon
 class ReplacementPanel:
     def __init__(self, main: C4IconSwapper):
-        # Initialize Replacement Panel
         self.main = main
         self.x, self.y = (303, 20)
         self.replacement_icon = None
-        self.img_bank, self.img_bank_tk_labels = [], []
+        self.img_bank = []
+        self.img_bank_tk_labels = []
         self.img_bank_lockout_dict = {}
+        self.selected_img = None
+        self.dragging = False
+        self.drag_label = None
+        self.label_offset = (0, 0)
+        self.click_pos = (0, 0)
+        self.mouse_pos = (0, 0)
         self.threading_event = threading.Event()
         self.threading_event.set()
+
+        self.main.root.bind('<B1-Motion>', self.on_drag, add='+')
 
         # Labels
         self.panel_label = Label(main.root, text='Replacement Icons', font=(label_font, 15))
@@ -3900,8 +3908,11 @@ class ReplacementPanel:
         self.replacement_img_label.image = main.img_blank
         self.replacement_img_label.drop_target_register(DND_FILES)
         self.replacement_img_label.dnd_bind('<<Drop>>', self.drag_and_drop_image)
+        self.replacement_img_label.bind('<Button-1>', self.on_click)
+        self.replacement_img_label.bind('<ButtonRelease-1>', lambda e: self.on_release(e))
         self.replacement_img_label.bind('<Button-3>', self.right_click_menu)
 
+        # Image Bank
         x_offset = 61
         for i in range(main.img_bank_size):
             bank_label = Label(main.root, image=main.img_bank_blank)
@@ -3909,7 +3920,8 @@ class ReplacementPanel:
             bank_label.image = main.img_bank_blank
             bank_label.drop_target_register(DND_FILES)
             bank_label.dnd_bind('<<Drop>>', lambda e, bn=i: self.drag_and_drop_image(e, bn))
-            bank_label.bind('<Button-1>', lambda e, bn=i: self.select_img_bank(e, bn))
+            bank_label.bind('<Button-1>', lambda e, bn=i: self.on_click(e, bank_num=bn))
+            bank_label.bind('<ButtonRelease-1>', lambda e: self.on_release(e))
             bank_label.bind('<Button-3>', self.right_click_menu)
             self.img_bank_tk_labels.append(bank_label)
 
@@ -3941,6 +3953,20 @@ class ReplacementPanel:
         self.file_entry_field.drop_target_register(DND_FILES)
         self.file_entry_field.dnd_bind('<<Drop>>', self.drag_and_drop_image)
         self.file_entry_field['state'] = DISABLED
+
+    @property
+    def drag_distance(self):
+        return hypot(self.click_pos[0] - self.mouse_pos[0], self.click_pos[1] - self.mouse_pos[1])
+
+    @property
+    def on_c4z_icon_label(self):
+        icon_label = self.main.c4z_panel.c4_icon_label
+        c4_icon_label_x, c4_icon_label_y = icon_label.winfo_x(), icon_label.winfo_y()
+        c4_icon_label_w, c4_icon_label_h = icon_label.winfo_width(), icon_label.winfo_width()
+        if c4_icon_label_x <= self.mouse_pos[0] <= c4_icon_label_x + c4_icon_label_w:
+            if c4_icon_label_y <= self.mouse_pos[1] <= c4_icon_label_y + c4_icon_label_h:
+                return True
+        return False
 
     def _process_image(self, file_path: Path | str | list | tuple = None,
                        bank_index=None, threaded=False, c4z_drop=False):
@@ -4131,6 +4157,43 @@ class ReplacementPanel:
             return
         self.process_image(file_path=paths, bank_index=bank_num)
 
+    def on_click(self, event, bank_num=-1):
+        if (bank_num == -1 and not self.replacement_icon) or bank_num > len(self.img_bank) - 1:
+            return
+        img_label = self.replacement_img_label if bank_num < 0 else self.img_bank_tk_labels[bank_num]
+        self.click_pos = (event.x + img_label.winfo_x(), event.y + img_label.winfo_y())
+        self.label_offset = (event.x, event.y)
+        self.selected_img = bank_num
+        self.drag_label = Label(self.main.root, image=img_label.image)
+        self.drag_label.image = img_label.image
+
+    def on_release(self, event):
+        if self.selected_img is None:
+            return
+        self.dragging = False
+        img_label = self.replacement_img_label if self.selected_img < 0 else self.img_bank_tk_labels[self.selected_img]
+        self.mouse_pos = (event.x + img_label.winfo_x(), event.y + img_label.winfo_y())
+        print(self.click_pos, self.mouse_pos)
+        if self.selected_img is not None and self.drag_distance <= 10:
+            self.select_img_bank(event, bank_num=self.selected_img)
+        elif self.on_c4z_icon_label:
+            self.replace_icon(bank_num=self.selected_img)
+        self.selected_img = None
+        self.label_offset = (0, 0)
+        if self.drag_label:
+            self.drag_label.destroy()
+            self.drag_label = None
+
+    def on_drag(self, event):
+        if self.selected_img is None:
+            return
+        img_label = self.replacement_img_label if self.selected_img < 0 else self.img_bank_tk_labels[self.selected_img]
+        self.mouse_pos = (event.x + img_label.winfo_x(), event.y + img_label.winfo_y())
+        self.dragging = True if self.drag_distance > 10 else False
+        if self.dragging:
+            self.drag_label.place(x=self.mouse_pos[0] - self.label_offset[0],
+                                  y=self.mouse_pos[1] - self.label_offset[1])
+
     def add_to_img_bank(self, img: Icon, bank_index=None):
         if img in self.img_bank:
             return
@@ -4155,7 +4218,7 @@ class ReplacementPanel:
         if not self.img_bank or len(self.img_bank) <= bank_num or not event:
             return
         # Debounce stack selection
-        debounce_val = 0.25
+        debounce_val = 0.20
         bank_key = f'bank{bank_num}'
         if (last_time := self.img_bank_lockout_dict.get(bank_key)) and time.time() - last_time < debounce_val:
             return
@@ -4180,7 +4243,7 @@ class ReplacementPanel:
             self.img_bank.append(temp)
         self.refresh_img_bank()
 
-    def replace_icon(self, update_ask_to_save=True, update_undo_history=True, c4_icn_index=None):
+    def replace_icon(self, update_ask_to_save=True, update_undo_history=True, c4_icn_index=None, bank_num=-1):
         if not self.threading_event.is_set():
             return
         c4z_panel = self.main.c4z_panel
@@ -4192,7 +4255,8 @@ class ReplacementPanel:
         if update_undo_history:
             self.main.update_undo_history({'icon_change': 'curr'})
 
-        c4z_panel.icons[c4_icn_index].replace(self.replacement_icon)
+        replacement_icon = self.replacement_icon if bank_num == -1 else self.img_bank[bank_num]
+        c4z_panel.icons[c4_icn_index].replace(replacement_icon)
         c4z_panel.restore_all_button['state'] = NORMAL
         c4z_panel.update_icon()
         if update_ask_to_save:
@@ -4273,7 +4337,6 @@ class ReplacementPanel:
 
 class ExportPanel:
     def __init__(self, main: C4IconSwapper):
-        # Initialize Export Panel
         self.main = main
         self.x, self.y = (615, -50)
         self.suppress_trace = False
@@ -4734,6 +4797,7 @@ class C4IS:
     def __init__(self, main: C4IconSwapper):
         if not isinstance(main, C4IconSwapper):
             raise TypeError(f'Expected type: {C4IconSwapper.__name__}')
+
         # Root class
         self.class_version = 2
         self.driver_xml = main.driver_xml
