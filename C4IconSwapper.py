@@ -36,6 +36,7 @@ from XMLObject import XMLObject, XMLTag
 version = '2.0dev'  # TODO: Change before release; Update README
 
 label_font, light_entry_bg, readonly_bg = 'Arial', '#FFFFFF', '#F0F0F0'
+sm_icon_size, lg_icon_size = (60, 60), (128, 128)
 re_valid_chars = re.compile(r'[^\-_ a-zA-Z0-9()]')
 re_natural_sort = re.compile(r'(\d+)')
 valid_img_types = {'.bmp', '.gif', '.jpeg', '.jpg', '.png', '.tif', '.tiff', '.webp'}
@@ -84,13 +85,22 @@ class PathStringVar(StringVar):
         return str(Path.cwd()) if not (value := super().get()) and blank_gives_cwd else value
 
 
-# This class is just to get rid of IDE warnings
 class Label(tkLabel):  # noinspection PyUnresolvedReferences
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.image = None
+        self.image = kwargs.get('image', None)
         self.drop_target_register = self.drop_target_register
         self.dnd_bind = self.dnd_bind
+
+    def config(self, *args, **kwargs):
+        super().config(*args, **kwargs)
+        if new_image := kwargs.get('image', None):
+            self.image = new_image
+
+    def configure(self, *args, **kwargs):
+        super().configure(*args, **kwargs)
+        if new_image := kwargs.get('image', None):
+            self.image = new_image
 
 
 # TODO: Reevaluate when ask_to_save is set; Check if entry variables have changed
@@ -241,8 +251,8 @@ class C4IconSwapper:
 
         # Creating blank image for panels
         with Image.open(assets_path / 'blank_img.png') as img:
-            self.img_blank = ImageTk.PhotoImage(img.resize((128, 128)))
-            self.img_bank_blank = ImageTk.PhotoImage(img.resize((60, 60)))
+            self.img_blank = ImageTk.PhotoImage(img.resize(lg_icon_size))
+            self.img_bank_blank = ImageTk.PhotoImage(img.resize(sm_icon_size))
 
         # Initialize Panels
         self.c4z_panel = C4zPanel(self)
@@ -443,7 +453,7 @@ class C4IconSwapper:
             case 'Up':
                 self.replacement_panel.inc_img_bank()
             case 'Down':
-                self.replacement_panel.inc_img_bank(inc=0)
+                self.replacement_panel.inc_img_bank(inc=-1)
             case 'Escape':
                 self.root.focus()
 
@@ -564,11 +574,11 @@ class C4IconSwapper:
         curr_label_img = self.c4z_panel.c4_icon_label.image
         with Image.open(assets_path / 'loading_img.png') as img:
             icon = ImageTk.PhotoImage(img)
-            update_label_img(self.c4z_panel.c4_icon_label, icon)
+            self.c4z_panel.c4_icon_label.config(image=icon)
             self.root.update_idletasks()
 
         def restore_label_img(update_idletasks=True):
-            update_label_img(self.c4z_panel.c4_icon_label, curr_label_img)
+            self.c4z_panel.c4_icon_label.config(image=curr_label_img)
             if update_idletasks:
                 self.root.update_idletasks()
 
@@ -632,7 +642,7 @@ class C4IconSwapper:
         if c4is.driver_selected or not merge_project:
             self.c4z_panel.icons = []
             self.c4z_panel.current_icon = 0
-            update_label_img(self.c4z_panel.c4_icon_label, self.img_blank)
+            self.c4z_panel.c4_icon_label.config(image=self.img_blank)
             shutil.rmtree(self.instance_temp / 'driver', ignore_errors=True)
             if c4is.driver_selected:
                 self.c4z_panel.restore_button['state'] = DISABLED
@@ -713,7 +723,7 @@ class C4IconSwapper:
             shutil.rmtree(replacement_dir, ignore_errors=True)
             replacement_dir.mkdir()
             for img_bank_label in self.replacement_panel.img_bank_labels:
-                update_label_img(img_bank_label, self.img_bank_blank)
+                img_bank_label.config(image=self.img_bank_blank)
         elif existing_driver and not c4is.driver_selected:
             restore_label_img(update_idletasks=True)
         if c4is.replacement:
@@ -721,8 +731,7 @@ class C4IconSwapper:
                 c4is.img_bank.append(c4is.replacement)
             else:
                 save_replacement_img()
-                rp_tk_img = self.replacement_panel.replacement_icon.icon_lg
-                update_label_img(self.replacement_panel.replacement_label, rp_tk_img)
+                self.replacement_panel.replacement_label.config(image=self.replacement_panel.replacement_icon.icon_lg)
                 self.replacement_panel.file_entry_str.set(str(self.replacement_panel.replacement_icon.path))
                 self.replacement_panel.file_entry_field['state'] = 'readonly'
         elif not merge_project:
@@ -850,7 +859,6 @@ class C4IconSwapper:
             self.instance_state_file_path.write_text(json.dumps(app_state, indent='\t'))
         return app_state
 
-    # TODO: Test undo functionality
     def undo(self, *_, redo_dict=None):
         if self.pending_load_save.get() or not (redo_dict or self.undo_history):
             return
@@ -858,8 +866,7 @@ class C4IconSwapper:
         ask_to_save = self.ask_to_save
         if not redo_dict:
             undo_dict = self.undo_history.pop()
-            if not undo_dict.get('icon_delete'):
-                self.redo_history.append(self.update_undo_history(flags=undo_dict, for_redo=True))
+            self.redo_history.append(self.update_undo_history(flags=undo_dict, for_redo=True))
         else:
             undo_dict = redo_dict
 
@@ -991,7 +998,7 @@ class C4IconSwapper:
                                 continue
                             rp_panel.img_bank.insert(i, rp_panel.img_bank.pop(img_i))
                             break
-                    update_label_img(rp_panel.replacement_label, rp_panel.replacement_icon.icon_lg)
+                    rp_panel.replacement_label.config(image=rp_panel.replacement_icon.icon_lg)
                 case 'bank':
                     shutil.move(self.undo_temp / undo_dict['delete'].path.name, undo_dict['delete'].path)
                     for i, path in enumerate(undo_dict['bank']):
@@ -1005,7 +1012,7 @@ class C4IconSwapper:
                         if rp_panel.replacement_icon and rp_panel.replacement_icon.path == path:
                             rp_panel.img_bank.insert(i, rp_panel.replacement_icon)
                             rp_panel.replacement_icon = None
-                            update_label_img(rp_panel.replacement_label, self.img_blank)
+                            rp_panel.replacement_label.config(image=self.img_blank)
                     if rp_path := undo_dict['replacement']:
                         if not rp_panel.replacement_icon or rp_panel.replacement_icon.path != rp_path:
                             for i, img in enumerate(rp_panel.img_bank):
@@ -1013,7 +1020,7 @@ class C4IconSwapper:
                                     if rp_panel.replacement_icon:
                                         rp_panel.img_bank.append(rp_panel.replacement_icon)
                                     rp_panel.replacement_icon = rp_panel.img_bank.pop(i)
-                                    update_label_img(rp_panel.replacement_label, rp_panel.replacement_icon.icon_lg)
+                                    rp_panel.replacement_label.config(image=rp_panel.replacement_icon.icon_lg)
                                     break
             rp_panel.refresh_img_bank()
 
@@ -1097,6 +1104,9 @@ class C4IconSwapper:
         if self.pending_load_save.get() or not self.redo_history:
             return
         redo_dict = self.redo_history.pop()
+        if redo_dict.get('icon_delete'):
+            print('TODO: Implement redo for deleted replacement images')
+            return
         self.undo_history.append(self.update_undo_history(flags=redo_dict, for_redo=True))
         self.edit.entryconfig(self.undo_pos, state=NORMAL)
         self.undo(redo_dict=redo_dict)
@@ -2009,8 +2019,8 @@ class Icon:
         self.icon_sm = None
 
         def create_tk_icons(pil_img):
-            self.icon_lg = ImageTk.PhotoImage(pil_img.resize((128, 128), Resampling.BICUBIC))
-            self.icon_sm = ImageTk.PhotoImage(pil_img.resize((60, 60), Resampling.BICUBIC))
+            self.icon_lg = ImageTk.PhotoImage(pil_img.resize(lg_icon_size, Resampling.BICUBIC))
+            self.icon_sm = ImageTk.PhotoImage(pil_img.resize(sm_icon_size, Resampling.BICUBIC))
         if img:
             create_tk_icons(img)
         else:
@@ -2065,7 +2075,7 @@ class C4Icon(Icon):
         if self.bak:
             icon = max(icons, key=lambda sub_icon: sub_icon.size[0] if sub_icon.bak_path else None)
             with Image.open(icon.bak_path) as img:
-                self.bak_tk_icon = ImageTk.PhotoImage(img.resize((128, 128), Resampling.BICUBIC))
+                self.bak_tk_icon = ImageTk.PhotoImage(img.resize(lg_icon_size, Resampling.BICUBIC))
 
     @property
     def tk_img(self):
@@ -2088,10 +2098,10 @@ class C4Icon(Icon):
         if bak and self.bak:
             icon = max(self.icons, key=lambda sub_icon: sub_icon.size[0] if sub_icon.bak_path else None)
             with Image.open(icon.bak_path) as img:
-                self.bak_tk_icon = ImageTk.PhotoImage(img.resize((128, 128), Resampling.BICUBIC))
+                self.bak_tk_icon = ImageTk.PhotoImage(img.resize(lg_icon_size, Resampling.BICUBIC))
             return
         with Image.open(self.path) as img:
-            self.icon_lg = ImageTk.PhotoImage(img.resize((128, 128), Resampling.BICUBIC))
+            self.icon_lg = ImageTk.PhotoImage(img.resize(lg_icon_size, Resampling.BICUBIC))
 
     def replace(self, icon: Icon):
         self.replacement_icon = icon
@@ -2128,7 +2138,6 @@ class SubIconWin:
         # Labels
         self.sub_icon_label = Label(window, image=main.img_blank)
         self.sub_icon_label.place(relx=0.5, y=10, anchor='n')
-        self.sub_icon_label.image = main.img_blank
         self.sub_icon_label.bind('<Button-3>', self.right_click_menu)
 
         self.name_label = Label(window, text='icon name', font=(label_font, 10, 'bold'))
@@ -2165,8 +2174,7 @@ class SubIconWin:
             self.curr_index = self.num_of_icons - 1 if self.curr_index >= self.num_of_icons else self.curr_index
         curr_sub_icon = self.icons[self.curr_index]
         with Image.open(curr_sub_icon.path) as img:
-            icon_image = ImageTk.PhotoImage(img.resize((128, 128), Resampling.BICUBIC))
-            update_label_img(self.sub_icon_label, icon_image)
+            self.sub_icon_label.config(image=ImageTk.PhotoImage(img.resize(lg_icon_size, Resampling.BICUBIC)))
         self.num_label.config(text=f'{self.curr_index + 1} of {self.num_of_icons}')
         self.size_label.config(text=f'{curr_sub_icon.size[0]}x{curr_sub_icon.size[1]}')
         self.name_label.config(text=curr_sub_icon.path.name)
@@ -3132,7 +3140,6 @@ class C4zPanel:
 
         self.c4_icon_label = Label(main.root, image=main.img_blank)
         self.c4_icon_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
-        self.c4_icon_label.image = main.img_blank
         self.c4_icon_label.drop_target_register(DND_FILES)
         self.c4_icon_label.dnd_bind('<<Drop>>', self.drop_in_c4z)
         self.c4_icon_label.bind('<Button-3>', self.right_click_menu)
@@ -3146,8 +3153,8 @@ class C4zPanel:
         self.icon_name_label.bind('<Button-3>', self.right_click_menu)
 
         # Buttons
-        self.open_file_button = Button(main.root, text='Open', width=10, command=self.load_c4z, takefocus=0)
-        self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
+        self.open_button = Button(main.root, text='Open', width=10, command=self.load_c4z, takefocus=0)
+        self.open_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
 
         self.restore_button = Button(main.root, text='Restore\nOriginal Icon', command=self.restore, takefocus=0)
         self.restore_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
@@ -3158,14 +3165,13 @@ class C4zPanel:
         self.restore_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
         self.restore_all_button['state'] = DISABLED
 
-        self.prev_icon_button = Button(
-            main.root, text='Prev', command=lambda: self.inc_icon(inc=-1), width=5, takefocus=0)
-        self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
-        self.prev_icon_button['state'] = DISABLED
+        self.prev_button = Button(main.root, text='Prev', command=lambda: self.inc_icon(inc=-1), width=5, takefocus=0)
+        self.prev_button.place(x=180 + self.x, y=146 + self.y)
+        self.prev_button['state'] = DISABLED
 
-        self.next_icon_button = Button(main.root, text='Next', command=self.inc_icon, width=5, takefocus=0)
-        self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
-        self.next_icon_button['state'] = DISABLED
+        self.next_button = Button(main.root, text='Next', command=self.inc_icon, width=5, takefocus=0)
+        self.next_button.place(x=230 + self.x, y=146 + self.y)
+        self.next_button['state'] = DISABLED
 
         # Entry
         self.file_entry_str = StringVar(value='Select .c4z file...')
@@ -3198,7 +3204,7 @@ class C4zPanel:
             device_icon_dir = main.instance_temp / 'driver' / 'www' / 'icons' / 'device'
             instance_driver_path = main.instance_temp / 'driver'
             with Image.open(assets_path / 'loading_img.png') as loading_img:
-                update_label_img(self.c4_icon_label, ImageTk.PhotoImage(loading_img))
+                self.c4_icon_label.config(image=ImageTk.PhotoImage(loading_img))
             gen_driver_path = assets_path / f"generic-driver{'-multi' if multi else ''}.c4z.compressed"
             shutil.rmtree(instance_driver_path, ignore_errors=True)
             shutil.unpack_archive(gen_driver_path, instance_driver_path, 'zip')
@@ -3541,8 +3547,8 @@ class C4zPanel:
         self.update_icon()
         visible_icons = len(self.icons) - (self.extra_icons if not self.show_extra_icons.get() else 0)
         prev_next_button_state = NORMAL if visible_icons > 1 else DISABLED
-        self.prev_icon_button['state'] = prev_next_button_state
-        self.next_icon_button['state'] = prev_next_button_state
+        self.prev_button['state'] = prev_next_button_state
+        self.next_button['state'] = prev_next_button_state
         # Update replacement buttons
         main.replacement_panel.update_buttons()
         # Update 'Restore All' button in driver panel
@@ -3679,15 +3685,15 @@ class C4zPanel:
                 self.show_extra_icons_check.config(text=f'show extra ({self.extra_icons})')
             current_icon = self.icons[self.current_icon]
             if current_icon.extra:
-                self.inc_icon()
+                self.inc_icon(inc=-1)
         else:
             self.show_extra_icons_check.config(text='show extra icons')
 
-        self.prev_icon_button['state'] = NORMAL
-        self.next_icon_button['state'] = NORMAL
+        self.prev_button['state'] = NORMAL
+        self.next_button['state'] = NORMAL
         if len(self.icons) - (self.extra_icons if not show_extra else 0) == 1:
-            self.prev_icon_button['state'] = DISABLED
-            self.next_icon_button['state'] = DISABLED
+            self.prev_button['state'] = DISABLED
+            self.next_button['state'] = DISABLED
         self.update_icon()
 
     def inc_icon(self, inc=1, validate=True):
@@ -3720,7 +3726,7 @@ class C4zPanel:
         if self.current_icon >= len(icons):
             self.current_icon = self.current_icon % len(icons)
 
-        update_label_img(self.c4_icon_label, icons[self.current_icon].tk_img)
+        self.c4_icon_label.config(image=icons[self.current_icon].tk_img)
 
         curr_icon = icons[self.current_icon]
         self.icon_name_label.config(text=curr_icon.display_name)
@@ -3952,7 +3958,6 @@ class ReplacementPanel:
 
         self.replacement_label = Label(main.root, image=main.img_blank)
         self.replacement_label.place(x=108 + self.x, y=42 + self.y, anchor='n')
-        self.replacement_label.image = main.img_blank
         self.replacement_label.drop_target_register(DND_FILES)
         self.replacement_label.dnd_bind('<<Drop>>', self.drag_and_drop_image)
         self.replacement_label.bind('<Button-1>', self.on_click)
@@ -3960,11 +3965,10 @@ class ReplacementPanel:
         self.replacement_label.bind('<Button-3>', self.right_click_menu)
 
         # Image Bank
-        x_offset = 61
+        label_spacing = 61
         for i in range(main.img_bank_size):
             bank_label = Label(main.root, image=main.img_bank_blank)
-            bank_label.place(x=31 + self.x + x_offset * i, y=176 + self.y, anchor='nw')
-            bank_label.image = main.img_bank_blank
+            bank_label.place(x=31 + self.x + label_spacing * i, y=176 + self.y, anchor='nw')
             bank_label.drop_target_register(DND_FILES)
             bank_label.dnd_bind('<<Drop>>', lambda e, bn=i: self.drag_and_drop_image(e, bn))
             bank_label.bind('<Button-1>', lambda e, bn=i: self.on_click(e, bank_num=bn))
@@ -3973,8 +3977,8 @@ class ReplacementPanel:
             self.img_bank_labels.append(bank_label)
 
         # Buttons
-        self.open_file_button = Button(main.root, text='Open', width=10, command=self.process_image, takefocus=0)
-        self.open_file_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
+        self.open_button = Button(main.root, text='Open', width=10, command=self.process_image, takefocus=0)
+        self.open_button.place(x=187 + self.x, y=30 + self.y, anchor='w')
 
         self.replace_all_button = Button(main.root, text='Replace All', command=self.replace_all, takefocus=0)
         self.replace_all_button.place(x=228 + self.x, y=58 + self.y, anchor='n')
@@ -3984,14 +3988,14 @@ class ReplacementPanel:
         self.replace_button.place(x=228 + self.x, y=91 + self.y, anchor='n')
         self.replace_button['state'] = DISABLED
 
-        self.prev_icon_button = Button(main.root, text='Prev', command=lambda: self.inc_img_bank(inc=0),
-                                       width=5, takefocus=0)
-        self.prev_icon_button.place(x=180 + self.x, y=146 + self.y)
-        self.prev_icon_button['state'] = DISABLED
+        self.prev_button = Button(
+            main.root, text='Prev', command=lambda: self.inc_img_bank(inc=-1), width=5, takefocus=0)
+        self.prev_button.place(x=180 + self.x, y=146 + self.y)
+        self.prev_button['state'] = DISABLED
 
-        self.next_icon_button = Button(main.root, text='Next', command=self.inc_img_bank, width=5, takefocus=0)
-        self.next_icon_button['state'] = DISABLED
-        self.next_icon_button.place(x=230 + self.x, y=146 + self.y)
+        self.next_button = Button(main.root, text='Next', command=self.inc_img_bank, width=5, takefocus=0)
+        self.next_button.place(x=230 + self.x, y=146 + self.y)
+        self.next_button['state'] = DISABLED
 
         # Entry
         self.file_entry_str = StringVar(value='Select image file...')
@@ -4072,7 +4076,7 @@ class ReplacementPanel:
                                 if drop_on_blank:
                                     self.img_bank.append(self.replacement_icon)
                                     self.replacement_icon = None
-                                    update_label_img(self.replacement_label, main.img_blank)
+                                    self.replacement_label.config(image=main.img_blank)
                                     bank_index += 1
                                     self.replace_button['state'] = DISABLED
                                     self.replace_all_button['state'] = DISABLED
@@ -4082,8 +4086,8 @@ class ReplacementPanel:
                                     rp_icon = self.replacement_icon
                                     self.replacement_icon = self.img_bank[bank_index]
                                     self.img_bank[bank_index] = rp_icon
-                                    update_label_img(self.replacement_label, self.replacement_icon.icon_lg)
-                                update_label_img(self.img_bank_labels[bank_index], self.img_bank[bank_index].icon_sm)
+                                    self.replacement_label.config(image=self.replacement_icon.icon_lg)
+                                self.img_bank_labels[bank_index].config(image=self.img_bank[bank_index].icon_sm)
                                 return
                             # If existing image is dropped onto itself
                             if self.img_bank[bank_index].path == cmp_path:
@@ -4094,8 +4098,8 @@ class ReplacementPanel:
                             swap_icon = self.img_bank[bank_index]
                             self.img_bank[bank_index] = existing_icon
                             self.img_bank[existing_index] = swap_icon
-                            update_label_img(self.img_bank_labels[existing_index], swap_icon.icon_sm)
-                            update_label_img(self.img_bank_labels[bank_index], existing_icon.icon_sm)
+                            self.img_bank_labels[existing_index].config(image=swap_icon.icon_sm)
+                            self.img_bank_labels[bank_index].config(image=existing_icon.icon_sm)
                             return
                         else:  # If image is dropped on replacement
                             if existing_replacement and self.replacement_icon.path == cmp_path:
@@ -4108,16 +4112,16 @@ class ReplacementPanel:
                                 rp_icon = self.replacement_icon
                                 self.replacement_icon = existing_icon
                                 self.img_bank[bank_index] = rp_icon
-                                update_label_img(self.img_bank_labels[bank_index], rp_icon.icon_sm)
+                                self.img_bank_labels[bank_index].config(image=rp_icon.icon_sm)
                             else:  # If dropped on blank replacement
                                 self.replacement_icon = self.img_bank.pop(bank_index)
                                 if bank_index <= (bank_len := len(self.img_bank)):
                                     for i, tk_label in enumerate(self.img_bank_labels[bank_index:bank_len]):
-                                        update_label_img(tk_label, self.img_bank[i + bank_index].icon_sm)
+                                        tk_label.config(image=self.img_bank[i + bank_index].icon_sm)
                                     last_index = bank_len if bank_len < main.img_bank_size else -1
-                                    update_label_img(self.img_bank_labels[last_index], main.img_bank_blank)
+                                    self.img_bank_labels[last_index].config(image=main.img_bank_blank)
                                 self.update_buttons()
-                            update_label_img(self.replacement_label, self.replacement_icon.icon_lg)
+                            self.replacement_label.config(image=self.replacement_icon.icon_lg)
                             if c4z_drop and main.c4z_panel.icons:
                                 self.replace_icon(update_ask_to_save=False)
                             return
@@ -4136,18 +4140,18 @@ class ReplacementPanel:
                 rp_icon = self.replacement_icon
                 self.replacement_icon = self.img_bank[bank_index]
                 self.img_bank[bank_index] = rp_icon
-                update_label_img(self.replacement_label, self.replacement_icon.icon_lg)
-                update_label_img(self.img_bank_labels[bank_index], rp_icon.icon_sm)
+                self.replacement_label.config(image=self.replacement_icon.icon_lg)
+                self.img_bank_labels[bank_index].config(image=rp_icon.icon_sm)
             else:
                 self.add_to_img_bank(self.replacement_icon)
         elif bank_index is not None:
             self.replacement_icon = self.img_bank.pop(bank_index)
-            update_label_img(self.replacement_label, self.replacement_icon.icon_lg)
+            self.replacement_label.config(image=self.replacement_icon.icon_lg)
             if (bank_len := len(self.img_bank)) < main.img_bank_size:
                 last_index = bank_len if bank_len < main.img_bank_size else -1
-                update_label_img(self.img_bank_labels[last_index], main.img_bank_blank)
+                self.img_bank_labels[last_index].config(image=main.img_bank_blank)
             for i, tk_label in enumerate(self.img_bank_labels[bank_index:bank_len]):
-                update_label_img(tk_label, self.img_bank[i + bank_index].icon_sm)
+                tk_label.config(image=self.img_bank[i + bank_index].icon_sm)
 
         if file_path:
             self.replacement_icon = new_icon
@@ -4162,7 +4166,7 @@ class ReplacementPanel:
             self.file_entry_field['state'] = 'readonly'
         self.update_buttons()
 
-        update_label_img(self.replacement_label, self.replacement_icon.icon_lg)
+        self.replacement_label.config(image=self.replacement_icon.icon_lg)
 
         main.replacement_selected = True
         if main.driver_selected:
@@ -4170,7 +4174,7 @@ class ReplacementPanel:
 
     def process_image(self, file_path: Path | str | list | tuple = None,
                       bank_index=None, new_thread=True, c4z_drop=False):
-        if self.open_file_button.config('relief')[-1] == 'sunken':
+        if self.open_button.config('relief')[-1] == 'sunken':
             return
         if new_thread:
             threading.Thread(target=self.process_image,
@@ -4180,9 +4184,9 @@ class ReplacementPanel:
             return
 
         if not self.threading_event.is_set():
-            self.open_file_button.config(relief='sunken')
+            self.open_button.config(relief='sunken')
         with self.main.thread_lock:
-            self.open_file_button.config(relief='raised')
+            self.open_button.config(relief='raised')
             self.threading_event.clear()
             self._process_image(file_path=file_path, bank_index=bank_index, threaded=True, c4z_drop=c4z_drop)
             self.threading_event.set()
@@ -4201,12 +4205,16 @@ class ReplacementPanel:
     def on_click(self, event, bank_num=-1):
         if (bank_num == -1 and not self.replacement_icon) or bank_num > len(self.img_bank) - 1:
             return
+        self.selected_img = bank_num
+
         img_label = self.replacement_label if bank_num < 0 else self.img_bank_labels[bank_num]
         self.click_pos = (event.x + img_label.winfo_x(), event.y + img_label.winfo_y())
-        self.drag_offset = (event.x, event.y)
-        self.selected_img = bank_num
-        self.drag_label = Label(self.main.root, image=img_label.image)
-        self.drag_label.image = img_label.image
+
+        scale_factor = sm_icon_size[0] / lg_icon_size[0] if bank_num < 0 else 1
+        self.drag_offset = (event.x * scale_factor, event.y * scale_factor)
+
+        drag_image = self.replacement_icon.icon_sm if bank_num < 0 else self.img_bank[bank_num].icon_sm
+        self.drag_label = Label(self.main.root, image=drag_image)
 
     def on_release(self, event):
         self.dragging = False
@@ -4230,8 +4238,8 @@ class ReplacementPanel:
             dropped_label, drop_index = dropped_label[0], dropped_label[1]
             if drop_index > len(self.img_bank) - 1:
                 if self.selected_img < 0 and len(self.img_bank) < self.main.img_bank_size:
-                    update_label_img(self.replacement_label, self.main.img_blank)
-                    update_label_img(self.img_bank_labels[len(self.img_bank)], self.replacement_icon.icon_sm)
+                    self.replacement_label.config(image=self.main.img_blank)
+                    self.img_bank_labels[len(self.img_bank)].config(image=self.replacement_icon.icon_sm)
                     self.img_bank.append(self.replacement_icon)
                     self.replacement_icon = None
                     end_drag()
@@ -4243,13 +4251,13 @@ class ReplacementPanel:
             if self.selected_img < 0:
                 selected_icon = self.replacement_icon
                 self.replacement_icon = self.img_bank[drop_index]
-                update_label_img(self.replacement_label, self.replacement_icon.icon_lg)
+                self.replacement_label.config(image=self.replacement_icon.icon_lg)
             else:
                 selected_icon = self.img_bank[self.selected_img]
                 self.img_bank[self.selected_img] = self.img_bank[drop_index]
-                update_label_img(self.img_bank_labels[self.selected_img], self.img_bank[self.selected_img].icon_sm)
+                self.img_bank_labels[self.selected_img].config(image=self.img_bank[self.selected_img].icon_sm)
             self.img_bank[drop_index] = selected_icon
-            update_label_img(dropped_label, self.img_bank[drop_index].icon_sm)
+            dropped_label.config(image=self.img_bank[drop_index].icon_sm)
         elif self.selected_img >= 0 and (self.drag_distance <= 7 or self.on_tk_label(self.replacement_label)):
             self.select_img_bank(event, bank_num=self.selected_img)
 
@@ -4263,9 +4271,6 @@ class ReplacementPanel:
         dragging = True if self.drag_distance > 7 else False
         if dragging:
             self.drag_label.place(x=self.mouse_pos[0] - self.drag_offset[0], y=self.mouse_pos[1] - self.drag_offset[1])
-            if not self.drag_label:
-                self.drag_label = Label(self.main.root, image=img_label.image)
-                self.drag_label.image = img_label.image
         elif self.dragging and self.drag_label:
             self.drag_label.place_forget()
         self.dragging = dragging
@@ -4279,15 +4284,15 @@ class ReplacementPanel:
             bank_index = bank_index if bank_index <= bank_len else bank_len
             self.img_bank.insert(bank_index, img)
             for i, tk_label in enumerate(self.img_bank_labels[bank_index:bank_len + 1]):
-                update_label_img(tk_label, self.img_bank[i + bank_index].icon_sm)
+                tk_label.config(image=self.img_bank[i + bank_index].icon_sm)
         else:
             self.img_bank.append(img)
             if bank_len < self.main.img_bank_size:
-                update_label_img(self.img_bank_labels[bank_len], self.img_bank[bank_len].icon_sm)
+                self.img_bank_labels[bank_len].config(image=self.img_bank[bank_len].icon_sm)
 
         if len(self.img_bank) > self.main.img_bank_size:
-            self.prev_icon_button['state'] = NORMAL
-            self.next_icon_button['state'] = NORMAL
+            self.prev_button['state'] = NORMAL
+            self.next_button['state'] = NORMAL
 
         if self.main.driver_selected:
             self.main.ask_to_save = True
@@ -4306,20 +4311,16 @@ class ReplacementPanel:
         self._process_image(bank_index=bank_num)
 
     def refresh_img_bank(self):
-        for i, img in zip(range(self.main.img_bank_size), self.img_bank):
-            update_label_img(self.img_bank_labels[i], img.icon_sm)
+        bank_len, img_blank = len(self.img_bank), self.main.img_bank_blank
+        for i, bank_label in enumerate(self.img_bank_labels):
+            bank_label.config(image=self.img_bank[i].icon_sm if i < bank_len else img_blank)
 
-    def inc_img_bank(self, inc=-1):
+    def inc_img_bank(self, inc=1):
         if not self.threading_event.is_set():
             return
-        if len(self.img_bank) <= self.main.img_bank_size:
+        if not inc or len(self.img_bank) <= self.main.img_bank_size:
             return
-        temp = self.img_bank[inc]
-        self.img_bank.pop(inc)
-        if inc == -1:
-            self.img_bank.insert(0, temp)
-        else:
-            self.img_bank.append(temp)
+        self.img_bank = self.img_bank[-inc:] + self.img_bank[:-inc]
         self.refresh_img_bank()
 
     def replace_icon(self, update_ask_to_save=True, update_undo_history=True, c4_icn_index=None, bank_num=-1):
@@ -4384,9 +4385,8 @@ class ReplacementPanel:
                 'bank': [icon.path for icon in self.img_bank[:self.main.img_bank_size]]
             })
             shutil.move(self.replacement_icon.path, self.main.undo_temp / self.replacement_icon.path.name)
-            # self.replacement_icon.path.unlink()
             self.replacement_icon = None
-            update_label_img(self.replacement_label, self.main.img_blank)
+            self.replacement_label.config(image=self.main.img_blank)
             self.replace_button['state'] = DISABLED
             self.replace_all_button['state'] = DISABLED
             self.file_entry_str.set('Select image file...')
@@ -4408,24 +4408,23 @@ class ReplacementPanel:
         })
 
         shutil.move(self.img_bank[img_index].path, self.main.undo_temp / self.img_bank[img_index].path.name)
-        # self.img_bank[img_index].path.unlink()
         self.img_bank.pop(img_index)
         if (bank_len := len(self.img_bank)) <= self.main.img_bank_size:
-            self.prev_icon_button['state'] = DISABLED
-            self.next_icon_button['state'] = DISABLED
+            self.prev_button['state'] = DISABLED
+            self.next_button['state'] = DISABLED
         if bank_len < self.main.img_bank_size:
             last_index = bank_len if bank_len < self.main.img_bank_size else -1
-            update_label_img(self.img_bank_labels[last_index], self.main.img_bank_blank)
+            self.img_bank_labels[last_index].config(image=self.main.img_bank_blank)
         for i, tk_label in enumerate(self.img_bank_labels[img_index:bank_len]):
-            update_label_img(tk_label, self.img_bank[i + img_index].icon_sm)
+            tk_label.config(image=self.img_bank[i + img_index].icon_sm)
 
     def update_buttons(self):
         replace_button_state = NORMAL if self.main.driver_selected and self.replacement_icon else DISABLED
         next_button_state = NORMAL if len(self.img_bank) > self.main.img_bank_size else DISABLED
         self.replace_button['state'] = replace_button_state
         self.replace_all_button['state'] = replace_button_state
-        self.next_icon_button['state'] = next_button_state
-        self.prev_icon_button['state'] = next_button_state
+        self.next_button['state'] = next_button_state
+        self.prev_button['state'] = next_button_state
 
 
 class ExportPanel:
@@ -4949,11 +4948,6 @@ class C4IS:
                 for img in state.pop('img_stack')
             ]
         self.__dict__.update(state)
-
-
-def update_label_img(tk_label: Label, img_obj: ImageTk.PhotoImage):
-    tk_label.config(image=img_obj)
-    tk_label.image = img_obj
 
 
 def list_all_sub_directories(directory: Path, include_root_dir=False) -> list[Path]:
