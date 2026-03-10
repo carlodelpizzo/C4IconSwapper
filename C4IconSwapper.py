@@ -870,6 +870,8 @@ class C4IconSwapper:
         else:
             undo_dict = redo_dict
 
+        # TODO: Consider refactoring into one match/case block
+
         # Icons
         if change_type := undo_dict.get('icon_change'):
             match change_type:
@@ -986,42 +988,50 @@ class C4IconSwapper:
         # Replacement Image Deleted
         elif change_type := undo_dict.get('icon_delete'):
             rp_panel = self.replacement_panel
-            match change_type:
-                case 'replacement':
-                    if rp_panel.replacement_icon:
-                        rp_panel.img_bank.append(rp_panel.replacement_icon)
-                    rp_panel.replacement_icon = undo_dict['delete']
-                    shutil.move(self.undo_temp / rp_panel.replacement_icon.path.name, rp_panel.replacement_icon.path)
-                    for i, path in enumerate(undo_dict['bank']):
-                        for img_i, img in enumerate(rp_panel.img_bank):
-                            if img.path != path:
-                                continue
-                            rp_panel.img_bank.insert(i, rp_panel.img_bank.pop(img_i))
-                            break
-                    rp_panel.replacement_label.config(image=rp_panel.replacement_icon.icon_lg)
-                case 'bank':
-                    shutil.move(self.undo_temp / undo_dict['delete'].path.name, undo_dict['delete'].path)
-                    for i, path in enumerate(undo_dict['bank']):
-                        if path == undo_dict['delete'].path:
-                            rp_panel.img_bank.insert(i, undo_dict['delete'])
-                            continue
-                        for img_i, img in enumerate(rp_panel.img_bank):
-                            if img.path == path:
+            deleted_icon = undo_dict['delete']
+            if undo_dict.get('redo'):
+                img_index = -1 if rp_panel.replacement_icon is deleted_icon else rp_panel.img_bank.index(deleted_icon)
+                rp_panel.delete_image(img_index, update_undo_history=False)
+            else:
+                # TODO: Bug if you delete image from bank, undo the delete,
+                #  move it to replacement, redo delete, then undo delete
+                match change_type:
+                    case 'replacement':
+                        if rp_panel.replacement_icon:
+                            rp_panel.img_bank.append(rp_panel.replacement_icon)
+                        rp_panel.replacement_icon = deleted_icon
+                        shutil.move(self.undo_temp / rp_panel.replacement_icon.path.name,
+                                    rp_panel.replacement_icon.path)
+                        for i, path in enumerate(undo_dict['bank']):
+                            for img_i, img in enumerate(rp_panel.img_bank):
+                                if img.path != path:
+                                    continue
                                 rp_panel.img_bank.insert(i, rp_panel.img_bank.pop(img_i))
                                 break
-                        if rp_panel.replacement_icon and rp_panel.replacement_icon.path == path:
-                            rp_panel.img_bank.insert(i, rp_panel.replacement_icon)
-                            rp_panel.replacement_icon = None
-                            rp_panel.replacement_label.config(image=self.img_blank)
-                    if rp_path := undo_dict['replacement']:
-                        if not rp_panel.replacement_icon or rp_panel.replacement_icon.path != rp_path:
-                            for i, img in enumerate(rp_panel.img_bank):
-                                if img.path == rp_path:
-                                    if rp_panel.replacement_icon:
-                                        rp_panel.img_bank.append(rp_panel.replacement_icon)
-                                    rp_panel.replacement_icon = rp_panel.img_bank.pop(i)
-                                    rp_panel.replacement_label.config(image=rp_panel.replacement_icon.icon_lg)
+                        rp_panel.replacement_label.config(image=rp_panel.replacement_icon.icon_lg)
+                    case 'bank':
+                        shutil.move(self.undo_temp / deleted_icon.path.name, deleted_icon.path)
+                        for i, path in enumerate(undo_dict['bank']):
+                            if path == deleted_icon.path:
+                                rp_panel.img_bank.insert(i, deleted_icon)
+                                continue
+                            for img_i, img in enumerate(rp_panel.img_bank):
+                                if img.path == path:
+                                    rp_panel.img_bank.insert(i, rp_panel.img_bank.pop(img_i))
                                     break
+                            if rp_panel.replacement_icon and rp_panel.replacement_icon.path == path:
+                                rp_panel.img_bank.insert(i, rp_panel.replacement_icon)
+                                rp_panel.replacement_icon = None
+                                rp_panel.replacement_label.config(image=self.img_blank)
+                        if rp_path := undo_dict['replacement']:
+                            if not rp_panel.replacement_icon or rp_panel.replacement_icon.path != rp_path:
+                                for i, img in enumerate(rp_panel.img_bank):
+                                    if img.path == rp_path:
+                                        if rp_panel.replacement_icon:
+                                            rp_panel.img_bank.append(rp_panel.replacement_icon)
+                                        rp_panel.replacement_icon = rp_panel.img_bank.pop(i)
+                                        rp_panel.replacement_label.config(image=rp_panel.replacement_icon.icon_lg)
+                                        break
             rp_panel.refresh_img_bank()
 
         if not self.undo_history:
@@ -1033,65 +1043,69 @@ class C4IconSwapper:
         if self.pending_load_save.get():
             return None
         app_state = flags.copy()
-        if change_type := flags.get('icon_change'):
-            match change_type:
-                case 'all':
-                    app_state['icons'] = {
-                        icon: {'replacement_icon': icon.replacement_icon, 'restore_bak': icon.restore_bak}
-                        for icon in self.c4z_panel.icons
+        match flags:
+            # Icons
+            case {'icon_change': 'all'}:
+                app_state['icons'] = {
+                    icon: {'replacement_icon': icon.replacement_icon, 'restore_bak': icon.restore_bak}
+                    for icon in self.c4z_panel.icons
+                }
+            case {'icon_change': 'curr'}:
+                icon = self.c4z_panel.icons[i := self.c4z_panel.current_icon]
+                app_state['icon_index'] = i
+                if flags.get('icon_rename'):
+                    app_state['icon_name'] = icon.name
+                else:
+                    app_state['icon'] = {'replacement_icon': icon.replacement_icon, 'restore_bak': icon.restore_bak}
+
+            # Connections
+            case {'conn_change': 'text'}:
+                app_state |= {
+                    'conn_index': (i := flags.get('conn_index')),
+                    'conn_name': self.connections[i].prev_name,
+                    'conn_type': self.connections[i].prev_type
+                }
+            case {'conn_change': 'user'}:
+                if flags.get('add_conn'):
+                    app_state['add_conn'] = True
+                elif (i := flags.get('x_conn')) is not None:
+                    app_state['x_conn'] = {
+                        'index': i,
+                        'name': self.connections[i].prev_name,
+                        'type': self.connections[i].prev_type
                     }
-                case 'curr':
-                    icon = self.c4z_panel.icons[i := self.c4z_panel.current_icon]
-                    app_state['icon_index'] = i
-                    if flags.get('icon_rename'):
-                        app_state['icon_name'] = icon.name
-                    else:
-                        app_state['icon'] = {'replacement_icon': icon.replacement_icon, 'restore_bak': icon.restore_bak}
-        elif change_type := flags.get('conn_change'):
-            match change_type:
-                case 'text':
-                    app_state |= {
-                        'conn_index': (i := flags.get('conn_index')),
-                        'conn_name': self.connections[i].prev_name,
-                        'conn_type': self.connections[i].prev_type
-                    }
-                case 'user':
-                    if flags.get('add_conn'):
-                        app_state['add_conn'] = True
-                    elif (i := flags.get('x_conn')) is not None:
-                        app_state['x_conn'] = {
-                            'index': i,
-                            'name': self.connections[i].prev_name,
-                            'type': self.connections[i].prev_type
-                        }
-                case 'orig':
-                    app_state['orig'] = True
-                    if (i := flags.get('del_conn')) is not None:
-                        app_state['del_conn'] = i
-                    elif (i := flags.get('keep_conn')) is not None:
-                        app_state['keep_conn'] = i
-        elif change_type := flags.get('dinfo_change'):
-            match change_type:
-                case 'name':
-                    app_state['name'] = self.name_new_prev
-                case 'manufac':
-                    app_state['manufac'] = self.manufac_new_prev
-                case 'creator':
-                    app_state['creator'] = self.creator_new_prev
-                case 'version':
-                    app_state['version'] = self.version_new_prev
-        elif change_type := flags.get('export_change'):
-            match change_type:
-                case 'name':
-                    app_state['driver_name'] = self.export_panel.file_name_prev
-                case 'use_orig_xml':
-                    app_state['use_orig_xml'] = self.export_panel.use_orig_xml_prev
-                case 'include_backups':
-                    app_state['include_backups'] = self.export_panel.include_backups_prev
-                case 'inc_version':
-                    app_state['inc_driver_version'] = self.export_panel.inc_driver_version_prev
-        elif change_type := flags.get('icon_delete'):
-            app_state['icon_delete'] = change_type
+            case {'conn_change': 'orig'}:
+                app_state['orig'] = True
+                if (i := flags.get('del_conn')) is not None:
+                    app_state['del_conn'] = i
+                elif (i := flags.get('keep_conn')) is not None:
+                    app_state['keep_conn'] = i
+
+            # Driver Info
+            case {'dinfo_change': 'name'}:
+                app_state['name'] = self.name_new_prev
+            case {'dinfo_change': 'manufac'}:
+                app_state['manufac'] = self.manufac_new_prev
+            case {'dinfo_change': 'creator'}:
+                app_state['creator'] = self.creator_new_prev
+            case {'dinfo_change': 'version'}:
+                app_state['version'] = self.version_new_prev
+
+            # Export Panel
+            case {'export_change': 'name'}:
+                app_state['driver_name'] = self.export_panel.file_name_prev
+            case {'export_change': 'use_orig_xml'}:
+                app_state['use_orig_xml'] = self.export_panel.use_orig_xml_prev
+            case {'export_change': 'include_backups'}:
+                app_state['include_backups'] = self.export_panel.include_backups_prev
+            case {'export_change': 'inc_version'}:
+                app_state['inc_driver_version'] = self.export_panel.inc_driver_version_prev
+
+            # Replacement Image Deleted
+            case {'icon_delete': _} if for_redo:
+                app_state['bank'] = [icon.path for icon in self.replacement_panel.img_bank[:self.img_bank_size]]
+                rp_icon = self.replacement_panel.replacement_icon
+                app_state['replacement'] = rp_icon.path if rp_icon else None
 
         if not for_redo:
             self.redo_history.clear()
@@ -1099,16 +1113,15 @@ class C4IconSwapper:
             self.edit.entryconfig(self.undo_pos, state=NORMAL)
         return app_state
 
-    # TODO: Implement redo deleted replacement image
+    # TODO: Finish implementing and investigate bugs
     def redo(self, *_):
         if self.pending_load_save.get() or not self.redo_history:
             return
         redo_dict = self.redo_history.pop()
-        if redo_dict.get('icon_delete'):
-            print('TODO: Implement redo for deleted replacement images')
-            return
         self.undo_history.append(self.update_undo_history(flags=redo_dict, for_redo=True))
         self.edit.entryconfig(self.undo_pos, state=NORMAL)
+        if redo_dict.get('icon_delete'):
+            redo_dict['redo'] = True
         self.undo(redo_dict=redo_dict)
 
     def ask_to_save_dialog(self, result_var, on_exit=True):
@@ -4304,10 +4317,9 @@ class ReplacementPanel:
             return
         # Debounce stack selection
         debounce_val = 0.20
-        bank_key = f'bank{bank_num}'
-        if (last_time := self.img_bank_lockout_dict.get(bank_key)) and time.time() - last_time < debounce_val:
+        if (last_time := self.img_bank_lockout_dict.get(bank_num)) and time.time() - last_time < debounce_val:
             return
-        self.img_bank_lockout_dict[bank_key] = time.time()
+        self.img_bank_lockout_dict[bank_num] = time.time()
         self._process_image(bank_index=bank_num)
 
     def refresh_img_bank(self):
@@ -4375,15 +4387,16 @@ class ReplacementPanel:
         context_menu.tk_popup(event.x_root, event.y_root)
         context_menu.grab_release()
 
-    def delete_image(self, img_index: int):
+    def delete_image(self, img_index: int, update_undo_history=True):
         if not -1 <= img_index < self.main.img_bank_size:
             return
         if img_index == -1:
-            self.main.update_undo_history({
-                'icon_delete': 'replacement',
-                'delete': self.replacement_icon,
-                'bank': [icon.path for icon in self.img_bank[:self.main.img_bank_size]]
-            })
+            if update_undo_history:
+                self.main.update_undo_history({
+                    'icon_delete': 'replacement',
+                    'delete': self.replacement_icon,
+                    'bank': [icon.path for icon in self.img_bank[:self.main.img_bank_size]]
+                })
             shutil.move(self.replacement_icon.path, self.main.undo_temp / self.replacement_icon.path.name)
             self.replacement_icon = None
             self.replacement_label.config(image=self.main.img_blank)
@@ -4395,17 +4408,17 @@ class ReplacementPanel:
 
         # Added this because of a bug that I could not reproduce, but seemed to happen from clicking the bank after
         # selecting delete, but before the delete was finished.. which doesn't seem possible, but whatever
-        bank_key = f'bank{img_index}'
-        if (last_time := self.img_bank_lockout_dict.get(bank_key)) and time.time() - last_time < 0.25:
+        if (last_time := self.img_bank_lockout_dict.get(img_index)) and time.time() - last_time < 0.25:
             return
-        self.img_bank_lockout_dict[bank_key] = time.time()
+        self.img_bank_lockout_dict[img_index] = time.time()
 
-        self.main.update_undo_history({
-            'icon_delete': 'bank',
-            'delete': self.img_bank[img_index],
-            'replacement': self.replacement_icon.path if self.replacement_icon else None,
-            'bank': [icon.path for icon in self.img_bank[:self.main.img_bank_size]]
-        })
+        if update_undo_history:
+            self.main.update_undo_history({
+                'icon_delete': 'bank',
+                'delete': self.img_bank[img_index],
+                'replacement': self.replacement_icon.path if self.replacement_icon else None,
+                'bank': [icon.path for icon in self.img_bank[:self.main.img_bank_size]]
+            })
 
         shutil.move(self.img_bank[img_index].path, self.main.undo_temp / self.img_bank[img_index].path.name)
         self.img_bank.pop(img_index)
