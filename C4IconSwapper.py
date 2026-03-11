@@ -336,7 +336,7 @@ class C4IconSwapper:
         self.root.bind('<Control-s>', self.save_project)
         self.root.bind('<Control-o>', self.load_project)
         self.root.bind('<Control-z>', self.undo)
-        self.root.bind('<Control-Shift-Z>', self.redo)
+        self.root.bind('<Control-Shift-Z>', lambda _: self.undo(redo=True))
         self.root.bind('<Control-w>', self.end_program)
         self.root.config(menu=self.menu)
         self.root.protocol('WM_DELETE_WINDOW', self.end_program)
@@ -456,6 +456,8 @@ class C4IconSwapper:
                 self.replacement_panel.inc_img_bank(inc=-1)
             case 'Escape':
                 self.root.focus()
+            case 'grave':
+                print(self.undo_history)
 
     def blink_driver_name_entry(self, *_):
         if not self.counter:
@@ -859,16 +861,20 @@ class C4IconSwapper:
             self.instance_state_file_path.write_text(json.dumps(app_state, indent='\t'))
         return app_state
 
-    def undo(self, *_, redo_dict=None):
-        if self.pending_load_save.get() or not (redo_dict or self.undo_history):
+    def undo(self, *_, redo=False):
+        if self.pending_load_save.get() or (redo and not self.redo_history) or (not redo and not self.undo_history):
             return
 
         ask_to_save = self.ask_to_save
-        if not redo_dict:
+
+        if not redo:
             undo_dict = self.undo_history.pop()
-            self.redo_history.append(self.update_undo_history(flags=undo_dict, for_redo=True))
-        else:
-            undo_dict = redo_dict
+            self.redo_history.append(self.make_undo_dict(undo_dict, for_redo=True))
+        else:  # TODO: Finish implementing redo and investigate bugs
+            undo_dict = self.redo_history.pop()
+            if undo_dict.get('icon_delete') is None:
+                self.update_undo_history(self.make_undo_dict(undo_dict), clear_redo=False)
+            self.edit.entryconfig(self.undo_pos, state=NORMAL)
 
         # TODO: Consider refactoring into one match/case block
 
@@ -986,52 +992,49 @@ class C4IconSwapper:
             self.export_panel.suppress_trace = False
 
         # Replacement Image Deleted
-        elif change_type := undo_dict.get('icon_delete'):
+        elif (img_index := undo_dict.get('icon_delete')) is not None:
             rp_panel = self.replacement_panel
             deleted_icon = undo_dict['delete']
             if undo_dict.get('redo'):
-                img_index = -1 if rp_panel.replacement_icon is deleted_icon else rp_panel.img_bank.index(deleted_icon)
+                del undo_dict['redo']
+                self.update_undo_history(self.make_undo_dict(undo_dict), clear_redo=False)
                 rp_panel.delete_image(img_index, update_undo_history=False)
+            elif img_index < 0:
+                if rp_panel.replacement_icon:
+                    rp_panel.img_bank.append(rp_panel.replacement_icon)
+                rp_panel.replacement_icon = deleted_icon
+                shutil.move(self.undo_temp / rp_panel.replacement_icon.path.name,
+                            rp_panel.replacement_icon.path)
+                for i, path in enumerate(undo_dict['bank']):
+                    for img_i, img in enumerate(rp_panel.img_bank):
+                        if img.path != path:
+                            continue
+                        rp_panel.img_bank.insert(i, rp_panel.img_bank.pop(img_i))
+                        break
+                rp_panel.replacement_label.config(image=rp_panel.replacement_icon.icon_lg)
             else:
-                # TODO: Bug if you delete image from bank, undo the delete,
-                #  move it to replacement, redo delete, then undo delete
-                match change_type:
-                    case 'replacement':
-                        if rp_panel.replacement_icon:
-                            rp_panel.img_bank.append(rp_panel.replacement_icon)
-                        rp_panel.replacement_icon = deleted_icon
-                        shutil.move(self.undo_temp / rp_panel.replacement_icon.path.name,
-                                    rp_panel.replacement_icon.path)
-                        for i, path in enumerate(undo_dict['bank']):
-                            for img_i, img in enumerate(rp_panel.img_bank):
-                                if img.path != path:
-                                    continue
-                                rp_panel.img_bank.insert(i, rp_panel.img_bank.pop(img_i))
+                shutil.move(self.undo_temp / deleted_icon.path.name, deleted_icon.path)
+                for i, path in enumerate(undo_dict['bank']):
+                    if path == deleted_icon.path:
+                        rp_panel.img_bank.insert(i, deleted_icon)
+                        continue
+                    for img_i, img in enumerate(rp_panel.img_bank):
+                        if img.path == path:
+                            rp_panel.img_bank.insert(i, rp_panel.img_bank.pop(img_i))
+                            break
+                    if rp_panel.replacement_icon and rp_panel.replacement_icon.path == path:
+                        rp_panel.img_bank.insert(i, rp_panel.replacement_icon)
+                        rp_panel.replacement_icon = None
+                        rp_panel.replacement_label.config(image=self.img_blank)
+                if rp_path := undo_dict['replacement']:
+                    if not rp_panel.replacement_icon or rp_panel.replacement_icon.path != rp_path:
+                        for i, img in enumerate(rp_panel.img_bank):
+                            if img.path == rp_path:
+                                if rp_panel.replacement_icon:
+                                    rp_panel.img_bank.append(rp_panel.replacement_icon)
+                                rp_panel.replacement_icon = rp_panel.img_bank.pop(i)
+                                rp_panel.replacement_label.config(image=rp_panel.replacement_icon.icon_lg)
                                 break
-                        rp_panel.replacement_label.config(image=rp_panel.replacement_icon.icon_lg)
-                    case 'bank':
-                        shutil.move(self.undo_temp / deleted_icon.path.name, deleted_icon.path)
-                        for i, path in enumerate(undo_dict['bank']):
-                            if path == deleted_icon.path:
-                                rp_panel.img_bank.insert(i, deleted_icon)
-                                continue
-                            for img_i, img in enumerate(rp_panel.img_bank):
-                                if img.path == path:
-                                    rp_panel.img_bank.insert(i, rp_panel.img_bank.pop(img_i))
-                                    break
-                            if rp_panel.replacement_icon and rp_panel.replacement_icon.path == path:
-                                rp_panel.img_bank.insert(i, rp_panel.replacement_icon)
-                                rp_panel.replacement_icon = None
-                                rp_panel.replacement_label.config(image=self.img_blank)
-                        if rp_path := undo_dict['replacement']:
-                            if not rp_panel.replacement_icon or rp_panel.replacement_icon.path != rp_path:
-                                for i, img in enumerate(rp_panel.img_bank):
-                                    if img.path == rp_path:
-                                        if rp_panel.replacement_icon:
-                                            rp_panel.img_bank.append(rp_panel.replacement_icon)
-                                        rp_panel.replacement_icon = rp_panel.img_bank.pop(i)
-                                        rp_panel.replacement_label.config(image=rp_panel.replacement_icon.icon_lg)
-                                        break
             rp_panel.refresh_img_bank()
 
         if not self.undo_history:
@@ -1039,11 +1042,10 @@ class C4IconSwapper:
         self.ask_to_save = ask_to_save
         self.get_app_state(write_file=True)
 
-    def update_undo_history(self, flags: dict = None, for_redo=False):
+    def make_undo_dict(self, flags: dict, for_redo=False):
         if self.pending_load_save.get():
             return None
-        app_state = flags.copy()
-        match flags:
+        match (app_state := flags.copy()):
             # Icons
             case {'icon_change': 'all'}:
                 app_state['icons'] = {
@@ -1103,26 +1105,32 @@ class C4IconSwapper:
 
             # Replacement Image Deleted
             case {'icon_delete': _} if for_redo:
-                app_state['bank'] = [icon.path for icon in self.replacement_panel.img_bank[:self.img_bank_size]]
+                app_state['redo'] = True
                 rp_icon = self.replacement_panel.replacement_icon
+                app_state['bank'] = [icon.path for icon in self.replacement_panel.img_bank[:self.img_bank_size]]
                 app_state['replacement'] = rp_icon.path if rp_icon else None
+            case {'icon_delete': -1}:
+                app_state |= {
+                    'delete': self.replacement_panel.replacement_icon,
+                    'bank': [icon.path for icon in self.replacement_panel.img_bank[:self.img_bank_size]]
+                }
+            case {'icon_delete': bank_num}:
+                rp_icon = self.replacement_panel.replacement_icon
+                app_state |= {
+                    'delete': self.replacement_panel.img_bank[bank_num],
+                    'replacement': rp_icon.path if rp_icon else None,
+                    'bank': [icon.path for icon in self.replacement_panel.img_bank[:self.img_bank_size]]
+                }
 
-        if not for_redo:
-            self.redo_history.clear()
-            self.undo_history.append(app_state)
-            self.edit.entryconfig(self.undo_pos, state=NORMAL)
         return app_state
 
-    # TODO: Finish implementing and investigate bugs
-    def redo(self, *_):
-        if self.pending_load_save.get() or not self.redo_history:
+    def update_undo_history(self, flags: dict, clear_redo=True):
+        if self.pending_load_save.get():
             return
-        redo_dict = self.redo_history.pop()
-        self.undo_history.append(self.update_undo_history(flags=redo_dict, for_redo=True))
+        if clear_redo:
+            self.redo_history.clear()
+        self.undo_history.append(self.make_undo_dict(flags))
         self.edit.entryconfig(self.undo_pos, state=NORMAL)
-        if redo_dict.get('icon_delete'):
-            redo_dict['redo'] = True
-        self.undo(redo_dict=redo_dict)
 
     def ask_to_save_dialog(self, result_var, on_exit=True):
         def cancel():
@@ -2924,6 +2932,7 @@ class StateEntry:
         self.name_entry.destroy()
 
 
+# TODO: Investigate issues with DnD being functional while RecoveryWin is open
 class RecoveryWin:
     def __init__(self, main: C4IconSwapper, *_):
         if not (recovery_dir := main.recovery_dir).is_dir():
@@ -4390,13 +4399,9 @@ class ReplacementPanel:
     def delete_image(self, img_index: int, update_undo_history=True):
         if not -1 <= img_index < self.main.img_bank_size:
             return
-        if img_index == -1:
+        if img_index < 0:
             if update_undo_history:
-                self.main.update_undo_history({
-                    'icon_delete': 'replacement',
-                    'delete': self.replacement_icon,
-                    'bank': [icon.path for icon in self.img_bank[:self.main.img_bank_size]]
-                })
+                self.main.update_undo_history({'icon_delete': -1})
             shutil.move(self.replacement_icon.path, self.main.undo_temp / self.replacement_icon.path.name)
             self.replacement_icon = None
             self.replacement_label.config(image=self.main.img_blank)
@@ -4413,12 +4418,7 @@ class ReplacementPanel:
         self.img_bank_lockout_dict[img_index] = time.time()
 
         if update_undo_history:
-            self.main.update_undo_history({
-                'icon_delete': 'bank',
-                'delete': self.img_bank[img_index],
-                'replacement': self.replacement_icon.path if self.replacement_icon else None,
-                'bank': [icon.path for icon in self.img_bank[:self.main.img_bank_size]]
-            })
+            self.main.update_undo_history({'icon_delete': img_index})
 
         shutil.move(self.img_bank[img_index].path, self.main.undo_temp / self.img_bank[img_index].path.name)
         self.img_bank.pop(img_index)
