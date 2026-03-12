@@ -866,6 +866,7 @@ class C4IconSwapper:
             return
 
         ask_to_save = self.ask_to_save
+        undo_dict: dict  # TODO: IDK why I need this for IDE; probably indicates a problem
 
         if not redo:
             undo_dict = self.undo_history.pop()
@@ -876,166 +877,176 @@ class C4IconSwapper:
                 self.update_undo_history(self.make_undo_dict(undo_dict), clear_redo=False)
             self.edit.entryconfig(self.undo_pos, state=NORMAL)
 
-        # TODO: Consider refactoring into one match/case block
+        # Undo Changes
+        match undo_dict:
+            # Icons
+            case {'icon_change': 'all'}:
+                for icon, icon_dict in undo_dict['icons'].items():
+                    icon.replacement_icon = icon_dict['replacement_icon']
+                    icon.restore_bak = icon_dict['restore_bak']
+                self.c4z_panel.update_icon()
+            case {'icon_change': 'curr'}:
+                self.c4z_panel.current_icon = i = undo_dict['icon_index']
+                icon = self.c4z_panel.icons[i]
+                if undo_dict.get('icon_rename'):
+                    old_name = icon.name
+                    icon.name = name = undo_dict['icon_name']
+                    self.c4z_panel.icon_paths -= {
+                        (sub_icon.path.parent / f'{old_name}_{sub_icon.size[0]}{sub_icon.path.suffix}').resolve()
+                        for sub_icon in icon.icons
+                    }
+                    self.c4z_panel.icon_paths |= {
+                        (sub_icon.path.parent / f'{name}_{sub_icon.size[0]}{sub_icon.path.suffix}').resolve()
+                        for sub_icon in icon.icons
+                    } if icon.renamed else {sub_icon.path for sub_icon in icon.icons}
+                else:
+                    icon_dict = undo_dict['icon']
+                    icon.replacement_icon = icon_dict['replacement_icon']
+                    icon.restore_bak = icon_dict['restore_bak']
+                self.c4z_panel.update_icon()
 
-        # Icons
-        if change_type := undo_dict.get('icon_change'):
-            match change_type:
-                case 'all':
-                    for icon, icon_dict in undo_dict['icons'].items():
-                        icon.replacement_icon = icon_dict['replacement_icon']
-                        icon.restore_bak = icon_dict['restore_bak']
-                case 'curr':
-                    self.c4z_panel.current_icon = i = undo_dict['icon_index']
-                    icon = self.c4z_panel.icons[i]
-                    if undo_dict.get('icon_rename'):
-                        old_name = icon.name
-                        icon.name = name = undo_dict['icon_name']
-                        self.c4z_panel.icon_paths -= {
-                            (sub_icon.path.parent / f'{old_name}_{sub_icon.size[0]}{sub_icon.path.suffix}').resolve()
-                            for sub_icon in icon.icons
-                        }
-                        self.c4z_panel.icon_paths |= {
-                            (sub_icon.path.parent / f'{name}_{sub_icon.size[0]}{sub_icon.path.suffix}').resolve()
-                            for sub_icon in icon.icons
-                        } if icon.renamed else {sub_icon.path for sub_icon in icon.icons}
-                    else:
-                        icon_dict = undo_dict['icon']
-                        icon.replacement_icon = icon_dict['replacement_icon']
-                        icon.restore_bak = icon_dict['restore_bak']
-            self.c4z_panel.update_icon()
-
-        # Connections
-        elif change_type := undo_dict.get('conn_change'):
-            if not self.connections_win:
-                self.connections_win = ConnectionsWin(self)
-                self.root.update_idletasks()
-            self.connections_win.suppress_trace = True
-            match change_type:
-                case 'text':
-                    i, cname, ctype = undo_dict['conn_index'], undo_dict['conn_name'], undo_dict['conn_type']
-                    self.connections[i].name.set(cname)
-                    self.connections[i].prev_name = cname
-                    self.connections[i].type.set(ctype)
-                    self.connections[i].prev_type = ctype
-                case 'user':
-                    if undo_dict['add_conn']:
-                        self.connections_win.connection_entries[-2].action(command='x')
-                    elif conn_dict := undo_dict['x_conn']:
-                        i, y_offset = conn_dict['index'], self.connections_win.widget_y_offset
+            # Connections  TODO: Make all changes to conn_objects directly and only update window if it is open
+            case {'conn_change': 'text'}:
+                i, cname, ctype = undo_dict['index'], undo_dict['name'], undo_dict['type']
+                self.connections[i].name.set(cname)
+                self.connections[i].prev_name = cname
+                self.connections[i].type.set(ctype)
+                self.connections[i].prev_type = ctype
+            case {'conn_change': 'user'}:
+                if undo_dict.get('add_conn'):
+                    conn_obj = self.connections.pop(-2)
+                    self.driver_xml.get_tag('connections').remove_element(conn_obj.tag)
+                    if (in_dict := self.taken_xml_ids.get(conn_obj.id)) and conn_obj is in_dict:
+                        self.taken_xml_ids.pop(conn_obj.id)
+                    if self.connections_win:
+                        self.connections_win.suppress_trace = True
+                        conn_entry = self.connections_win.connection_entries.pop(-2)
+                        conn_entry.destroy()
+                        self.connections_win.connection_entries[-1].y -= self.connections_win.widget_y_offset
+                        self.connections_win.connection_entries[-1].refresh()
+                        self.connections_win.update_scroll_frame()
+                        self.connections_win.suppress_trace = False
+                elif (i := undo_dict.get('x_conn')) is not None:
+                    new_conn = Connection(self)
+                    self.connections.insert(i, new_conn)
+                    self.driver_xml.get_tag('connections').add_element(new_conn.tag)
+                    new_conn.enabled = True
+                    new_conn.tag.hide = False
+                    new_conn.update_id()
+                    new_conn.prev_name = undo_dict['name']
+                    new_conn.name.set(new_conn.prev_name)
+                    new_conn.prev_type = undo_dict['type']
+                    new_conn.type.set(new_conn.prev_type)
+                    if self.connections_win:
+                        self.connections_win.suppress_trace = True
+                        y_offset = self.connections_win.widget_y_offset
                         for conn_entry in self.connections_win.connection_entries[i:]:
+                            print(conn_entry.name_entry.get())
                             conn_entry.y += y_offset
-                        self.connections.insert(i, (new_conn := Connection(self)))
-                        self.driver_xml.get_tag('connections').add_element(new_conn.tag)
+                            conn_entry.refresh()
                         conn_y = self.connections_win.connection_entries[i - 1].y + y_offset
                         self.connections_win.connection_entries.insert(i,
                                                                        ConnectionEntry(self.connections_win, new_conn,
                                                                                        self.connections_win.widget_x,
                                                                                        conn_y))
                         conn_entry = self.connections_win.connection_entries[i]
-                        conn_obj = conn_entry.conn_obj
-                        conn_obj.enabled = True
-                        conn_obj.tag.hide = False
-                        conn_obj.update_id()
                         conn_entry.name_entry['state'] = NORMAL
                         conn_entry.type_menu['state'] = NORMAL
                         conn_entry.action_button.config(text='x', width=1)
                         conn_entry.action_button.place(x=conn_entry.x + 14)
                         conn_entry.name_entry['takefocus'] = 1
-                        conn_obj.prev_name = conn_dict['name']
-                        conn_obj.name.set(conn_obj.prev_name)
-                        conn_obj.prev_type = conn_dict['type']
-                        conn_obj.type.set(conn_obj.prev_type)
-                case 'orig':
-                    if (i := undo_dict.get('del_conn')) is not None:
-                        self.connections_win.connection_entries[i].action(command='Keep')
-                    elif (i := undo_dict.get('keep_conn')) is not None:
-                        self.connections_win.connection_entries[i].action(command='Del')
-            self.connections_win.suppress_trace = False
-            self.connections_win.refresh()
+                        self.connections_win.update_scroll_frame()
+                        self.connections_win.suppress_trace = False
+            case {'conn_change': 'orig'}:
+                if (i := undo_dict.get('del_conn')) is not None:
+                    self.connections_win.connection_entries[i].action(command='Keep')
+                elif (i := undo_dict.get('keep_conn')) is not None:
+                    self.connections_win.connection_entries[i].action(command='Del')
 
-        # Driver Info
-        elif change_type := undo_dict.get('dinfo_change'):
-            if not self.driver_info_win:
-                self.driver_info_win = DriverInfoWin(self)
-                self.root.update_idletasks()
-            match change_type:
-                case 'name':
-                    self.name_new_prev = undo_dict['name']
-                    self.name_new.set(self.name_new_prev)
-                case 'manufac':
-                    self.manufac_new_prev = undo_dict['manufac']
-                    self.manufac_new.set(self.manufac_new_prev)
-                case 'creator':
-                    self.creator_new_prev = undo_dict['creator']
-                    self.creator_new.set(self.creator_new_prev)
-                case 'version':
-                    self.version_new_prev = undo_dict['version']
-                    self.version_new.set(self.version_new_prev)
+            # Driver Info
+            case {'dinfo_change': 'name'}:
+                self.name_new_prev = undo_dict['name']
+                self.name_new.set(self.name_new_prev)
+            case {'dinfo_change': 'manufac'}:
+                self.manufac_new_prev = undo_dict['manufac']
+                self.manufac_new.set(self.manufac_new_prev)
+            case {'dinfo_change': 'creator'}:
+                self.creator_new_prev = undo_dict['creator']
+                self.creator_new.set(self.creator_new_prev)
+            case {'dinfo_change': 'version'}:
+                self.version_new_prev = undo_dict['version']
+                self.version_new.set(self.version_new_prev)
 
-        # Export Panel
-        elif change_type := undo_dict.get('export_change'):
-            self.export_panel.suppress_trace = True
-            match change_type:
-                case 'name':
-                    self.export_panel.file_name_prev = undo_dict['driver_name']
-                    self.export_panel.file_name.set(self.export_panel.file_name_prev)
-                case 'use_orig_xml':
-                    self.export_panel.use_orig_xml_prev = undo_dict['use_orig_xml']
-                    self.export_panel.use_orig_xml.set(self.export_panel.use_orig_xml_prev)
-                case 'include_backups':
-                    self.export_panel.include_backups_prev = undo_dict['include_backups']
-                    self.export_panel.include_backups.set(self.export_panel.include_backups_prev)
-                case 'inc_version':
-                    self.export_panel.inc_driver_version_prev = undo_dict['inc_driver_version']
-                    self.export_panel.inc_driver_version.set(self.export_panel.inc_driver_version_prev)
-            self.export_panel.suppress_trace = False
+            # Export Panel
+            case {'export_change': 'name'}:
+                self.export_panel.file_name_prev = undo_dict['driver_name']
+                self.export_panel.file_name.set(self.export_panel.file_name_prev)
+            case {'export_change': 'use_orig_xml'}:
+                self.export_panel.use_orig_xml_prev = undo_dict['use_orig_xml']
+                self.export_panel.use_orig_xml.set(self.export_panel.use_orig_xml_prev)
+            case {'export_change': 'include_backups'}:
+                self.export_panel.include_backups_prev = undo_dict['include_backups']
+                self.export_panel.include_backups.set(self.export_panel.include_backups_prev)
+            case {'export_change': 'inc_version'}:
+                self.export_panel.inc_driver_version_prev = undo_dict['inc_driver_version']
+                self.export_panel.inc_driver_version.set(self.export_panel.inc_driver_version_prev)
 
-        # Replacement Image Deleted
-        elif (img_index := undo_dict.get('icon_delete')) is not None:
-            rp_panel = self.replacement_panel
-            deleted_icon = undo_dict['delete']
-            if undo_dict.get('redo'):
-                del undo_dict['redo']
-                self.update_undo_history(self.make_undo_dict(undo_dict), clear_redo=False)
-                rp_panel.delete_image(img_index, update_undo_history=False)
-            elif img_index < 0:
-                if rp_panel.replacement_icon:
-                    rp_panel.img_bank.append(rp_panel.replacement_icon)
-                rp_panel.replacement_icon = deleted_icon
-                shutil.move(self.undo_temp / rp_panel.replacement_icon.path.name,
-                            rp_panel.replacement_icon.path)
-                for i, path in enumerate(undo_dict['bank']):
-                    for img_i, img in enumerate(rp_panel.img_bank):
-                        if img.path != path:
-                            continue
-                        rp_panel.img_bank.insert(i, rp_panel.img_bank.pop(img_i))
-                        break
-                rp_panel.replacement_label.config(image=rp_panel.replacement_icon.icon_lg)
-            else:
-                shutil.move(self.undo_temp / deleted_icon.path.name, deleted_icon.path)
-                for i, path in enumerate(undo_dict['bank']):
-                    if path == deleted_icon.path:
-                        rp_panel.img_bank.insert(i, deleted_icon)
-                        continue
-                    for img_i, img in enumerate(rp_panel.img_bank):
-                        if img.path == path:
+            # Replacement Image Deleted
+            case {'icon_delete': img_index}:
+                rp_panel = self.replacement_panel
+                deleted_icon = undo_dict['delete']
+                if undo_dict.get('redo'):
+                    del undo_dict['redo']
+                    self.update_undo_history(self.make_undo_dict(undo_dict), clear_redo=False)
+                    rp_panel.delete_image(img_index, update_undo_history=False)
+                elif img_index < 0:
+                    if rp_panel.replacement_icon:
+                        rp_panel.img_bank.append(rp_panel.replacement_icon)
+                    rp_panel.replacement_icon = deleted_icon
+                    shutil.move(self.undo_temp / rp_panel.replacement_icon.path.name,
+                                rp_panel.replacement_icon.path)
+                    for i, path in enumerate(undo_dict['bank']):
+                        for img_i, img in enumerate(rp_panel.img_bank):
+                            if img.path != path:
+                                continue
                             rp_panel.img_bank.insert(i, rp_panel.img_bank.pop(img_i))
                             break
-                    if rp_panel.replacement_icon and rp_panel.replacement_icon.path == path:
-                        rp_panel.img_bank.insert(i, rp_panel.replacement_icon)
-                        rp_panel.replacement_icon = None
-                        rp_panel.replacement_label.config(image=self.img_blank)
-                if rp_path := undo_dict['replacement']:
-                    if not rp_panel.replacement_icon or rp_panel.replacement_icon.path != rp_path:
-                        for i, img in enumerate(rp_panel.img_bank):
-                            if img.path == rp_path:
-                                if rp_panel.replacement_icon:
-                                    rp_panel.img_bank.append(rp_panel.replacement_icon)
-                                rp_panel.replacement_icon = rp_panel.img_bank.pop(i)
-                                rp_panel.replacement_label.config(image=rp_panel.replacement_icon.icon_lg)
+                    rp_panel.replacement_label.config(image=rp_panel.replacement_icon.icon_lg)
+                else:
+                    shutil.move(self.undo_temp / deleted_icon.path.name, deleted_icon.path)
+                    for i, path in enumerate(undo_dict['bank']):
+                        if path == deleted_icon.path:
+                            rp_panel.img_bank.insert(i, deleted_icon)
+                            continue
+                        for img_i, img in enumerate(rp_panel.img_bank):
+                            if img.path == path:
+                                rp_panel.img_bank.insert(i, rp_panel.img_bank.pop(img_i))
                                 break
-            rp_panel.refresh_img_bank()
+                        if rp_panel.replacement_icon and rp_panel.replacement_icon.path == path:
+                            rp_panel.img_bank.insert(i, rp_panel.replacement_icon)
+                            rp_panel.replacement_icon = None
+                            rp_panel.replacement_label.config(image=self.img_blank)
+                    if rp_path := undo_dict['replacement']:
+                        if not rp_panel.replacement_icon or rp_panel.replacement_icon.path != rp_path:
+                            for i, img in enumerate(rp_panel.img_bank):
+                                if img.path == rp_path:
+                                    if rp_panel.replacement_icon:
+                                        rp_panel.img_bank.append(rp_panel.replacement_icon)
+                                    rp_panel.replacement_icon = rp_panel.img_bank.pop(i)
+                                    rp_panel.replacement_label.config(image=rp_panel.replacement_icon.icon_lg)
+                                    break
+                rp_panel.refresh_img_bank()
+
+        # Open any windows where changes have been made
+        match undo_dict:
+            case {'conn_change': _}:
+                if not self.connections_win:
+                    self.connections_win = ConnectionsWin(self)
+                    self.root.update_idletasks()
+            case {'dinfo_change': _}:
+                if not self.driver_info_win:
+                    self.driver_info_win = DriverInfoWin(self)
+                    self.root.update_idletasks()
 
         if not self.undo_history:
             self.edit.entryconfig(self.undo_pos, state=DISABLED)
@@ -1045,6 +1056,7 @@ class C4IconSwapper:
     def make_undo_dict(self, flags: dict, for_redo=False):
         if self.pending_load_save.get():
             return None
+        print(flags)
         match (app_state := flags.copy()):
             # Icons
             case {'icon_change': 'all'}:
@@ -1063,16 +1075,15 @@ class C4IconSwapper:
             # Connections
             case {'conn_change': 'text'}:
                 app_state |= {
-                    'conn_index': (i := flags.get('conn_index')),
-                    'conn_name': self.connections[i].prev_name,
-                    'conn_type': self.connections[i].prev_type
+                    'index': (i := flags.get('conn_index')),
+                    'name': self.connections[i].prev_name,
+                    'type': self.connections[i].prev_type
                 }
             case {'conn_change': 'user'}:
                 if flags.get('add_conn'):
                     app_state['add_conn'] = True
                 elif (i := flags.get('x_conn')) is not None:
-                    app_state['x_conn'] = {
-                        'index': i,
+                    app_state |= {
                         'name': self.connections[i].prev_name,
                         'type': self.connections[i].prev_type
                     }
@@ -1125,6 +1136,7 @@ class C4IconSwapper:
         return app_state
 
     def update_undo_history(self, flags: dict, clear_redo=True):
+        print('DEBUG: update_undo_history')
         if self.pending_load_save.get():
             return
         if clear_redo:
@@ -2413,6 +2425,7 @@ class DriverInfoWin:
         self.main.driver_info_win = None
 
 
+# TODO: Check if conn name is saved on exit if still focused in entry
 class ConnectionsWin:
     def __init__(self, main: C4IconSwapper):
         self.suppress_trace = True
