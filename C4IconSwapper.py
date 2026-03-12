@@ -88,18 +88,18 @@ class PathStringVar(StringVar):
 class Label(tkLabel):  # noinspection PyUnresolvedReferences
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.image = kwargs.get('image', None)
+        self.image = kwargs.get('image')
         self.drop_target_register = self.drop_target_register
         self.dnd_bind = self.dnd_bind
 
     def config(self, *args, **kwargs):
         super().config(*args, **kwargs)
-        if new_image := kwargs.get('image', None):
+        if new_image := kwargs.get('image'):
             self.image = new_image
 
     def configure(self, *args, **kwargs):
         super().configure(*args, **kwargs)
-        if new_image := kwargs.get('image', None):
+        if new_image := kwargs.get('image'):
             self.image = new_image
 
 
@@ -456,7 +456,7 @@ class C4IconSwapper:
                 self.replacement_panel.inc_img_bank(inc=-1)
             case 'Escape':
                 self.root.focus()
-            case 'grave':
+            case 'grave':  # DEBUG: TODO: Remove this
                 print(self.undo_history)
 
     def blink_driver_name_entry(self, *_):
@@ -852,7 +852,7 @@ class C4IconSwapper:
             'manufac': self.manufac_new_prev,
             'creator': self.creator_new_prev,
             'version': self.version_new_prev,
-            'driver_name': self.export_panel.file_name_prev,
+            'file_name': self.export_panel.file_name_prev,
             'use_orig_xml': self.export_panel.use_orig_xml_prev,
             'include_backups': self.export_panel.include_backups_prev,
             'inc_driver_version': self.export_panel.inc_driver_version_prev
@@ -2932,17 +2932,17 @@ class StateEntry:
         self.name_entry.destroy()
 
 
-# TODO: Investigate issues with DnD being functional while RecoveryWin is open
+# TODO: Investigate potential issues with DnD being functional while RecoveryWin is open
+# TODO: Maybe add select all button?
 class RecoveryWin:
     def __init__(self, main: C4IconSwapper, *_):
         if not (recovery_dir := main.recovery_dir).is_dir():
             return
         # Delete any non-directories in Recovery folder (Just in case)
         for path in recovery_dir.iterdir():
-            if path.is_dir():
-                continue
-            path.unlink()
-            print(f'Deleted invalid item from Recovery folder {path.name}')
+            if not path.is_dir():
+                path.unlink()
+                print(f'Deleted invalid item from Recovery folder {path.name}')
         if not (num_of_rec_folders := len(os.listdir(recovery_dir))):
             shutil.rmtree(recovery_dir)
             if not main.is_server:
