@@ -244,8 +244,8 @@ class C4IconSwapper:
         self.states_orig_names = []
         self.states = [State('') for _ in range(13)]
         self.driver_selected = False
-        self.undo_history = deque(maxlen=100)
-        self.redo_history = deque()
+        self.undo_history: deque[dict] = deque(maxlen=100000)
+        self.redo_history: deque[dict] = deque()
         self.thread_lock = threading.Lock()
         self.pending_load_save = BooleanVar(value=False)
 
@@ -456,8 +456,6 @@ class C4IconSwapper:
                 self.replacement_panel.inc_img_bank(inc=-1)
             case 'Escape':
                 self.root.focus()
-            case 'grave':  # DEBUG: TODO: Remove this
-                print(self.undo_history)
 
     def blink_driver_name_entry(self, *_):
         if not self.counter:
@@ -866,7 +864,6 @@ class C4IconSwapper:
             return
 
         ask_to_save = self.ask_to_save
-        undo_dict: dict  # TODO: IDK why I need this for IDE; probably indicates a problem
 
         if not redo:
             undo_dict = self.undo_history.pop()
@@ -905,7 +902,7 @@ class C4IconSwapper:
                     icon.restore_bak = icon_dict['restore_bak']
                 self.c4z_panel.update_icon()
 
-            # Connections  TODO: Make all changes to conn_objects directly and only update window if it is open
+            # Connections
             case {'conn_change': 'text'}:
                 i, cname, ctype = undo_dict['index'], undo_dict['name'], undo_dict['type']
                 self.connections[i].name.set(cname)
@@ -941,7 +938,6 @@ class C4IconSwapper:
                         self.connections_win.suppress_trace = True
                         y_offset = self.connections_win.widget_y_offset
                         for conn_entry in self.connections_win.connection_entries[i:]:
-                            print(conn_entry.name_entry.get())
                             conn_entry.y += y_offset
                             conn_entry.refresh()
                         conn_y = self.connections_win.connection_entries[i - 1].y + y_offset
@@ -959,9 +955,27 @@ class C4IconSwapper:
                         self.connections_win.suppress_trace = False
             case {'conn_change': 'orig'}:
                 if (i := undo_dict.get('del_conn')) is not None:
-                    self.connections_win.connection_entries[i].action(command='Keep')
+                    conn_obj = self.connections[i]
+                    conn_obj.delete = False
+                    conn_obj.tag.hide = False
+                    if self.connections_win:
+                        conn_entry = self.connections_win.connection_entries[i]
+                        conn_entry.strike.place_forget()
+                        conn_entry.name_entry.config(readonlybackground=readonly_bg)
+                        conn_entry.action_button.config(text='Del', width=3)
+                        conn_entry.action_button.place(x=conn_entry.x)
                 elif (i := undo_dict.get('keep_conn')) is not None:
-                    self.connections_win.connection_entries[i].action(command='Del')
+                    conn_obj = self.connections[i]
+                    conn_obj.delete = True
+                    conn_obj.tag.hide = True
+                    if self.connections_win:
+                        conn_entry = self.connections_win.connection_entries[i]
+                        if not conn_entry.strike:
+                            conn_entry.strike = Frame(self.connections_win.scrollable_frame, bg='black', height=1)
+                        conn_entry.strike.place(in_=conn_entry.name_entry, relx=0, rely=0.5, relwidth=0.999)
+                        conn_entry.name_entry.config(readonlybackground='pink')
+                        conn_entry.action_button.config(text='Keep', width=4)
+                        conn_entry.action_button.place(x=conn_entry.x - 6)
 
             # Driver Info
             case {'dinfo_change': 'name'}:
@@ -997,12 +1011,17 @@ class C4IconSwapper:
                 deleted_icon = undo_dict['delete']
                 if undo_dict.get('redo'):
                     del undo_dict['redo']
+                    index = -1 if rp_panel.replacement_icon is deleted_icon else rp_panel.img_bank.index(deleted_icon)
+                    undo_dict['icon_delete'] = index
                     self.update_undo_history(self.make_undo_dict(undo_dict), clear_redo=False)
-                    rp_panel.delete_image(img_index, update_undo_history=False)
+                    rp_panel.delete_image(index, update_undo_history=False)
                 elif img_index < 0:
                     if rp_panel.replacement_icon:
                         rp_panel.img_bank.append(rp_panel.replacement_icon)
+                    else:
+                        rp_panel.file_entry_field['state'] = 'readonly'
                     rp_panel.replacement_icon = deleted_icon
+                    rp_panel.file_entry_str.set(str(deleted_icon.path))
                     shutil.move(self.undo_temp / rp_panel.replacement_icon.path.name,
                                 rp_panel.replacement_icon.path)
                     for i, path in enumerate(undo_dict['bank']):
@@ -1056,7 +1075,7 @@ class C4IconSwapper:
     def make_undo_dict(self, flags: dict, for_redo=False):
         if self.pending_load_save.get():
             return None
-        print(flags)
+
         match (app_state := flags.copy()):
             # Icons
             case {'icon_change': 'all'}:
@@ -1136,7 +1155,6 @@ class C4IconSwapper:
         return app_state
 
     def update_undo_history(self, flags: dict, clear_redo=True):
-        print('DEBUG: update_undo_history')
         if self.pending_load_save.get():
             return
         if clear_redo:
@@ -4196,7 +4214,7 @@ class ReplacementPanel:
         if c4z_drop and main.c4z_panel.icons:
             self.replace_icon(update_ask_to_save=False)
 
-        self.file_entry_str.set(file_path)
+        self.file_entry_str.set(str(self.replacement_icon.path))
         if not existing_replacement:
             self.file_entry_field['state'] = 'readonly'
         self.update_buttons()
